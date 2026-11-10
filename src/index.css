@@ -1,0 +1,154 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@utility scroll-smooth {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply scroll-smooth;
+    min-height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .overflow-y-auto {
+    @apply scroll-smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body {
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+
+  /* Scoped print rules when 'Print bilag' is activated on the PDF-rapport-widget */
+  body.printing-pdf-widget-only * {
+    visibility: hidden !important;
+  }
+  body.printing-pdf-widget-only .pdf-report-widget-printable,
+  body.printing-pdf-widget-only .pdf-report-widget-printable * {
+    visibility: visible !important;
+  }
+  body.printing-pdf-widget-only .pdf-report-widget-printable {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    background: #0f172a !important;
+    color: #f8fafc !important;
+    border: 2px solid #f59e0b !important;
+    box-shadow: none !important;
+    z-index: 99999 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body.printing-pdf-widget-only .pdf-report-widget-printable .no-print-in-widget {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+
+.pdf-report-widget-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) auto;
+  grid-template-areas:
+    "header meta actions"
+    "stats meta actions";
+}
+
+@media (max-width: 1024px) {
+  .pdf-report-widget-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "header"
+      "meta"
+      "stats"
+      "actions";
+  }
+}
+
+.pdf-grid-area-header {
+  grid-area: header;
+}
+
+.pdf-grid-area-meta {
+  grid-area: meta;
+  justify-self: stretch;
+  align-self: stretch;
+}
+
+.pdf-grid-area-stats {
+  grid-area: stats;
+  justify-self: start;
+  align-self: end;
+}
+
+.pdf-grid-area-actions {
+  grid-area: actions;
+  justify-self: end;
+  align-self: end;
+}
+
+/* Automatic height adaptation when windows/panels are minimized */
+[data-window-minimized="true"],
+.window-minimized-collapse {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  flex: 0 0 auto !important;
+  align-self: flex-start !important;
+}
+
+@keyframes sQuotientWarningPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow:
+      0 0 0 0 rgba(244, 63, 94, 0.85),
+      0 0 16px rgba(244, 63, 94, 0.9);
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.88;
+    box-shadow:
+      0 0 0 6px rgba(244, 63, 94, 0),
+      0 0 24px rgba(251, 191, 36, 0.95);
+  }
+}
+
+.s-quotient-warning-pulse,
+[data-s-warning-active="true"] {
+  animation: sQuotientWarningPulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
