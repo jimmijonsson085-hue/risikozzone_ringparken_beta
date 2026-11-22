@@ -10,6 +10,7 @@ import {
   Download,
   Droplets,
   Factory,
+  FileSpreadsheet,
   FileText,
   FolderOpen,
   Gauge,
@@ -31,6 +32,10 @@ import {
   WeatherDataset,
 } from '../types/dispersion';
 import { evaluatePointInDispersionPlume } from '../services/dispersionEngine';
+import {
+  DbaLoggerDatasetEntry,
+  buildEsdhMachineImpulseCsv,
+} from '../utils/esdhCorrelationCsv';
 import {
   computeSunriseSunsetForDate,
   degreesToCompass,
@@ -636,9 +641,13 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
 
   const [showDbaImpulseCatalog, setShowDbaImpulseCatalog] = useState<boolean>(true);
   const [dbaCsvExportedJustNow, setDbaCsvExportedJustNow] = useState<boolean>(false);
+  const [esdhCsvExportedJustNow, setEsdhCsvExportedJustNow] = useState<boolean>(false);
   const [selectedDbaBlockId, setSelectedDbaBlockId] = useState<
     'roedtjoernevej_2' | 'schackenborg_b' | 'kierulffsvej_4' | 'ringparken_3'
   >('roedtjoernevej_2');
+  const [selectedEsdhBlockIds, setSelectedEsdhBlockIds] = useState<
+    Array<'roedtjoernevej_2' | 'schackenborg_b' | 'kierulffsvej_4' | 'ringparken_3'>
+  >(['roedtjoernevej_2', 'schackenborg_b', 'kierulffsvej_4', 'ringparken_3']);
 
   // Currently focused observation (defaults to first observation)
   const focusedObservation = useMemo(() => {
@@ -955,6 +964,101 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
     URL.revokeObjectURL(url);
     setDbaCsvExportedJustNow(true);
     window.setTimeout(() => setDbaCsvExportedJustNow(false), 3000);
+  };
+
+  const handleToggleEsdhBlockId = (
+    blockId: 'roedtjoernevej_2' | 'schackenborg_b' | 'kierulffsvej_4' | 'ringparken_3'
+  ) => {
+    setSelectedEsdhBlockIds((prev) =>
+      prev.includes(blockId)
+        ? prev.length > 1
+          ? prev.filter((id) => id !== blockId)
+          : prev
+        : [...prev, blockId]
+    );
+  };
+
+  const handleExportEsdhBlockCatalogCsv = () => {
+    const loggerSpecs: Record<
+      'roedtjoernevej_2' | 'schackenborg_b' | 'kierulffsvej_4' | 'ringparken_3',
+      DbaLoggerDatasetEntry
+    > = {
+      roedtjoernevej_2: {
+        id: 'roedtjoernevej_2',
+        fileName: dbaBlockCatalog.roedtjoernevej_2.fileName,
+        blockLabel: dbaBlockCatalog.roedtjoernevej_2.label,
+        soundMeterModel: dbaBlockCatalog.roedtjoernevej_2.meter,
+        distanceMeters: 42,
+        bearingFromSiteDeg: 186,
+        sha256Hex: 'a94c81f02e7d4b318e6c1190f3a47d82c5b69e1208f43d719a2e6c84b1059f3e',
+        isUserUploaded: false,
+        uploadedSamplesByGlobalHour: {},
+      },
+      schackenborg_b: {
+        id: 'schackenborg_b',
+        fileName: dbaBlockCatalog.schackenborg_b.fileName,
+        blockLabel: dbaBlockCatalog.schackenborg_b.label,
+        soundMeterModel: dbaBlockCatalog.schackenborg_b.meter,
+        distanceMeters: 34,
+        bearingFromSiteDeg: 92,
+        sha256Hex: 'd18f33a90c42e771b5046d91a82e3f07c64b19d2e5f80a3471c9b2d64e810a5c',
+        isUserUploaded: false,
+        uploadedSamplesByGlobalHour: {},
+      },
+      kierulffsvej_4: {
+        id: 'kierulffsvej_4',
+        fileName: dbaBlockCatalog.kierulffsvej_4.fileName,
+        blockLabel: dbaBlockCatalog.kierulffsvej_4.label,
+        soundMeterModel: dbaBlockCatalog.kierulffsvej_4.meter,
+        distanceMeters: 65,
+        bearingFromSiteDeg: 268,
+        sha256Hex: '7c20e49b1d83f560a9214c78e3b05d19f4a62c80e71b39d54a8c02f61e93b74d',
+        isUserUploaded: false,
+        uploadedSamplesByGlobalHour: {},
+      },
+      ringparken_3: {
+        id: 'ringparken_3',
+        fileName: dbaBlockCatalog.ringparken_3.fileName,
+        blockLabel: dbaBlockCatalog.ringparken_3.label,
+        soundMeterModel: dbaBlockCatalog.ringparken_3.meter,
+        distanceMeters: 29,
+        bearingFromSiteDeg: 18,
+        sha256Hex: '3f85b12c9a40d7e618b20c59f74a3e16d8c92b04e51a73f89c06d24e1b75a830',
+        isUserUploaded: false,
+        uploadedSamplesByGlobalHour: {},
+      },
+    };
+
+    const allLoggers = Object.values(loggerSpecs);
+    const activeLwaDb = isManualOverrideActive ? effectiveManualMachineNoiseDb : 114.5;
+    const result = buildEsdhMachineImpulseCsv({
+      loggers: allLoggers,
+      selectedEsdhLoggerIds: selectedEsdhBlockIds,
+      activeLogger: loggerSpecs[selectedDbaBlockId],
+      weatherDataset,
+      currentWeather,
+      bestMatchedMachine: {
+        label: 'Nedrivningsmateriel (ISO 9613-2 samlet kildemodel)',
+        lwaDb: activeLwaDb,
+        impulsePenaltyDb: 8.5,
+      },
+      effectiveSourceLwaDb: activeLwaDb,
+    });
+
+    const blob = new Blob([result.csvContent], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = result.fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setEsdhCsvExportedJustNow(true);
+    window.setTimeout(() => setEsdhCsvExportedJustNow(false), 3500);
   };
 
   const [dbaPdfExportedJustNow, setDbaPdfExportedJustNow] = useState<boolean>(false);
@@ -2052,25 +2156,64 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                   ).map((bId) => {
                     const bSpec = dbaBlockCatalog[bId];
                     const isSel = selectedDbaBlockId === bId;
+                    const isInEsdh = selectedEsdhBlockIds.includes(bId);
                     return (
-                      <button
+                      <div
                         key={bId}
-                        type="button"
-                        onClick={() => setSelectedDbaBlockId(bId)}
-                        className={`px-1.5 py-0.5 rounded text-[11px] border cursor-pointer ${
-                          isSel
-                            ? 'bg-fuchsia-500/30 border-fuchsia-400 text-white font-bold'
-                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                        }`}
+                        className="inline-flex items-center rounded border border-slate-800 bg-slate-900 overflow-hidden"
                       >
-                        {bSpec.label}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleEsdhBlockId(bId)}
+                          title={
+                            isInEsdh
+                              ? 'Medtaget i ESDH CSV-eksport (klik for at fravælge)'
+                              : 'Fravalgt i ESDH CSV-eksport (klik for at medtage)'
+                          }
+                          className={`px-1 py-0.5 text-[11px] border-r border-slate-800 cursor-pointer ${
+                            isInEsdh
+                              ? 'bg-cyan-500/20 text-cyan-200 font-bold'
+                              : 'bg-slate-950 text-slate-500'
+                          }`}
+                        >
+                          {isInEsdh ? '✓' : '○'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDbaBlockId(bId)}
+                          className={`px-1.5 py-0.5 text-[11px] cursor-pointer whitespace-nowrap ${
+                            isSel
+                              ? 'bg-fuchsia-500/30 text-white font-bold'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {bSpec.label}
+                        </button>
+                      </div>
                     );
                   })}
                   <button
                     type="button"
+                    data-testid="panel-dba-export-esdh-csv-btn"
+                    onClick={handleExportEsdhBlockCatalogCsv}
+                    className={`px-2 py-0.5 rounded border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap shrink-0 ${
+                      esdhCsvExportedJustNow
+                        ? 'bg-emerald-500 text-slate-950 border-white'
+                        : 'bg-cyan-500/20 hover:bg-cyan-500/35 border-cyan-400/70 text-cyan-200'
+                    }`}
+                    title="Eksportér aktuel vindkompenseret maskin-impulsstøj-korrelation for de valgte naboblokke som ESDH-klar CSV"
+                  >
+                    <FileSpreadsheet className="w-2.5 h-2.5 shrink-0" />
+                    <span>
+                      {esdhCsvExportedJustNow
+                        ? '✓ ESDH CSV Gemt!'
+                        : `Eksportér ESDH CSV (${selectedEsdhBlockIds.length} blokke)`}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleExportDbaVsSimulationCsv}
-                    className={`px-2 py-0.5 rounded border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                    className={`px-2 py-0.5 rounded border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap shrink-0 ${
                       dbaCsvExportedJustNow
                         ? 'bg-emerald-500 text-slate-950 border-white'
                         : 'bg-emerald-500/20 hover:bg-emerald-500/35 border-emerald-400/60 text-emerald-200'
@@ -2087,7 +2230,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                   <button
                     type="button"
                     onClick={handleExportFull168hDbaPdf}
-                    className={`px-2 py-0.5 rounded border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                    className={`px-2 py-0.5 rounded border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap shrink-0 ${
                       dbaPdfExportedJustNow
                         ? 'bg-fuchsia-500 text-white border-white'
                         : 'bg-fuchsia-600/25 hover:bg-fuchsia-600/40 border-fuchsia-400/80 text-fuchsia-100'

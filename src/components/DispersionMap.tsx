@@ -103,6 +103,7 @@ import {
   render2DViewportPrintSnapshotDataUrl,
 } from '../services/pdfExportService';
 import { WindParticleFieldOverlay } from './WindParticleFieldOverlay';
+import { WebGl2DDustPlumeOverlay } from './WebGl2DDustPlumeOverlay';
 import { buildAutonomousReceptorMeshNetwork } from '../services/autonomousReceptorMeshService';
 import {
   BlockComplaintDensityItem,
@@ -675,6 +676,7 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
   const [gmpAuthFailed, setGmpAuthFailed] = useState(false);
   const [preferTacticalCanvas, setPreferTacticalCanvas] = useState(true);
   const [showWindParticles, setShowWindParticles] = useState(true);
+  const [showWebGlDustPlume, setShowWebGlDustPlume] = useState(true);
   const [weatherJsonExportedJustNow, setWeatherJsonExportedJustNow] = useState(false);
 
   const handleExportSelectedDayWeatherJson = () => {
@@ -774,6 +776,7 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
   const [forecast6hSpeed, setForecast6hSpeed] = useState<'0.5x' | '1x' | '2x'>('1x');
   const [is6hForecastCardMinimized, setIs6hForecastCardMinimized] = useState<boolean>(false);
   const [puffWavePhase, setPuffWavePhase] = useState<number>(0);
+  const [showVibrationHeatmap, setShowVibrationHeatmap] = useState<boolean>(true);
 
   const heatmapComparisonViewMode: HeatmapComparisonViewMode =
     externalComparisonViewMode ?? internalComparisonViewMode;
@@ -3561,6 +3564,272 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
     return { sourceContours, receptorNoiseNodes };
   }, [sources, receptors, currentWeather]);
 
+  // Real-Time Bornitz (DIN 4150-3:2016) Vibration Intensity Heatmap correlated with heavy machinery sources
+  const vibrationHeatmapData = useMemo(() => {
+    const mLat = 111320;
+    const mLng = 111320 * Math.cos((RINGPARKEN_CENTER.lat * Math.PI) / 180);
+    const activeMachinery = sources.filter((s) => s.active);
+    const evalSources = activeMachinery.length > 0 ? activeMachinery : sources.slice(0, 1);
+
+    const machineDb = Math.max(85, machineNoiseOutputDb || 114);
+    const dbFactor = Math.pow(10, (machineDb - 114) / 22);
+    const soilSaturationAmp = currentWeather.precipitation > 2 ? 1.14 : 1.04;
+    const plateDamping = hasSteelRoadPlates ? 0.72 : 1.0;
+    const alphaClay = 0.036;
+    const v0Reference = 26.5;
+
+    const evalPointPpvMmPerSec = (lat: number, lng: number): { totalPpv: number; dominantSourceId: string } => {
+      let sumSquares = 0;
+      let maxSingle = -1;
+      let dominantSourceId = evalSources[0]?.id || '';
+      for (const src of evalSources) {
+        const dx = (lng - src.position.lng) * mLng;
+        const dy = (lat - src.position.lat) * mLat;
+        const horizM = Math.hypot(dx, dy);
+        const r3D = Math.max(2.0, Math.hypot(horizM, 1.65));
+        const sourceScale = src.active
+          ? Math.max(0.7, Math.min(1.45, src.sourceEmissionFactor ?? 1.0))
+          : 0.25;
+        const ppv =
+          v0Reference *
+          dbFactor *
+          sourceScale *
+          soilSaturationAmp *
+          plateDamping *
+          Math.pow(2.0 / r3D, 0.55) *
+          Math.exp(-alphaClay * Math.max(0, r3D - 2.0));
+        sumSquares += ppv * ppv;
+        if (ppv > maxSingle) {
+          maxSingle = ppv;
+          dominantSourceId = src.id;
+        }
+      }
+      return {
+        totalPpv: Number(Math.min(95, Math.sqrt(sumSquares)).toFixed(2)),
+        dominantSourceId,
+      };
+    };
+
+    const ppvColorForLevel = (ppv: number): { fill: string; stroke: string; opacity: number; label: string } => {
+      if (ppv >= 20) {
+        return {
+          fill: '#e11d48',
+          stroke: '#fda4af',
+          opacity: Math.min(0.62, 0.36 + (ppv - 20) * 0.012),
+          label: 'Kritisk ≥20 mm/s (DIN 4150-3 R1)',
+        };
+      }
+      if (ppv >= 10) {
+        return {
+          fill: '#f97316',
+          stroke: '#fdba74',
+          opacity: 0.34 + ((ppv - 10) / 10) * 0.14,
+          label: 'Høj 10–20 mm/s',
+        };
+      }
+      if (ppv >= 5) {
+        return {
+          fill: '#facc15',
+          stroke: '#fef08a',
+          opacity: 0.24 + ((ppv - 5) / 5) * 0.12,
+          label: 'Over Bolig-grænse ≥5 mm/s (DIN R2)',
+        };
+      }
+      return {
+        fill: '#06b6d4',
+        stroke: '#67e8f9',
+        opacity: Math.max(0.08, (ppv / 5) * 0.2),
+        label: 'Lav <5 mm/s',
+      };
+    };
+
+    const latMin = 55.4112;
+    const latMax = 55.4151;
+    const lngMin = 11.3484;
+    const lngMax = 11.3586;
+    const rows = 16;
+    const cols = 22;
+    const dLat = (latMax - latMin) / rows;
+    const dLng = (lngMax - lngMin) / cols;
+
+    const gridCells: Array<{
+      id: string;
+      nw: LatLngPoint;
+      se: LatLngPoint;
+      ppv: number;
+      fill: string;
+      opacity: number;
+    }> = [];
+
+    let peakGridPpv = 0;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cLat = latMin + (r + 0.5) * dLat;
+        const cLng = lngMin + (c + 0.5) * dLng;
+        const { totalPpv } = evalPointPpvMmPerSec(cLat, cLng);
+        if (totalPpv > peakGridPpv) peakGridPpv = totalPpv;
+        if (totalPpv < 1.25) continue;
+        const style = ppvColorForLevel(totalPpv);
+        gridCells.push({
+          id: `vib-cell-${r}-${c}`,
+          nw: { lat: latMin + (r + 1) * dLat, lng: lngMin + c * dLng },
+          se: { lat: latMin + r * dLat, lng: lngMin + (c + 1) * dLng },
+          ppv: totalPpv,
+          fill: style.fill,
+          opacity: Number(style.opacity.toFixed(2)),
+        });
+      }
+    }
+
+    const solveRadiusForTargetPpv = (targetPpv: number, sourceScale: number): number => {
+      const peakAt2m = v0Reference * dbFactor * sourceScale * soilSaturationAmp * plateDamping;
+      if (peakAt2m <= targetPpv) return 0;
+      let low = 2.0;
+      let high = 160.0;
+      for (let i = 0; i < 14; i++) {
+        const mid = (low + high) * 0.5;
+        const val =
+          peakAt2m * Math.pow(2.0 / mid, 0.55) * Math.exp(-alphaClay * Math.max(0, mid - 2.0));
+        if (val > targetPpv) low = mid;
+        else high = mid;
+      }
+      return Number(((low + high) * 0.5).toFixed(1));
+    };
+
+    const buildGeoRing = (origin: LatLngPoint, radiusM: number): LatLngPoint[] => {
+      const pts: LatLngPoint[] = [];
+      const steps = 24;
+      for (let i = 0; i <= steps; i++) {
+        const ang = (i / steps) * Math.PI * 2;
+        pts.push({
+          lat: origin.lat + (radiusM * Math.cos(ang)) / mLat,
+          lng: origin.lng + (radiusM * Math.sin(ang)) / mLng,
+        });
+      }
+      return pts;
+    };
+
+    const sourceRings = activeMachinery.map((src) => {
+      const sourceScale = Math.max(0.7, Math.min(1.45, src.sourceEmissionFactor ?? 1.0));
+      const peakSourcePpv = Number(
+        (v0Reference * dbFactor * sourceScale * soilSaturationAmp * plateDamping).toFixed(1)
+      );
+      const r5M = solveRadiusForTargetPpv(5.0, sourceScale);
+      const r20M = solveRadiusForTargetPpv(20.0, sourceScale);
+      return {
+        sourceId: src.id,
+        sourceCode: src.code,
+        position: src.position,
+        peakSourcePpv,
+        radius5M: r5M,
+        radius20M: r20M,
+        ring5MmS: r5M > 2 ? buildGeoRing(src.position, r5M) : [],
+        ring20MmS: r20M > 2 ? buildGeoRing(src.position, r20M) : [],
+      };
+    });
+
+    const buildingBreaches = buildings
+      .map((b) => {
+        const { totalPpv } = evalPointPpvMmPerSec(b.center.lat, b.center.lng);
+        const thresholdMmS =
+          b.category === 'a_inhabited' || b.category === 'b_vacant' ? 5.0 : 20.0;
+        return {
+          buildingId: b.id,
+          code: b.code,
+          name: b.name,
+          center: b.center,
+          ppvMmPerSec: totalPpv,
+          thresholdMmS,
+          isBreached: totalPpv >= thresholdMmS,
+        };
+      })
+      .filter((b) => b.isBreached);
+
+    const maxPpvMmPerSec = Number(
+      Math.max(
+        peakGridPpv,
+        waterMainTelemetry?.pipePpvMmPerSec ?? 0,
+        ...sourceRings.map((s) => s.peakSourcePpv),
+        ...buildingBreaches.map((b) => b.ppvMmPerSec)
+      ).toFixed(1)
+    );
+
+    return {
+      gridCells,
+      sourceRings,
+      buildingBreaches,
+      maxPpvMmPerSec,
+      machineDb,
+      plateDamping,
+    };
+  }, [
+    sources,
+    buildings,
+    machineNoiseOutputDb,
+    currentWeather.precipitation,
+    hasSteelRoadPlates,
+    waterMainTelemetry?.pipePpvMmPerSec,
+  ]);
+
+  // Wind > 10 m/s CSS Dust Plume Spread Animation Targets (prioritizes selectedSourceId + active sources)
+  const windOver10MsPlumeData = useMemo(() => {
+    const isHighWindActive = currentWeather.windSpeed10m > 10;
+    if (!isHighWindActive) {
+      return {
+        isActive: false,
+        plumeDirectionDeg: (currentWeather.windDirection10m + 180) % 360,
+        targetSources: [] as Array<{
+          source: DemolitionSourceNode;
+          isSelected: boolean;
+          tipPoint: LatLngPoint;
+          plumeDurationSec: number;
+          streakDurationSec: number;
+        }>,
+      };
+    }
+
+    const mLat = 111320;
+    const mLng = 111320 * Math.cos((RINGPARKEN_CENTER.lat * Math.PI) / 180);
+    const plumeDirectionDeg = (currentWeather.windDirection10m + 180) % 360;
+    const rad = (plumeDirectionDeg * Math.PI) / 180;
+    const reachMeters = Math.min(240, Math.max(115, 95 + (currentWeather.windSpeed10m - 10) * 14));
+    const plumeDurationSec = Number(Math.max(0.95, 22 / currentWeather.windSpeed10m).toFixed(2));
+    const streakDurationSec = Number(Math.max(0.65, 13 / currentWeather.windSpeed10m).toFixed(2));
+
+    const activeList = visibleSources.filter((s) => s.active);
+    const selectedSrc = selectedSourceId
+      ? visibleSources.find((s) => s.id === selectedSourceId)
+      : undefined;
+    const prioritized = selectedSrc
+      ? [selectedSrc, ...activeList.filter((s) => s.id !== selectedSrc.id)]
+      : activeList.length > 0
+      ? activeList
+      : visibleSources.slice(0, 1);
+
+    const targetSources = prioritized.map((src) => ({
+      source: src,
+      isSelected: src.id === selectedSourceId,
+      tipPoint: {
+        lat: src.position.lat + (reachMeters * Math.cos(rad)) / mLat,
+        lng: src.position.lng + (reachMeters * Math.sin(rad)) / mLng,
+      },
+      plumeDurationSec,
+      streakDurationSec,
+    }));
+
+    return {
+      isActive: true,
+      plumeDirectionDeg,
+      targetSources,
+    };
+  }, [
+    visibleSources,
+    selectedSourceId,
+    currentWeather.windSpeed10m,
+    currentWeather.windDirection10m,
+  ]);
+
   const unprojectPx = (x: number, y: number): LatLngPoint => {
     const lng = RINGPARKEN_CENTER.lng + (x - VIEW_W / 2 - panOffsetPx.x) / PX_PER_DEG_LNG;
     const lat = RINGPARKEN_CENTER.lat - (y - VIEW_H / 2 - panOffsetPx.y) / PX_PER_DEG_LAT;
@@ -4447,6 +4716,25 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
 
           <button
             type="button"
+            data-testid="toggle-vibration-heatmap-btn"
+            onClick={() => setShowVibrationHeatmap((v) => !v)}
+            className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              showVibrationHeatmap
+                ? vibrationHeatmapData.maxPpvMmPerSec >= 20
+                  ? 'bg-rose-500/25 text-rose-200 border border-rose-400/70'
+                  : 'bg-amber-500/20 text-amber-200 border border-amber-400/60'
+                : 'bg-slate-900 text-slate-400 border border-slate-800'
+            }`}
+            title="Vis/skjul realtids Bornitz vibrations-heatmap (PPV mm/s · DIN 4150-3) korreleret med aktive maskinkilder"
+          >
+            <Activity className="w-3.5 h-3.5 shrink-0" />
+            <span className="font-mono tabular-nums">
+              Vibrations-Heatmap ({vibrationHeatmapData.maxPpvMmPerSec.toFixed(1)} mm/s)
+            </span>
+          </button>
+
+          <button
+            type="button"
             data-testid="toggle-autonomous-receptor-mesh-btn"
             onClick={() => setShowAutonomousMesh((v) => !v)}
             className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
@@ -4558,6 +4846,46 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                 : !isHighWindAlert && firstHighWindHourInDataset
                 ? `Trykbølger (>10 m/s · Hop kl. ${firstHighWindHourInDataset.hourLabel})`
                 : 'Trykbølger (>10 m/s: Afventer)'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="toggle-webgl-dust-plume-btn"
+            onClick={() => {
+              if (!isHighWindAlert && firstHighWindHourInDataset && onSelectHourFromPeak) {
+                setShowWebGlDustPlume(true);
+                onSelectHourFromPeak(firstHighWindHourInDataset.hourIndex);
+              } else {
+                setShowWebGlDustPlume((v) => !v);
+              }
+            }}
+            className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              showWebGlDustPlume && isHighWindAlert && !useGoogleMapsEngine
+                ? 'bg-amber-500/25 text-amber-100 border border-amber-400/70 font-bold'
+                : isHighWindAlert
+                ? 'bg-slate-900 text-slate-400 border border-slate-800'
+                : 'bg-slate-900 text-amber-300/90 border border-amber-500/40'
+            }`}
+            title={
+              isHighWindAlert
+                ? `WebGL 2D-støvfane fra valgte kildenoder er AKTIV ved v = ${currentWeather.windSpeed10m.toFixed(
+                    1
+                  )} m/s (> 10 m/s). Klik for at vise/skjule på 2D-kortet.`
+                : firstHighWindHourInDataset
+                ? `WebGL-støvfanen aktiveres automatisk, når vindhastigheden overstiger 10 m/s. Klik for at hoppe til kl. ${
+                    firstHighWindHourInDataset.hourLabel
+                  } (${firstHighWindHourInDataset.windSpeed10m.toFixed(1)} m/s).`
+                : 'WebGL-støvfanen aktiveres automatisk på 2D-kortet, når vindhastigheden overstiger 10 m/s.'
+            }
+          >
+            <Wind className="w-3.5 h-3.5 shrink-0 text-amber-300" />
+            <span className="font-mono tabular-nums">
+              {showWebGlDustPlume && isHighWindAlert && !useGoogleMapsEngine
+                ? `WebGL Støvfane >10 m/s: AKTIV (${currentWeather.windSpeed10m.toFixed(1)} m/s)`
+                : !isHighWindAlert && firstHighWindHourInDataset
+                ? `WebGL Støvfane (>10 m/s · Hop kl. ${firstHighWindHourInDataset.hourLabel})`
+                : 'WebGL Støvfane (>10 m/s: Afventer)'}
             </span>
           </button>
 
@@ -10043,6 +10371,172 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
               </g>
             )}
 
+            {/* REAL-TIME BORNITZ (DIN 4150-3) PEAK VIBRATION INTENSITY HEATMAP OVERLAY */}
+            {showVibrationHeatmap && (
+              <g data-testid="dispersion-map-vibration-heatmap" className="pointer-events-none">
+                {vibrationHeatmapData.gridCells.map((cell) => {
+                  const nwPx = projectLatLng(cell.nw);
+                  const sePx = projectLatLng(cell.se);
+                  const w = Math.max(4, Math.abs(sePx.x - nwPx.x));
+                  const h = Math.max(4, Math.abs(sePx.y - nwPx.y));
+                  return (
+                    <rect
+                      key={cell.id}
+                      x={Math.min(nwPx.x, sePx.x)}
+                      y={Math.min(nwPx.y, sePx.y)}
+                      width={w}
+                      height={h}
+                      fill={cell.fill}
+                      fillOpacity={cell.opacity}
+                      stroke={cell.ppv >= 10 ? '#fecdd3' : 'none'}
+                      strokeOpacity={0.28}
+                      strokeWidth={0.6}
+                    />
+                  );
+                })}
+
+                {vibrationHeatmapData.sourceRings.map((sr) => {
+                  const sPx = projectLatLng(sr.position);
+                  return (
+                    <g key={`vib-src-rings-${sr.sourceId}`}>
+                      {sr.ring5MmS.length > 0 && (
+                        <polygon
+                          points={polygonToSvgPoints(sr.ring5MmS)}
+                          fill="none"
+                          stroke="#facc15"
+                          strokeWidth={1.6}
+                          strokeDasharray="5 3"
+                        />
+                      )}
+                      {sr.ring20MmS.length > 0 && (
+                        <polygon
+                          points={polygonToSvgPoints(sr.ring20MmS)}
+                          fill="rgba(225, 29, 72, 0.14)"
+                          stroke="#fb7185"
+                          strokeWidth={2.0}
+                        />
+                      )}
+                      <g transform={`translate(${sPx.x}, ${sPx.y - 18})`}>
+                        <rect
+                          x={-54}
+                          y={-9}
+                          width={108}
+                          height={16}
+                          rx={3}
+                          fill="#0f172a"
+                          fillOpacity={0.9}
+                          stroke={sr.peakSourcePpv >= 20 ? '#fb7185' : '#facc15'}
+                          strokeWidth={1}
+                        />
+                        <text
+                          x={0}
+                          y={2}
+                          textAnchor="middle"
+                          className="fill-amber-200 text-[10px] font-mono font-bold tabular-nums"
+                        >
+                          VIB {sr.sourceCode}: {sr.peakSourcePpv.toFixed(1)} mm/s
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
+
+                {vibrationHeatmapData.buildingBreaches.map((bb) => {
+                  const bPx = projectLatLng(bb.center);
+                  return (
+                    <g key={`vib-breach-${bb.buildingId}`} transform={`translate(${bPx.x}, ${bPx.y})`}>
+                      <circle
+                        cx={0}
+                        cy={0}
+                        r={12}
+                        fill="rgba(225, 29, 72, 0.24)"
+                        stroke="#f43f5e"
+                        strokeWidth={1.8}
+                      />
+                      <text
+                        x={0}
+                        y={-15}
+                        textAnchor="middle"
+                        className="fill-rose-200 text-[10px] font-mono font-bold tabular-nums"
+                      >
+                        {bb.code}: {bb.ppvMmPerSec.toFixed(1)} mm/s
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
+            )}
+
+            {/* WIND > 10 m/s CSS ANIMATED DUST PLUME SPREAD SEQUENCE FROM SOURCE NODES */}
+            {windOver10MsPlumeData.isActive && (
+              <g data-testid="wind-over-10ms-dust-plume-sequence" className="pointer-events-none">
+                {windOver10MsPlumeData.targetSources.map((item) => {
+                  const srcPx = projectLatLng(item.source.position);
+                  const tipPx = projectLatLng(item.tipPoint);
+                  const dxPx = tipPx.x - srcPx.x;
+                  const dyPx = tipPx.y - srcPx.y;
+                  const plumeLenPx = Math.max(90, Math.hypot(dxPx, dyPx));
+                  const rotDeg = (Math.atan2(dyPx, dxPx) * 180) / Math.PI;
+                  const halfSpreadPx = Math.max(24, plumeLenPx * 0.26);
+                  const waveStyle = {
+                    '--dust-plume-dur': `${item.plumeDurationSec}s`,
+                  } as React.CSSProperties;
+                  const streakStyle = {
+                    '--dust-streak-dur': `${item.streakDurationSec}s`,
+                  } as React.CSSProperties;
+                  const conePts = `0,0 ${plumeLenPx.toFixed(1)},${(-halfSpreadPx).toFixed(1)} ${(plumeLenPx * 1.07).toFixed(1)},0 ${plumeLenPx.toFixed(1)},${halfSpreadPx.toFixed(1)}`;
+                  const streakOffsets = [-0.68, -0.34, 0, 0.34, 0.68];
+
+                  return (
+                    <g
+                      key={`wind-plume-seq-${item.source.id}`}
+                      transform={`translate(${srcPx.x}, ${srcPx.y}) rotate(${rotDeg.toFixed(2)})`}
+                    >
+                      <polygon
+                        points={conePts}
+                        fill={item.isSelected ? 'rgba(245, 158, 11, 0.34)' : 'rgba(251, 146, 60, 0.22)'}
+                        stroke={item.isSelected ? '#fbbf24' : '#fdba74'}
+                        strokeWidth={item.isSelected ? 1.8 : 1.2}
+                        className="map-dust-plume-wave"
+                        style={waveStyle}
+                      />
+                      <polygon
+                        points={conePts}
+                        fill={item.isSelected ? 'rgba(239, 68, 68, 0.26)' : 'rgba(249, 115, 22, 0.18)'}
+                        stroke="#fb7185"
+                        strokeWidth={1.3}
+                        className="map-dust-plume-wave map-dust-plume-wave--2"
+                        style={waveStyle}
+                      />
+                      <polygon
+                        points={conePts}
+                        fill="rgba(250, 204, 21, 0.2)"
+                        stroke="#fde047"
+                        strokeWidth={1.1}
+                        className="map-dust-plume-wave map-dust-plume-wave--3"
+                        style={waveStyle}
+                      />
+
+                      {streakOffsets.map((mult, idx) => (
+                        <line
+                          key={`plume-streak-${item.source.id}-${idx}`}
+                          x1={4}
+                          y1={0}
+                          x2={plumeLenPx * (1.02 - Math.abs(mult) * 0.12)}
+                          y2={halfSpreadPx * mult}
+                          stroke={item.isSelected ? '#fde047' : '#fdba74'}
+                          strokeWidth={idx === 2 ? 2.0 : 1.3}
+                          strokeDasharray="10 8"
+                          className="map-dust-plume-streak"
+                          style={streakStyle}
+                        />
+                      ))}
+                    </g>
+                  );
+                })}
+              </g>
+            )}
+
             {/* HYDROLOGISK UDVASKNINGS-RISIKO TIL GRUNDVAND (AKKUMULERET NEDBØR & JORDMÆTNINGSGRAD) */}
             {showGroundwaterLeachingWarning &&
               groundwaterLeachingData.zones.map((lz) => {
@@ -11333,6 +11827,16 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
             })}
           </svg>
         )}
+
+        {/* WebGL High-Wind (> 10 m/s) Turbulent Dust Plume Animation Sequence */}
+        <WebGl2DDustPlumeOverlay
+          currentWeather={currentWeather}
+          sources={visibleSources}
+          selectedSourceId={selectedSourceId}
+          zoom={zoom}
+          panOffsetPx={panOffsetPx}
+          visible={showWebGlDustPlume && !useGoogleMapsEngine}
+        />
 
         {/* Animated Open-Meteo Wind Particle & Source Aerosol Streamline Layer */}
         <WindParticleFieldOverlay

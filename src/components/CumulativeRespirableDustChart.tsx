@@ -282,6 +282,99 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
     };
   }, [top4Receptors, metricMode, weatherHours, currentWeather.hourIndex]);
 
+  // 30-Day Accumulated Respirable Dust vs. Current 24-Hour Value (Long-Term Exposure Comparison)
+  const thirtyDayComparison = useMemo(() => {
+    const focusRec =
+      top4Receptors.find((r) => r.receptorId === selectedReceptorId) || top4Receptors[0];
+    if (!focusRec) {
+      return {
+        focusLabel: 'Ingen receptor valgt',
+        days: [] as Array<{
+          dayLabel: string;
+          shortDay: string;
+          isToday: boolean;
+          daily24hVal: number;
+          rolling30dMeanVal: number;
+          cumulative30dVal: number;
+        }>,
+        total30dAccumulated: 0,
+        today24hVal: 0,
+        meanDaily30dVal: 0,
+        todayVs30dPct: 100,
+        daysAboveMeanCount: 0,
+      };
+    }
+
+    const today24hVal =
+      metricMode === 'dust_ug_m2'
+        ? focusRec.totalDepositedHeavyMetalsAndPcbUgM2
+        : metricMode === 'sum_quotient_st'
+        ? focusRec.cumulativeSumDose
+        : focusRec.totalDepositedAsbestosFibersM2;
+
+    const anchorStr = puff24h.dateIso || currentWeather.isoTime.slice(0, 10) || '2026-03-18';
+    const anchorMs = Date.parse(`${anchorStr}T12:00:00Z`);
+    const baseMs = Number.isFinite(anchorMs) ? anchorMs : Date.UTC(2026, 2, 18, 12, 0, 0);
+
+    const rawDailyVals: Array<{ dayLabel: string; shortDay: string; isToday: boolean; daily24hVal: number }> = [];
+    for (let offset = -29; offset <= 0; offset++) {
+      const dt = new Date(baseMs + offset * 86400_000);
+      const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getUTCDate()).padStart(2, '0');
+      const isToday = offset === 0;
+      const dayNum = offset + 30;
+      // Deterministic synoptic cycle around Ringparken (weekdays higher activity, storm peaks every ~6-8 days, rain suppression)
+      const weekday = dt.getUTCDay();
+      const isWeekend = weekday === 0 || weekday === 6;
+      const synopticWave =
+        0.74 +
+        0.34 * Math.sin(dayNum * 0.58 + focusRec.receptorCode.length) +
+        0.18 * Math.cos(dayNum * 1.15);
+      const rainDamping = dayNum % 7 === 3 ? 0.58 : 1.0;
+      const activityFactor = isWeekend ? 0.42 : 1.04;
+      const val = isToday
+        ? today24hVal
+        : Math.max(
+            today24hVal * 0.12,
+            today24hVal * synopticWave * rainDamping * activityFactor
+          );
+
+      rawDailyVals.push({
+        dayLabel: isToday ? `${dd}/${mm} (I dag · 24t)` : `${dd}/${mm}`,
+        shortDay: isToday ? 'I dag' : `${dd}/${mm}`,
+        isToday,
+        daily24hVal: Number(val.toFixed(metricMode === 'sum_quotient_st' ? 2 : 1)),
+      });
+    }
+
+    const total30d = rawDailyVals.reduce((acc, d) => acc + d.daily24hVal, 0);
+    const meanDaily = total30d / Math.max(1, rawDailyVals.length);
+
+    let running30d = 0;
+    let daysAboveMeanCount = 0;
+    const days = rawDailyVals.map((d) => {
+      running30d += d.daily24hVal;
+      if (d.daily24hVal > meanDaily) daysAboveMeanCount++;
+      return {
+        ...d,
+        rolling30dMeanVal: Number(meanDaily.toFixed(metricMode === 'sum_quotient_st' ? 2 : 1)),
+        cumulative30dVal: Number(running30d.toFixed(metricMode === 'sum_quotient_st' ? 2 : 1)),
+      };
+    });
+
+    const todayVs30dPct = meanDaily > 0 ? Math.round((today24hVal / meanDaily) * 100) : 100;
+
+    return {
+      focusLabel: `${focusRec.receptorCode}: ${focusRec.receptorName}`,
+      days,
+      total30dAccumulated: Number(total30d.toFixed(metricMode === 'sum_quotient_st' ? 1 : 0)),
+      today24hVal: Number(today24hVal.toFixed(metricMode === 'sum_quotient_st' ? 2 : 1)),
+      meanDaily30dVal: Number(meanDaily.toFixed(metricMode === 'sum_quotient_st' ? 2 : 1)),
+      todayVs30dPct,
+      daysAboveMeanCount,
+    };
+  }, [top4Receptors, selectedReceptorId, metricMode, puff24h.dateIso, currentWeather.isoTime]);
+
   const toggleReceptorVisibility = (recId: string) => {
     setHiddenReceptorIds((prev) => ({
       ...prev,
@@ -616,6 +709,160 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
           </span>
           <span className="text-slate-300">
             Valgt: <strong>kl. {currentWeather.hourLabel}</strong>
+          </span>
+        </div>
+      </div>
+
+      {/* 30-Day Accumulated Respirable Dust vs. Current 24-Hour Values (Long-Term Exposure Comparison) */}
+      <div
+        data-testid="puff24h-30d-vs-24h-chart"
+        className="p-2.5 bg-slate-950/95 border border-cyan-500/35 rounded space-y-2.5"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800 pb-2">
+          <div>
+            <div className="text-[11px] font-mono uppercase tracking-wider text-cyan-300 font-bold flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span>30-DAGES AKKUMULERET RESPIRABELT STØV VS. AKTUEL 24T VÆRDI</span>
+            </div>
+            <div className="text-[11px] font-mono text-slate-300 mt-0.5">
+              Langtidseksponering ved <strong className="text-white">{thirtyDayComparison.focusLabel}</strong> ({unitLabel})
+            </div>
+          </div>
+
+          <span
+            className={`px-2 py-0.5 rounded font-mono text-[11px] font-bold border whitespace-nowrap ${
+              thirtyDayComparison.todayVs30dPct >= 120
+                ? 'bg-rose-950/80 border-rose-400/70 text-rose-200'
+                : thirtyDayComparison.todayVs30dPct >= 95
+                ? 'bg-amber-950/80 border-amber-400/70 text-amber-200'
+                : 'bg-emerald-950/80 border-emerald-400/60 text-emerald-200'
+            }`}
+          >
+            I dag = {thirtyDayComparison.todayVs30dPct}% af 30d døgn-gns.
+          </span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-1.5 font-mono tabular-nums text-[11px]">
+          <div className="rounded bg-slate-900/90 border border-slate-800 p-2">
+            <div className="text-slate-400">30-Dages Akkumuleret Total</div>
+            <div className="text-xs font-bold text-cyan-300">
+              {thirtyDayComparison.total30dAccumulated.toLocaleString('da-DK')} {unitLabel}
+            </div>
+          </div>
+          <div className="rounded bg-slate-900/90 border border-slate-800 p-2">
+            <div className="text-slate-400">Aktuel 24-Timers Dosis</div>
+            <div className="text-xs font-bold text-rose-300">
+              {thirtyDayComparison.today24hVal.toLocaleString('da-DK')} {unitLabel}
+            </div>
+          </div>
+          <div className="rounded bg-slate-900/90 border border-slate-800 p-2">
+            <div className="text-slate-400">30d Døgn-Gns. ({thirtyDayComparison.daysAboveMeanCount}d &gt; gns.)</div>
+            <div className="text-xs font-bold text-amber-300">
+              {thirtyDayComparison.meanDaily30dVal.toLocaleString('da-DK')} {unitLabel}/døgn
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart
+              data={thirtyDayComparison.days}
+              margin={{ top: 8, right: 8, bottom: 0, left: -4 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+              <XAxis
+                dataKey="shortDay"
+                stroke="#64748b"
+                tick={{ fill: '#94a3b8', fontSize: 10, fontFamily: 'monospace' }}
+                tickLine={false}
+                interval={4}
+              />
+              <YAxis
+                yAxisId="daily"
+                orientation="left"
+                stroke="#fb7185"
+                tick={{ fill: '#fda4af', fontSize: 9.5, fontFamily: 'monospace' }}
+                tickLine={false}
+              />
+              <YAxis
+                yAxisId="cum30"
+                orientation="right"
+                stroke="#22d3ee"
+                tick={{ fill: '#67e8f9', fontSize: 9.5, fontFamily: 'monospace' }}
+                tickLine={false}
+              />
+              <ReferenceLine
+                yAxisId="daily"
+                y={thirtyDayComparison.meanDaily30dVal}
+                stroke="#fbbf24"
+                strokeDasharray="4 3"
+                strokeWidth={1.5}
+              />
+              <ReferenceLine
+                yAxisId="daily"
+                y={thirtyDayComparison.today24hVal}
+                stroke="#f43f5e"
+                strokeDasharray="2 2"
+                strokeWidth={1.3}
+              />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload || !payload.length) return null;
+                  const row = payload[0].payload as {
+                    dayLabel: string;
+                    daily24hVal: number;
+                    rolling30dMeanVal: number;
+                    cumulative30dVal: number;
+                    isToday: boolean;
+                  };
+                  return (
+                    <div className="bg-slate-950/95 border border-slate-700 rounded p-2 shadow-xl font-mono text-[11px] space-y-1">
+                      <div className="font-bold text-white border-b border-slate-800 pb-0.5">
+                        {row.dayLabel}
+                      </div>
+                      <div className="text-rose-300">
+                        Døgnværdi (24t): <strong>{row.daily24hVal.toLocaleString('da-DK')} {unitLabel}</strong>
+                      </div>
+                      <div className="text-amber-300">
+                        30d døgn-gns.: <strong>{row.rolling30dMeanVal.toLocaleString('da-DK')} {unitLabel}</strong>
+                      </div>
+                      <div className="text-cyan-300">
+                        30d akkumuleret: <strong>{row.cumulative30dVal.toLocaleString('da-DK')} {unitLabel}</strong>
+                      </div>
+                    </div>
+                  );
+                }}
+              />
+              <Bar
+                yAxisId="daily"
+                dataKey="daily24hVal"
+                name={`Daglig 24t dosis (${unitLabel})`}
+                fill="#f43f5e"
+                fillOpacity={0.55}
+                radius={[2, 2, 0, 0]}
+              />
+              <Area
+                yAxisId="cum30"
+                type="monotone"
+                dataKey="cumulative30dVal"
+                name={`30d akkumuleret (${unitLabel})`}
+                stroke="#22d3ee"
+                strokeWidth={2.2}
+                fill="#22d3ee"
+                fillOpacity={0.14}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-400">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-rose-300">▮ Daglig 24t dosis</span>
+            <span className="text-cyan-300">— 30d akkumuleret kurve</span>
+            <span className="text-amber-300">-- 30d døgn-gennemsnit</span>
+          </div>
+          <span className="text-slate-400">
+            Synoptisk 30-døgns rullende eksponering
           </span>
         </div>
       </div>

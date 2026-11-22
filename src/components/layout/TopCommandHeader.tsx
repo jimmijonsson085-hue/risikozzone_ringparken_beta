@@ -104,6 +104,7 @@ export interface TopCommandHeaderProps {
   onOpenSimultaneousModal?: () => void;
   onAcknowledgeSimultaneousP1?: () => void;
   onClearSimultaneousSimulation?: () => void;
+  onExportWeatherCorrelationPdf?: () => void;
 }
 
 export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
@@ -163,6 +164,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
   onOpenSimultaneousModal,
   onAcknowledgeSimultaneousP1,
   onClearSimultaneousSimulation,
+  onExportWeatherCorrelationPdf,
 }) => {
   const [showRiskSummaryPopover, setShowRiskSummaryPopover] = useState(false);
   const [showSimultaneousMenu, setShowSimultaneousMenu] = useState(false);
@@ -968,6 +970,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           isManualMachineNoiseOverrideActive ? manualMachineNoiseOutputDb : 114
         }
         onSelectHour={onSelectHour}
+        onExportForensicPdf={onExportWeatherCorrelationPdf}
       />
     </header>
   );

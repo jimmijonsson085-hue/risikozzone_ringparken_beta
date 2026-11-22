@@ -19,6 +19,7 @@ import {
   RingparkenBuildingUnit,
 } from '../../types/dispersion';
 import { RightPanelTab, UiDensityMode, ViewportVisualizationMode } from './layoutTypes';
+import { computeFuzzySearchScore } from '../../utils/riskEngine';
 
 export interface CommandPaletteModalProps {
   isOpen: boolean;
@@ -463,10 +464,13 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
 
   const { renderedSections, flatVisibleOptions } = useMemo(() => {
     const tokens = trimmedQuery ? trimmedQuery.split(/\s+/).filter(Boolean) : [];
-    const matchesQuery = (cmd: CommandItem) => {
-      if (tokens.length === 0) return true;
-      const haystack = `${cmd.title} ${cmd.subtitle} ${cmd.keywords}`.toLowerCase();
-      return tokens.every((tk) => haystack.includes(tk));
+    const scoreCommand = (cmd: CommandItem): number => {
+      if (tokens.length === 0) return 100;
+      const haystack = `${cmd.title} ${cmd.subtitle} ${cmd.keywords}`;
+      if (tokens.every((tk) => haystack.toLowerCase().includes(tk))) {
+        return 95;
+      }
+      return computeFuzzySearchScore(trimmedQuery, haystack);
     };
 
     const sections: Array<{
@@ -496,7 +500,12 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
 
     // Always render the 4 fixed groups in invariant order (never reordered between keystrokes)
     for (const grp of FIXED_GROUP_ORDER) {
-      const matched = allCommands.filter((c) => c.group === grp.key && matchesQuery(c));
+      const matched = allCommands
+        .filter((c) => c.group === grp.key)
+        .map((c) => ({ item: c, score: scoreCommand(c) }))
+        .filter((entry) => entry.score >= (tokens.length === 0 ? 1 : 45))
+        .sort((a, b) => (tokens.length > 0 ? b.score - a.score : 0))
+        .map((entry) => entry.item);
       if (matched.length > 0) {
         sections.push({
           sectionKey: grp.key,

@@ -1105,4 +1105,63 @@ html {
   will-change: transform, box-shadow;
 }
 
+/* ============================================================================
+ * #main-workspace-anchor WIND > 10 m/s 2D DUST PLUME SPREAD ANIMATION SEQUENCE
+ * Simulates downwind aerosol & dust dispersion originating from selected source nodes
+ * ============================================================================ */
+@keyframes dustPlumeSpreadWave {
+  0% {
+    transform: translate3d(0, 0, 0) scale3d(0.22, 0.35, 1);
+    opacity: 0.88;
+  }
+  55% {
+    opacity: 0.48;
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale3d(1.38, 1.38, 1);
+    opacity: 0;
+  }
+}
 
+@keyframes dustPlumeStreakDrift {
+  0% {
+    stroke-dashoffset: 56;
+    opacity: 0.25;
+  }
+  30% {
+    opacity: 0.92;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0.3;
+  }
+}
+
+#main-workspace-anchor .map-dust-plume-wave {
+  transform-box: fill-box;
+  transform-origin: 0% 50%;
+  will-change: transform, opacity;
+  animation: dustPlumeSpreadWave var(--dust-plume-dur, 1.9s) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+#main-workspace-anchor .map-dust-plume-wave--2 {
+  animation-delay: calc(var(--dust-plume-dur, 1.9s) * 0.33);
+}
+
+#main-workspace-anchor .map-dust-plume-wave--3 {
+  animation-delay: calc(var(--dust-plume-dur, 1.9s) * 0.66);
+}
+
+#main-workspace-anchor .map-dust-plume-streak {
+  will-change: stroke-dashoffset, opacity;
+  animation: dustPlumeStreakDrift var(--dust-streak-dur, 1.2s) linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #main-workspace-anchor .map-dust-plume-wave,
+  #main-workspace-anchor .map-dust-plume-streak {
+    animation: none !important;
+    opacity: 0.38 !important;
+    transform: none !important;
+  }
+}

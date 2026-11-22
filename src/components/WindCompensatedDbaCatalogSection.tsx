@@ -26,6 +26,11 @@ import {
   DEMOLITION_ACTIVITY_MODES,
   DemolitionActivityModeId,
 } from './WeatherNoiseDustCorrelationPanel';
+import {
+  DbaLoggerDatasetEntry,
+  ParsedDbaHourlySample,
+  buildEsdhMachineImpulseCsv,
+} from '../utils/esdhCorrelationCsv';
 
 export interface WindCompensatedDbaCatalogSectionProps {
   sources: DemolitionSourceNode[];
@@ -58,23 +63,7 @@ export interface WindCompensatedDbaCatalogSectionProps {
   }) => Promise<void> | void;
 }
 
-interface ParsedDbaHourlySample {
-  globalHourIndex: number; // 0..167
-  rawLaeqDb: number;
-  lafmaxPeakDb: number;
-}
-
-interface DbaLoggerDatasetEntry {
-  id: string;
-  fileName: string;
-  blockLabel: string;
-  soundMeterModel: string;
-  distanceMeters: number;
-  bearingFromSiteDeg: number;
-  sha256Hex: string;
-  isUserUploaded: boolean;
-  uploadedSamplesByGlobalHour: Record<number, ParsedDbaHourlySample>;
-}
+// DbaLoggerDatasetEntry & ParsedDbaHourlySample imported from ../utils/esdhCorrelationCsv
 
 const PRESET_DBA_LOGGERS: DbaLoggerDatasetEntry[] = [
   {
@@ -376,10 +365,17 @@ export const WindCompensatedDbaCatalogSection: React.FC<
 }) => {
   const [loggers, setLoggers] = useState<DbaLoggerDatasetEntry[]>(PRESET_DBA_LOGGERS);
   const [activeLoggerId, setActiveLoggerId] = useState<string>(PRESET_DBA_LOGGERS[0].id);
+  const [selectedEsdhLoggerIds, setSelectedEsdhLoggerIds] = useState<string[]>([
+    PRESET_DBA_LOGGERS[0].id,
+    PRESET_DBA_LOGGERS[1].id,
+    PRESET_DBA_LOGGERS[2].id,
+    PRESET_DBA_LOGGERS[3].id,
+  ]);
   const [chartWindowMode, setChartWindowMode] = useState<'24h' | '168h'>('24h');
   const [uploadStatusBanner, setUploadStatusBanner] = useState<string | null>(null);
   const [pdfExportBanner, setPdfExportBanner] = useState<boolean>(false);
   const [csvExportBanner, setCsvExportBanner] = useState<boolean>(false);
+  const [esdhCsvExportBanner, setEsdhCsvExportBanner] = useState<string | null>(null);
   const [evidenceLoggedBanner, setEvidenceLoggedBanner] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -632,6 +628,9 @@ export const WindCompensatedDbaCatalogSection: React.FC<
     if (newEntries.length > 0) {
       setLoggers((prev) => [...newEntries, ...prev]);
       setActiveLoggerId(newEntries[0].id);
+      setSelectedEsdhLoggerIds((prev) =>
+        Array.from(new Set([...newEntries.map((entry) => entry.id), ...prev]))
+      );
       setUploadStatusBanner(
         `${newEntries.length} .DBA-fil(er) indlæst ("${newEntries[0].fileName}") og korreleret automatisk over 168 timer mod maskinprofiler & Open-Meteo vejrdata.`
       );
@@ -703,6 +702,47 @@ export const WindCompensatedDbaCatalogSection: React.FC<
 
     setCsvExportBanner(true);
     window.setTimeout(() => setCsvExportBanner(false), 3500);
+  };
+
+  const toggleEsdhBlockSelection = (loggerId: string) => {
+    setSelectedEsdhLoggerIds((prev) =>
+      prev.includes(loggerId)
+        ? prev.length > 1
+          ? prev.filter((id) => id !== loggerId)
+          : prev
+        : [...prev, loggerId]
+    );
+  };
+
+  const handleExportEsdhCorrelationCsv = () => {
+    const result = buildEsdhMachineImpulseCsv({
+      loggers,
+      selectedEsdhLoggerIds,
+      activeLogger,
+      weatherDataset,
+      currentWeather,
+      bestMatchedMachine,
+      effectiveSourceLwaDb,
+    });
+
+    const blob = new Blob([result.csvContent], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = result.fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setEsdhCsvExportBanner(
+      `ESDH CSV eksporteret (${result.fileName}) · ${result.exportedCount} valgte naboblok(ke) · Vind ${currentWeather.windSpeed10m.toFixed(
+        1
+      )} m/s · Maks vindkomp. ${result.maxCompDb.toFixed(1)} dB(A).`
+    );
+    window.setTimeout(() => setEsdhCsvExportBanner(null), 5000);
   };
 
   const handleGenerateFull168hPdfReport = () => {
@@ -787,6 +827,25 @@ export const WindCompensatedDbaCatalogSection: React.FC<
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleExportEsdhCorrelationCsv}
+            data-testid="dba-section-export-esdh-csv-btn"
+            title="Eksportér den aktuelle vindkompenserede maskin-impulsstøj-korrelation for de valgte naboblokke som struktureret ESDH-klar CSV"
+            className={`px-2.5 py-1.5 rounded border font-mono text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
+              esdhCsvExportBanner
+                ? 'bg-emerald-500 text-slate-950 border-white'
+                : 'bg-cyan-500/20 hover:bg-cyan-500/30 border-cyan-400/70 text-cyan-200'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              {esdhCsvExportBanner
+                ? '✓ ESDH CSV Eksporteret!'
+                : `Eksportér ESDH Korrelation (.CSV · ${selectedEsdhLoggerIds.length} blokke)`}
+            </span>
+          </button>
+
           <button
             type="button"
             onClick={handleExport168hCsv}
@@ -897,26 +956,64 @@ export const WindCompensatedDbaCatalogSection: React.FC<
           </span>
         </div>
 
-        {/* Active .DBA File Selector */}
+        {/* Active .DBA File Selector + ESDH Multi-Block Selection */}
         <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-mono text-slate-400 mr-1">Aktiv .DBA serie:</span>
+          <span className="text-[11px] font-mono text-slate-400 mr-1">
+            Aktiv .DBA serie &amp; ESDH-naboblokke:
+          </span>
           {loggers.map((lg) => {
             const isSel = lg.id === activeLogger.id;
+            const isInEsdh = selectedEsdhLoggerIds.includes(lg.id);
             return (
-              <button
-                key={lg.id}
-                type="button"
-                onClick={() => setActiveLoggerId(lg.id)}
-                className={`px-2.5 py-1 rounded text-[11px] font-mono border cursor-pointer transition-colors whitespace-nowrap shrink-0 ${
-                  isSel
-                    ? 'bg-fuchsia-500/25 border-fuchsia-400 text-white font-bold'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-600'
-                }`}
-              >
-                {lg.isUserUploaded ? `★ ${lg.fileName}` : lg.blockLabel}
-              </button>
+              <div key={lg.id} className="inline-flex items-center rounded border border-slate-800 bg-slate-900/90 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => toggleEsdhBlockSelection(lg.id)}
+                  title={
+                    isInEsdh
+                      ? 'Medtaget i ESDH CSV-eksport (klik for at fravælge)'
+                      : 'Fravalgt i ESDH CSV-eksport (klik for at medtage)'
+                  }
+                  className={`px-1.5 py-1 text-[11px] font-mono border-r border-slate-800 cursor-pointer ${
+                    isInEsdh
+                      ? 'bg-cyan-500/20 text-cyan-200 font-bold'
+                      : 'bg-slate-950 text-slate-500'
+                  }`}
+                >
+                  {isInEsdh ? '✓' : '○'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveLoggerId(lg.id)}
+                  className={`px-2 py-1 text-[11px] font-mono cursor-pointer transition-colors whitespace-nowrap shrink-0 ${
+                    isSel
+                      ? 'bg-fuchsia-500/25 text-white font-bold'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  {lg.isUserUploaded ? `★ ${lg.fileName}` : lg.blockLabel}
+                </button>
+              </div>
             );
           })}
+          <div className="inline-flex items-center gap-1 ml-auto">
+            <button
+              type="button"
+              onClick={() => setSelectedEsdhLoggerIds(loggers.map((l) => l.id))}
+              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] font-mono text-cyan-200 cursor-pointer whitespace-nowrap shrink-0"
+              title="Medtag alle naboblokke i ESDH CSV-eksport"
+            >
+              Vælg alle ({loggers.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedEsdhLoggerIds([activeLogger.id])}
+              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] font-mono text-slate-300 hover:text-white cursor-pointer whitespace-nowrap shrink-0"
+              title="Begræns ESDH CSV-eksport til kun den aktive måleblok"
+            >
+              Kun aktiv
+            </button>
+          </div>
         </div>
       </div>
 
@@ -924,6 +1021,16 @@ export const WindCompensatedDbaCatalogSection: React.FC<
         <div className="px-3 py-2 rounded bg-emerald-950/70 border border-emerald-500/60 text-xs font-mono text-emerald-200 flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{uploadStatusBanner}</span>
+        </div>
+      )}
+
+      {esdhCsvExportBanner && (
+        <div
+          data-testid="dba-section-esdh-csv-banner"
+          className="px-3 py-2 rounded bg-cyan-950/75 border border-cyan-400/60 text-xs font-mono text-cyan-100 flex items-center gap-2"
+        >
+          <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span>{esdhCsvExportBanner}</span>
         </div>
       )}
 
@@ -1155,25 +1262,40 @@ export const WindCompensatedDbaCatalogSection: React.FC<
             </span>
           </div>
 
-          {bestMatchedMachine && onApplyMatchedMachineProfile && (
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              onClick={() =>
-                onApplyMatchedMachineProfile({
-                  lwaDb: bestMatchedMachine.lwaDb,
-                  machineryCategoryKey: bestMatchedMachine.machineryKey,
-                  profileLabel: bestMatchedMachine.label,
-                })
-              }
-              className="px-2.5 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/70 text-cyan-200 font-mono text-[11px] font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              onClick={handleExportEsdhCorrelationCsv}
+              data-testid="dba-correlation-table-export-esdh-csv-btn"
+              className="px-2.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/70 text-emerald-200 font-mono text-[11px] font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              title="Eksportér den vindkompenserede maskin-impulsstøj-korrelation for de valgte naboblokke til ESDH (.CSV)"
             >
-              <Sliders className="w-3 h-3 text-cyan-300 shrink-0" />
+              <FileSpreadsheet className="w-3 h-3 text-emerald-300 shrink-0" />
               <span>
-                Anvend bedste match ({bestMatchedMachine.shortLabel} ·{' '}
-                {bestMatchedMachine.matchScorePct}%)
+                Eksportér valgte naboblokke (.CSV · {selectedEsdhLoggerIds.length})
               </span>
             </button>
-          )}
+
+            {bestMatchedMachine && onApplyMatchedMachineProfile && (
+              <button
+                type="button"
+                onClick={() =>
+                  onApplyMatchedMachineProfile({
+                    lwaDb: bestMatchedMachine.lwaDb,
+                    machineryCategoryKey: bestMatchedMachine.machineryKey,
+                    profileLabel: bestMatchedMachine.label,
+                  })
+                }
+                className="px-2.5 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/70 text-cyan-200 font-mono text-[11px] font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <Sliders className="w-3 h-3 text-cyan-300 shrink-0" />
+                <span>
+                  Anvend bedste match ({bestMatchedMachine.shortLabel} ·{' '}
+                  {bestMatchedMachine.matchScorePct}%)
+                </span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="overflow-x-auto">

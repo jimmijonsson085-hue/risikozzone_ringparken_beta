@@ -1257,7 +1257,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
               <Loader2 className="w-5 h-5 animate-spin text-indigo-400 shrink-0" />
               <div className="text-xs space-y-0.5">
                 <div className="font-semibold">
-                  Gemini 3 Flash Multimodal PDF-motor analyserer dokumentet...
+                  Gemini 3.8 Flash Multimodal PDF-motor analyserer dokumentet...
                 </div>
                 <div className="text-indigo-300/80">
                   Udtrækker journalnumre, citater, myndighedsindrømmelser og krydstjekker mod

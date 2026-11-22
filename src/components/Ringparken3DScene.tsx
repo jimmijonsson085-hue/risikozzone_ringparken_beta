@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import {
+  AlertTriangle,
   Biohazard,
   Box,
   Building2,
@@ -256,6 +257,9 @@ export interface AsbestosHeatmapMetrics {
   leewardWindReductionPct: number;
   peakLeewardAccumulationFactor: number;
   criticalLeewardBuildingLabel: string;
+  // Børnehave-receptor (Kierulffsvej 2–4) live asbestos concentration for >0.001 f/cm³ alarm
+  bornehaveFibersCm3: number;
+  bornehaveReceptorLabel: string;
 }
 
 const ASBESTOS_VOLUME_GRID_DIM = 22;
@@ -979,6 +983,26 @@ function renderAsbestosHeatmapCanvasAndRelief(
     activeAsbestosSources[0]?.src ||
     sources[0];
 
+  // Evaluate current instantaneous asbestos fiber concentration at the Børnehave receptor (Kierulffsvej 2–4)
+  const bornehaveRec = receptors.find(
+    (r) =>
+      r.id === 'rec-byg-5-daginst' ||
+      /børnehave|daginst|kierulffsvej\s*2/i.test(`${r.name} ${r.address}`)
+  );
+  const bornehavePrimaryXZ = latLngToWorldXZ({ lat: 55.4132, lng: 11.3541 });
+  const bornehaveSecondaryXZ = latLngToWorldXZ(
+    bornehaveRec ? bornehaveRec.center : { lat: 55.41278, lng: 11.35495 }
+  );
+  const bornehaveFibersCm3 = Number(
+    Math.max(
+      evalPointForHourKernel(bornehavePrimaryXZ.x, bornehavePrimaryXZ.z, 0),
+      evalPointForHourKernel(bornehaveSecondaryXZ.x, bornehaveSecondaryXZ.z, 0)
+    ).toFixed(5)
+  );
+  const bornehaveReceptorLabel = bornehaveRec
+    ? `${bornehaveRec.code}: ${bornehaveRec.name}`
+    : 'Børnehave / Daginstitution (Kierulffsvej 2–4)';
+
   return {
     isTemporal24hMode: temporal24hMode,
     peakFibersCm3: Number(peakFibersCm3.toFixed(5)),
@@ -1008,6 +1032,8 @@ function renderAsbestosHeatmapCanvasAndRelief(
     leewardWindReductionPct: windReductionPct,
     peakLeewardAccumulationFactor,
     criticalLeewardBuildingLabel,
+    bornehaveFibersCm3,
+    bornehaveReceptorLabel,
   };
 }
 
@@ -4696,6 +4722,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     leewardWindReductionPct: 82,
     peakLeewardAccumulationFactor: 2.25,
     criticalLeewardBuildingLabel: 'R1: Rødtjørnevej 2',
+    bornehaveFibersCm3: 0.0004,
+    bornehaveReceptorLabel: 'Børnehave / Daginstitution (Kierulffsvej 2–4)',
   });
 
   const effectiveTemporalAccumulationHours = syncTemporalVolumeToTimeline
@@ -4982,6 +5010,27 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     [sources, currentWeather, machineryLoadOutputPct, waterSuppressionActive]
   );
 
+  // Automatic 3D Asbestos Concentration Monitor for the Børnehave Receptor (> 0.001 f/cm³ alarm trigger)
+  const bornehaveOverlayAlert = React.useMemo(
+    () =>
+      evaluateBornehaveDaycare3DPlumeAlert({
+        sources,
+        receptors,
+        weather: currentWeather,
+        evalHeightMeters: asbestosEvalHeightMeters,
+        waterSuppressionActive,
+      }),
+    [sources, receptors, currentWeather, asbestosEvalHeightMeters, waterSuppressionActive]
+  );
+
+  const bornehaveAsbestosConcCm3 = Number(
+    Math.max(
+      asbestosMetrics.bornehaveFibersCm3 ?? 0,
+      bornehaveOverlayAlert.asbestosFibersCm3 ?? 0
+    ).toFixed(5)
+  );
+  const isBornehaveAsbestosAlarmTriggered = bornehaveAsbestosConcCm3 > 0.001;
+
   // Synchronize 3D Courtyard Accumulated Dust-Dose Heatmap directly with the footer Timeline Slider (00:00-23:00)
   useEffect(() => {
     if (!syncCourtyardHeatmapWithTimeline || isPlayingDustDeposition) return;
@@ -5090,6 +5139,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     virtualLeakPinPoint,
     virtualLeakImpact,
     simultaneousDispatch,
+    machineNoiseOutputDb,
+    hasSteelRoadPlates,
   });
 
   useEffect(() => {
@@ -5154,6 +5205,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       virtualLeakPinPoint,
       virtualLeakImpact,
       simultaneousDispatch,
+      machineNoiseOutputDb,
+      hasSteelRoadPlates,
     };
   }, [
     sources,
@@ -5216,6 +5269,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     virtualLeakPinPoint,
     virtualLeakImpact,
     simultaneousDispatch,
+    machineNoiseOutputDb,
+    hasSteelRoadPlates,
   ]);
 
   // Real-time recomputation of the 3D Asbestos-Fiber Dispersion Heatmap (both 1h Real-Time & 24h Temporal 3D Volume Accumulation)
@@ -5660,6 +5715,10 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           arrowMats: THREE.MeshBasicMaterial[];
         }>;
         crawlspaceSuctionArrow: THREE.Mesh;
+        dinPulseInnerMesh: THREE.Mesh;
+        dinPulseOuterMesh: THREE.Mesh;
+        dinPulseInnerMat: THREE.MeshBasicMaterial;
+        dinPulseOuterMat: THREE.MeshBasicMaterial;
       }
     >();
 
@@ -5671,6 +5730,9 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     // Orient cone so +Z is the forward tip direction
     nplVecConeGeo.rotateX(Math.PI / 2);
     const crawlspaceSuctionConeGeo = new THREE.ConeGeometry(0.42, 1.4, 10);
+    // Shared ring geometries for DIN 4150-3 structural integrity pulse rings around building markers
+    const dinPulseInnerGeo = new THREE.RingGeometry(4.8, 5.55, 28);
+    const dinPulseOuterGeo = new THREE.RingGeometry(5.9, 6.75, 28);
 
     RINGPARKEN_MASTER_BUILDINGS.forEach((b) => {
       const { x, z } = latLngToWorldXZ(b.center);
@@ -5819,6 +5881,33 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
 
       bGroup.add(nplOverlayGroup);
 
+      // 5. DIN 4150-3 Structural Integrity Breach Pulse Rings around building marker
+      const dinPulseInnerMat = new THREE.MeshBasicMaterial({
+        color: 0xf43f5e,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.0,
+        depthWrite: false,
+      });
+      const dinPulseInnerMesh = new THREE.Mesh(dinPulseInnerGeo, dinPulseInnerMat);
+      dinPulseInnerMesh.rotation.x = -Math.PI / 2;
+      dinPulseInnerMesh.position.y = 0.29;
+      dinPulseInnerMesh.visible = false;
+      bGroup.add(dinPulseInnerMesh);
+
+      const dinPulseOuterMat = new THREE.MeshBasicMaterial({
+        color: 0xf59e0b,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.0,
+        depthWrite: false,
+      });
+      const dinPulseOuterMesh = new THREE.Mesh(dinPulseOuterGeo, dinPulseOuterMat);
+      dinPulseOuterMesh.rotation.x = -Math.PI / 2;
+      dinPulseOuterMesh.position.y = 0.27;
+      dinPulseOuterMesh.visible = false;
+      bGroup.add(dinPulseOuterMesh);
+
       masterBuildingRegistryGroup.add(bGroup);
       masterBuildingNodesMap.set(b.id, {
         root: bGroup,
@@ -5833,6 +5922,10 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
         nplSliceMat,
         nplFloorArrowRings,
         crawlspaceSuctionArrow,
+        dinPulseInnerMesh,
+        dinPulseOuterMesh,
+        dinPulseInnerMat,
+        dinPulseOuterMat,
       });
     });
 
@@ -8078,6 +8171,66 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
             bNode.crawlspaceSuctionArrow.position.y =
               0.7 + ((elapsed * 1.4) % 1.0) * Math.max(1.2, zNplUnits * 0.55);
           }
+        }
+
+        // Evaluate Bornitz PPV (DIN 4150-3:2016) at building footprint with zero allocations
+        const latRadSite = (SITE_ORIGIN.lat * Math.PI) / 180;
+        const mPerDegLngSite = 111320 * Math.cos(latRadSite);
+        const machineDbNow = Math.max(85, state.machineNoiseOutputDb || 114.5);
+        const dbFactorNow = Math.pow(10, (machineDbNow - 114) / 22);
+        const soilSatAmpNow = state.currentWeather.precipitation > 2 ? 1.14 : 1.04;
+        const plateDampNow = state.hasSteelRoadPlates ? 0.72 : 1.0;
+        const pipePpvGlobal = state.waterMainTelemetry?.pipePpvMmPerSec ?? 0;
+
+        let sumSquaresPpv = 0;
+        for (let sIdx = 0; sIdx < state.sources.length; sIdx++) {
+          const src = state.sources[sIdx];
+          if (!src.active || hiddenSourceSet.has(src.id)) continue;
+          const dxM = (b.center.lng - src.position.lng) * mPerDegLngSite;
+          const dyM = (b.center.lat - src.position.lat) * 111320;
+          const r3D = Math.max(2.0, Math.hypot(Math.hypot(dxM, dyM), 1.65));
+          const srcScale = Math.max(0.7, Math.min(1.45, src.sourceEmissionFactor ?? 1.0));
+          const ppv =
+            26.5 *
+            dbFactorNow *
+            srcScale *
+            soilSatAmpNow *
+            plateDampNow *
+            Math.pow(2.0 / r3D, 0.55) *
+            Math.exp(-0.036 * Math.max(0, r3D - 2.0));
+          sumSquaresPpv += ppv * ppv;
+        }
+        const bldgPpvMmPerSec = Math.sqrt(sumSquaresPpv);
+        const dinThresholdMmPerSec =
+          b.category === 'a_inhabited' || b.category === 'b_vacant' ? 5.0 : 20.0;
+        const isDin4150Breached =
+          bldgPpvMmPerSec >= dinThresholdMmPerSec ||
+          (pipePpvGlobal >= 25.0 && bldgPpvMmPerSec >= dinThresholdMmPerSec * 0.75);
+
+        if (isDin4150Breached) {
+          const severity = Math.min(2.0, bldgPpvMmPerSec / dinThresholdMmPerSec);
+          const phase1 = (elapsed * (1.55 + severity * 0.35) + b.center.lat * 100) % 1.0;
+          const phase2 = (phase1 + 0.5) % 1.0;
+          const s1 = 1.0 + phase1 * 0.78;
+          const s2 = 1.0 + phase2 * 0.85;
+          const isCriticalR1 = bldgPpvMmPerSec >= 20.0 || pipePpvGlobal >= 50.0;
+
+          bNode.dinPulseInnerMesh.visible = true;
+          bNode.dinPulseInnerMesh.scale.set(s1, s1, 1);
+          bNode.dinPulseInnerMat.color.setHex(isCriticalR1 ? 0xf43f5e : 0xf59e0b);
+          bNode.dinPulseInnerMat.opacity = (1.0 - phase1) * 0.88;
+
+          bNode.dinPulseOuterMesh.visible = true;
+          bNode.dinPulseOuterMesh.scale.set(s2, s2, 1);
+          bNode.dinPulseOuterMat.color.setHex(isCriticalR1 ? 0xfb7185 : 0xfbbf24);
+          bNode.dinPulseOuterMat.opacity = (1.0 - phase2) * 0.64;
+
+          bNode.roofCapMat.emissive.setHex(isCriticalR1 ? 0xf43f5e : 0xf59e0b);
+          bNode.roofCapMat.emissiveIntensity = 0.55 + 0.45 * Math.abs(Math.sin(elapsed * 4.5));
+        } else {
+          bNode.dinPulseInnerMesh.visible = false;
+          bNode.dinPulseOuterMesh.visible = false;
+          bNode.roofCapMat.emissiveIntensity = 0.45;
         }
       });
 
@@ -10749,6 +10902,34 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                       )}% GV)`}
                 </span>
               </div>
+
+              {/* Automatic Asbestos Concentration Monitor for Børnehave Receptor (> 0.001 f/cm³) */}
+              {isBornehaveAsbestosAlarmTriggered && (
+                <div
+                  data-testid="asbestos-overlay-bornehave-alarm"
+                  role="alert"
+                  className="bg-rose-950/95 border border-rose-400 rounded px-2.5 py-2 space-y-1 text-[11px] font-mono shadow-lg"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-extrabold text-rose-200 flex items-center gap-1.5 uppercase tracking-wide">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                      <span>ASBEST-ALARM: BØRNEHAVE-RECEPTOR &gt; 0,001 f/cm³</span>
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white font-bold border border-amber-300 tabular-nums shrink-0">
+                      {bornehaveAsbestosConcCm3.toFixed(4)} f/cm³
+                    </span>
+                  </div>
+                  <div className="text-rose-100/90 leading-snug tabular-nums">
+                    Målepunkt: <strong>{asbestosMetrics.bornehaveReceptorLabel}</strong> ·{' '}
+                    Alarmgrænse: <strong>0,0010 f/cm³</strong> (
+                    {Math.round((bornehaveAsbestosConcCm3 / ASBESTOS_GV_2026) * 100)}% af BEK 613 GV
+                    0,0030 f/cm³) · Kilde: <strong>{bornehaveOverlayAlert.dominantSourceCode}</strong>
+                  </div>
+                  <div className="text-amber-200 font-semibold leading-snug">
+                    Strakstiltag: Aktivér øjeblikkelig vandtåge-støvbinding / arbejdsstop i opstrøms kildezone og underret daginstitutionen (Kierulffsvej 2–4).
+                  </div>
+                </div>
+              )}
 
               {/* Dynamic 'Tidsmæssig Akkumulering' Mode Switcher: Øjebliksbillede vs. 24t Kumulativ Eksponeringsrisiko */}
               <div

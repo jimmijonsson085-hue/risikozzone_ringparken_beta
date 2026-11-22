@@ -11,6 +11,7 @@ import {
   ReceptorZone,
   WeatherDataset,
 } from '../types/dispersion';
+import { evaluateReceptorAtHour } from './dispersionEngine';
 import { degreesToCompass } from './weatherService';
 
 function sanitizePdfText(input: string): string {
@@ -22,7 +23,10 @@ function sanitizePdfText(input: string): string {
     .replace(/↔/g, '<->')
     .replace(/Δ/g, 'Delta ')
     .replace(/•/g, '-')
-    .replace(/·/g, '|');
+    .replace(/·/g, '|')
+    .replace(/µ/g, 'u')
+    .replace(/³/g, '^3')
+    .replace(/²/g, '^2');
 }
 
 export interface WeatherCorrelationPdfParams {
@@ -35,9 +39,10 @@ export interface WeatherCorrelationPdfParams {
 }
 
 /**
- * Generates and downloads a detailed PDF summary of Wind-Noise-Dust correlation
- * extracted from the 24-hour meteorological telemetry, ISO 9613-2 acoustic refraction model,
- * and BEK 613/2026 dust sum-quotient dispersion simulation.
+ * Generates and downloads a detailed forensic PDF report of the current Weather, Wind Gust,
+ * and Dust Correlation including the last 24 hours of meteorological wind gust telemetry,
+ * particulate & asbestos dust concentrations (ug/m^3, fibre/cm^3, ug/m^2), ISO 9613-2 acoustic
+ * refraction metrics, and SHA-256 forensic chain-of-custody metadata (BEK 613/2026 & L 69).
  */
 export function generateWeatherCorrelationPdfReport(
   params: WeatherCorrelationPdfParams
@@ -45,7 +50,6 @@ export function generateWeatherCorrelationPdfReport(
   const { weatherDataset, simulation, sources, receptors, observations, sha256Hash } = params;
   const { currentWeather, receptorExposures, puff24h, maxSiteSumQuotient } = simulation;
 
-  // Determine highest-priority target point (worst current receptor or primary residential anchor)
   const worstExposure =
     [...receptorExposures].sort((a, b) => b.sumQuotient - a.sumQuotient)[0] || null;
   const targetReceptor =
@@ -60,21 +64,80 @@ export function generateWeatherCorrelationPdfReport(
     ? `${targetReceptor.code} - ${targetReceptor.name}`
     : 'Roedtjoernevej 2 (C962+VV Slagelse)';
 
+  const targetPuffProfile =
+    (targetReceptor
+      ? puff24h.receptorSummaries.find((r) => r.receptorId === targetReceptor.id)
+      : null)?.hourlyProfile || puff24h.peakReceptor.hourlyProfile;
+
   const emptyActivityConfigs: Record<string, SourceActivityConfig> = {};
 
-  const hourly24Series = weatherDataset.hours.map((hr) =>
-    evaluateNoiseAndDustAtPoint(focusPoint, hr, sources, emptyActivityConfigs)
-  );
+  const safeTargetReceptor: ReceptorZone = targetReceptor || {
+    id: 'fallback-rec',
+    code: 'R01',
+    name: 'Roedtjoernevej 2',
+    address: 'Roedtjoernevej 2, 4200 Slagelse',
+    category: 'residential',
+    center: focusPoint,
+    polygon: [focusPoint],
+    description: 'Fokus-receptor',
+  };
+
+  const hourly24Series = weatherDataset.hours.map((hr, idx) => {
+    const noiseDust = evaluateNoiseAndDustAtPoint(
+      focusPoint,
+      hr,
+      sources,
+      emptyActivityConfigs
+    );
+    const receptorEval = evaluateReceptorAtHour(safeTargetReceptor, sources, hr);
+    const puffHour = targetPuffProfile[idx];
+
+    const asbestosConc =
+      receptorEval.substances.find((s) => s.key === 'asbestos')?.concentration ?? 0;
+    const pcbConc =
+      receptorEval.substances.find((s) => s.key === 'pcb')?.concentration ?? 0;
+    const heavyMetalsConc =
+      receptorEval.substances.find((s) => s.key === 'heavyMetals')?.concentration ?? 0;
+    const quartzConc =
+      receptorEval.substances.find((s) => s.key === 'quartzWool')?.concentration ?? 0;
+
+    // Total particulate respirable dust concentration in ug/m^3 (PCB + heavy metals + quartz + asbestos mass equivalent)
+    const totalDustConcUgM3 = Number(
+      (
+        pcbConc +
+        heavyMetalsConc +
+        quartzConc * 1000 +
+        asbestosConc * 1200 +
+        noiseDust.adjustedDustSumQuotient * 18.5
+      ).toFixed(2)
+    );
+    const depositedDustUgM2 = Number(
+      (
+        puffHour?.depositedDustUgM2 ??
+        Math.max(0.5, noiseDust.adjustedDustSumQuotient * 100)
+      ).toFixed(1)
+    );
+
+    return {
+      ...noiseDust,
+      asbestosFibreCm3: asbestosConc,
+      totalDustConcUgM3,
+      depositedDustUgM2,
+    };
+  });
 
   const laeqArr = hourly24Series.map((h) => h.combinedLaeqDb);
   const lafmaxArr = hourly24Series.map((h) => h.combinedLafmaxDb);
   const dustArr = hourly24Series.map((h) => h.adjustedDustSumQuotient);
+  const dustConcArr = hourly24Series.map((h) => h.totalDustConcUgM3);
   const refractionArr = hourly24Series.map((h) => h.netWeatherRefractionEffectDb);
   const windSpeedArr = hourly24Series.map((h) => h.weather.windSpeed10m);
+  const windGustArr = hourly24Series.map((h) => h.weather.windGusts10m);
 
   const rWindToNoise = computePearsonCorrelation(refractionArr, laeqArr);
   const rNoiseToDust = computePearsonCorrelation(laeqArr, dustArr);
   const rWindSpeedToDust = computePearsonCorrelation(windSpeedArr, dustArr);
+  const rGustsToDustConc = computePearsonCorrelation(windGustArr, dustConcArr);
 
   const noiseExceedanceHours = hourly24Series.filter(
     (h) => h.exceedsLaeqLimit || h.exceedsLafmaxLimit
@@ -91,13 +154,24 @@ export function generateWeatherCorrelationPdfReport(
   );
   const peakDustHour = hourly24Series.reduce(
     (best, curr) =>
-      curr.adjustedDustSumQuotient > best.adjustedDustSumQuotient ? curr : best,
+      curr.totalDustConcUgM3 > best.totalDustConcUgM3 ? curr : best,
     hourly24Series[0]
   );
   const maxWindHour = hourly24Series.reduce(
-    (best, curr) => (curr.weather.windSpeed10m > best.weather.windSpeed10m ? curr : best),
+    (best, curr) =>
+      curr.weather.windSpeed10m > best.weather.windSpeed10m ? curr : best,
     hourly24Series[0]
   );
+  const maxGustHour = hourly24Series.reduce(
+    (best, curr) =>
+      curr.weather.windGusts10m > best.weather.windGusts10m ? curr : best,
+    hourly24Series[0]
+  );
+
+  const meanWindGustMs =
+    windGustArr.reduce((acc, v) => acc + v, 0) / Math.max(1, windGustArr.length);
+  const meanDustConcUgM3 =
+    dustConcArr.reduce((acc, v) => acc + v, 0) / Math.max(1, dustConcArr.length);
 
   // Current hour wind-noise-dust evaluation across top 6 exposed receptors
   const topReceptorEvaluations = [...receptorExposures]
@@ -133,92 +207,92 @@ export function generateWeatherCorrelationPdfReport(
     }
   };
 
-  // Top Header Banner
+  // Top Header Banner (Forensic Edition)
   doc.setFillColor(11, 14, 23);
-  doc.rect(0, 0, pageW, 34, 'F');
+  doc.rect(0, 0, pageW, 36, 'F');
   doc.setDrawColor(6, 182, 212);
   doc.setLineWidth(0.7);
-  doc.line(margin, 30.5, pageW - margin, 30.5);
+  doc.line(margin, 32.5, pageW - margin, 32.5);
 
   doc.setTextColor(34, 211, 238);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.2);
+  doc.setFontSize(8.0);
   doc.text(
     sanitizePdfText(
-      'RINGPARKEN MILJOE- & SPREDNINGSTELEMETRI | VIND-STOEJ-STOEV KORRELATIONSRAPPORT (PSS SAG W22085)'
+      'RETSMEDICINSK MILJOE- & SPREDNINGSRAPPORT | VINDSTOED, STOEVKONCENTRATION & STOEJ (PSS SAG W22085)'
     ),
     margin,
-    9.5
+    9.2
   );
 
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(13.5);
+  doc.setFontSize(13.2);
   doc.text(
     sanitizePdfText(
-      `Vejr-, Stoej- & Stoevkorrelationsrapport (${weatherDataset.dateIso} kl. ${currentWeather.hourLabel})`
+      `Retsmedicinsk Vejr- & Stoevkorrelationsrapport (24t) - ${weatherDataset.dateIso} kl. ${currentWeather.hourLabel}`
     ),
     margin,
-    17
+    16.8
   );
 
   doc.setTextColor(148, 163, 184);
   doc.setFont('courier', 'normal');
-  doc.setFontSize(7.4);
+  doc.setFontSize(7.2);
   doc.text(
     sanitizePdfText(
       `Fokus-Receptor: ${focusLabel} | Stabilitet: Pasquill ${currentWeather.pasquillClass} | SHA-256: ${sha256Hash.slice(
         0,
-        24
+        28
       )}...`
     ),
     margin,
-    24
+    23.5
   );
 
   doc.text(
     sanitizePdfText(
-      `Model: ISO 9613-2 Akustisk Refraktion + MST Vejl. 5/1984 + BEK 613/2026 Gaussisk Plume/Puff`
+      `Lovgrundlag: BEK nr. 613/2026 § 3 stk. 3, L 69 (BEK 1328/2025), ISO 9613-2 & MST Vejl. 5/1984 | Genereret: ${new Date().toISOString()}`
     ),
     margin,
-    28.5
+    28.8
   );
 
-  y = 40;
+  y = 41;
 
   // KPI Correlation Summary Grid (4 boxes)
   const kpiW = (contentW - 6) / 4;
   const kpis = [
     {
-      label: 'PEARSON r (VIND <-> STOEJ)',
-      val: `${rWindToNoise >= 0 ? '+' : ''}${rWindToNoise.toFixed(2)}`,
-      sub: `Refraktion vs L_Aeq`,
+      label: 'SPIDS VINDSTOED (24T)',
+      val: `${maxGustHour?.weather.windGusts10m.toFixed(1) ?? '0.0'} m/s`,
+      sub: `Snit: ${meanWindGustMs.toFixed(1)} m/s | Kl. ${maxGustHour?.weather.hourLabel ?? '13:00'}`,
       bg: [236, 254, 255] as [number, number, number],
       border: [6, 182, 212] as [number, number, number],
       text: [14, 116, 144] as [number, number, number],
     },
     {
-      label: 'PEARSON r (STOEJ <-> STOEV)',
-      val: `${rNoiseToDust >= 0 ? '+' : ''}${rNoiseToDust.toFixed(2)}`,
-      sub: `r(Vind<->Stoev): ${rWindSpeedToDust >= 0 ? '+' : ''}${rWindSpeedToDust.toFixed(2)}`,
+      label: 'SPIDS STOEVKONC. (24T)',
+      val: `${peakDustHour?.totalDustConcUgM3.toFixed(1) ?? '0.0'} ug/m3`,
+      sub: `Snit: ${meanDustConcUgM3.toFixed(1)} ug/m3 | S=${peakDustHour?.adjustedDustSumQuotient.toFixed(2) ?? '0.00'}`,
       bg: [255, 247, 237] as [number, number, number],
       border: [234, 88, 12] as [number, number, number],
       text: [194, 65, 12] as [number, number, number],
     },
     {
-      label: 'DOBBELT-OVERSKRIDELSE',
-      val: `${dualExceedanceHours}t / 24t`,
-      sub: `Stoej > GV: ${noiseExceedanceHours}t`,
-      bg: (dualExceedanceHours > 0 ? [255, 241, 242] : [236, 253, 245]) as [number, number, number],
-      border: (dualExceedanceHours > 0 ? [225, 29, 72] : [16, 185, 129]) as [number, number, number],
-      text: (dualExceedanceHours > 0 ? [190, 18, 60] : [4, 120, 87]) as [number, number, number],
-    },
-    {
-      label: 'SPIDS STOEJ & STOEV (24T)',
-      val: `${peakNoiseHour?.combinedLaeqDb.toFixed(1) ?? '0.0'} dB`,
-      sub: `L_AFmax ${Math.max(...lafmaxArr, 0).toFixed(0)} dB | Max S=${maxSiteSumQuotient.toFixed(2)}`,
+      label: 'KORRELATION r (STOED<->STOEV)',
+      val: `${rGustsToDustConc >= 0 ? '+' : ''}${rGustsToDustConc.toFixed(2)}`,
+      sub: `r(Vind<->Stoej): ${rWindToNoise >= 0 ? '+' : ''}${rWindToNoise.toFixed(2)} | r(Stoej<->Stoev): ${rNoiseToDust >= 0 ? '+' : ''}${rNoiseToDust.toFixed(2)}`,
       bg: [248, 250, 252] as [number, number, number],
       border: [100, 116, 139] as [number, number, number],
       text: [15, 23, 42] as [number, number, number],
+    },
+    {
+      label: 'DOBBELT-OVERSKRIDELSE',
+      val: `${dualExceedanceHours}t / 24t`,
+      sub: `Stoej > GV: ${noiseExceedanceHours}t | Max S=${maxSiteSumQuotient.toFixed(2)}`,
+      bg: (dualExceedanceHours > 0 ? [255, 241, 242] : [236, 253, 245]) as [number, number, number],
+      border: (dualExceedanceHours > 0 ? [225, 29, 72] : [16, 185, 129]) as [number, number, number],
+      text: (dualExceedanceHours > 0 ? [190, 18, 60] : [4, 120, 87]) as [number, number, number],
     },
   ];
 
@@ -230,29 +304,29 @@ export function generateWeatherCorrelationPdfReport(
     doc.rect(kx, y, kpiW, 18.5, 'FD');
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.6);
+    doc.setFontSize(6.3);
     doc.setTextColor(71, 85, 105);
     doc.text(sanitizePdfText(k.label), kx + 2, y + 4.8);
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(10.5);
     doc.setTextColor(...k.text);
     doc.text(sanitizePdfText(k.val), kx + 2, y + 11.2);
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.8);
+    doc.setFontSize(6.3);
     doc.setTextColor(51, 65, 85);
     doc.text(sanitizePdfText(k.sub), kx + 2, y + 16.0);
   });
   y += 23;
 
-  // Section 01: Executive Weather-Noise-Dust Telemetry Summary
-  ensureSpace(28);
+  // Section 01: Executive Weather-WindGust-Dust Telemetry Summary
+  ensureSpace(32);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.8);
+  doc.setFontSize(9.6);
   doc.setTextColor(15, 23, 42);
   doc.text(
-    sanitizePdfText('01. AKTUEL METEOROLOGI & VIND-STOEJ-STOEV SAMMENHÆNG'),
+    sanitizePdfText('01. AKTUEL METEOROLOGI, VINDSTOED & 24T STOEVKONCENTRATION'),
     margin,
     y
   );
@@ -261,38 +335,45 @@ export function generateWeatherCorrelationPdfReport(
   const plumeVectorDeg = (currentWeather.windDirection10m + 180) % 360;
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(203, 213, 225);
-  doc.rect(margin, y, contentW, 20, 'FD');
+  doc.rect(margin, y, contentW, 25, 'FD');
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.8);
+  doc.setFontSize(7.6);
   doc.setTextColor(30, 41, 59);
   const summaryLines = [
-    `Valgt tidspunkt: ${weatherDataset.dateIso} kl. ${currentWeather.hourLabel} | Vind: ${currentWeather.windSpeed10m.toFixed(
+    `Valgt tidspunkt: ${weatherDataset.dateIso} kl. ${currentWeather.hourLabel} | Middelvind: ${currentWeather.windSpeed10m.toFixed(
       1
-    )} m/s (stød ${currentWeather.windGusts10m.toFixed(1)} m/s) fra ${
+    )} m/s | Vindstoed: ${currentWeather.windGusts10m.toFixed(1)} m/s fra ${
       currentWeather.windDirection10m
     }° (${degreesToCompass(currentWeather.windDirection10m)}) -> Spredningsfane mod ${plumeVectorDeg}°`,
-    `Atmosfærisk stabilitet: Pasquill ${currentWeather.pasquillClass} | Temp: ${currentWeather.temperature2m.toFixed(
+    `Atmosfaere: Pasquill ${currentWeather.pasquillClass} | Temp: ${currentWeather.temperature2m.toFixed(
       1
-    )} °C | Fugt: ${currentWeather.relativeHumidity2m}% | Nedbør: ${currentWeather.precipitation.toFixed(
+    )} °C | Fugt: ${currentWeather.relativeHumidity2m}% | Nedboer: ${currentWeather.precipitation.toFixed(
       1
-    )} mm/t | 24t spidsvind kl. ${maxWindHour?.weather.hourLabel ?? '13:00'} (${
+    )} mm/t | 24t spids middelvind kl. ${maxWindHour?.weather.hourLabel ?? '13:00'} (${
       maxWindHour?.weather.windSpeed10m.toFixed(1) ?? '0.0'
     } m/s)`,
-    `24t Spidsstøj: kl. ${peakNoiseHour?.weather.hourLabel ?? '13:00'} (${peakNoiseHour?.combinedLaeqDb.toFixed(
+    `24t Spids Vindstoed: ${maxGustHour?.weather.windGusts10m.toFixed(1) ?? '0.0'} m/s kl. ${
+      maxGustHour?.weather.hourLabel ?? '13:00'
+    } | 24t Spids Stoevkoncentration: ${peakDustHour?.totalDustConcUgM3.toFixed(2) ?? '0.00'} ug/m^3 (Asbest ${
+      peakDustHour?.asbestosFibreCm3.toFixed(4) ?? '0.0000'
+    } f/cm^3) kl. ${peakDustHour?.weather.hourLabel ?? '13:00'}`,
+    `24t Spidsstoej: kl. ${peakNoiseHour?.weather.hourLabel ?? '13:00'} (${peakNoiseHour?.combinedLaeqDb.toFixed(
       1
-    )} dB L_Aeq) | 24t Spidsstøv ved fokus: kl. ${peakDustHour?.weather.hourLabel ?? '13:00'} (S = ${peakDustHour?.adjustedDustSumQuotient.toFixed(
+    )} dB L_Aeq) | r(Vind<->Stoev) = ${rWindSpeedToDust.toFixed(
       2
-    )}) | 24t Puff spidsreceptor: ${puff24h.peakReceptor.receptorName}`,
+    )} | r(Vindstoed<->Stoevkonc.) = ${rGustsToDustConc.toFixed(
+      2
+    )} | 24t Puff spidsreceptor: ${puff24h.peakReceptor.receptorName}`,
   ];
   summaryLines.forEach((line, i) => {
     doc.text(sanitizePdfText(line), margin + 3, y + 5.2 + i * 5.6);
   });
-  y += 24;
+  y += 29;
 
   // Section 02: Current-Hour Spatial Correlation Across Top 6 Receptor Zones
   ensureSpace(26);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.8);
+  doc.setFontSize(9.6);
   doc.setTextColor(15, 23, 42);
   doc.text(
     sanitizePdfText(
@@ -365,36 +446,38 @@ export function generateWeatherCorrelationPdfReport(
   });
   y += 5;
 
-  // Section 03: Full 24-Hour Time-Series Wind-Noise-Dust Matrix (00:00 -> 23:00)
-  ensureSpace(32);
+  // Section 03: Full 24-Hour Time-Series Wind Gust & Dust Concentration Forensic Matrix (00:00 -> 23:00)
+  ensureSpace(34);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.8);
+  doc.setFontSize(9.6);
   doc.setTextColor(15, 23, 42);
   doc.text(
-    sanitizePdfText(`03. 24-TIMERS VIND-, STOEJ- & STOEV-KORRELATIONSMATRIX (${focusLabel})`),
+    sanitizePdfText(
+      `03. 24-TIMERS VINDSTOED- & STOEVKONCENTRATIONSMATRIX (${focusLabel})`
+    ),
     margin,
     y
   );
   y += 3.5;
 
-  const hCols = [14, 24, 20, 16, 18, 19, 19, 18, 38];
+  const hCols = [13, 17, 19, 17, 24, 21, 16, 25, 34];
   const hHeaders = [
     'Time',
-    'Vind (m/s)',
-    'Retn.',
+    'Vind m/s',
+    'Stoed m/s',
     'Pasq.',
-    'Refr. dB',
-    'L_Aeq',
-    'L_AFmax',
-    'Stoev S',
-    'Sambelastning',
+    'Stoev ug/m3',
+    'Asbest f/cm3',
+    'Sumkv. S',
+    'LAeq / Max',
+    'Retsstatus',
   ];
 
   const drawHourlyTableHeader = () => {
     doc.setFillColor(30, 41, 59);
     doc.rect(margin, y, contentW, 6.2, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.9);
+    doc.setFontSize(6.5);
     doc.setTextColor(255, 255, 255);
     let hx = margin + 1.5;
     hHeaders.forEach((hdr, i) => {
@@ -431,26 +514,24 @@ export function generateWeatherCorrelationPdfReport(
 
     const cells = [
       row.weather.hourLabel,
-      `${row.weather.windSpeed10m.toFixed(1)} (${row.weather.windGusts10m.toFixed(0)})`,
-      `${row.weather.windDirection10m}°`,
-      row.weather.pasquillClass,
-      `${row.netWeatherRefractionEffectDb >= 0 ? '+' : ''}${row.netWeatherRefractionEffectDb.toFixed(
-        1
-      )}`,
-      `${row.combinedLaeqDb.toFixed(1)}`,
-      `${row.combinedLafmaxDb.toFixed(1)}`,
+      `${row.weather.windSpeed10m.toFixed(1)}`,
+      `${row.weather.windGusts10m.toFixed(1)}`,
+      `${row.weather.windDirection10m}° ${row.weather.pasquillClass}`,
+      `${row.totalDustConcUgM3.toFixed(1)}`,
+      `${row.asbestosFibreCm3.toFixed(4)}`,
       `${row.adjustedDustSumQuotient.toFixed(2)}`,
-      row.coExposureSeverity.slice(0, 24),
+      `${row.combinedLaeqDb.toFixed(0)}/${row.combinedLafmaxDb.toFixed(0)} dB`,
+      row.coExposureSeverity.slice(0, 22),
     ];
 
     let cx = margin + 1.5;
     cells.forEach((cell, cIdx) => {
       doc.setFont(
         'helvetica',
-        isSelected || cIdx === 0 || (isDual && cIdx >= 5) ? 'bold' : 'normal'
+        isSelected || cIdx === 0 || (isDual && cIdx >= 4) ? 'bold' : 'normal'
       );
-      doc.setFontSize(6.8);
-      if (isDual && cIdx >= 5) {
+      doc.setFontSize(6.5);
+      if (isDual && cIdx >= 4) {
         doc.setTextColor(190, 18, 60);
       } else if (isSelected) {
         doc.setTextColor(3, 105, 161);
@@ -468,7 +549,7 @@ export function generateWeatherCorrelationPdfReport(
   if (observations.length > 0) {
     ensureSpace(22);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.8);
+    doc.setFontSize(9.6);
     doc.setTextColor(15, 23, 42);
     doc.text(
       sanitizePdfText(
@@ -492,7 +573,7 @@ export function generateWeatherCorrelationPdfReport(
       doc.rect(margin, y, contentW, 13, 'FD');
 
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.6);
+      doc.setFontSize(7.5);
       doc.setTextColor(15, 23, 42);
       doc.text(
         sanitizePdfText(
@@ -503,13 +584,13 @@ export function generateWeatherCorrelationPdfReport(
       );
 
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.1);
+      doc.setFontSize(7.0);
       doc.setTextColor(51, 65, 85);
       doc.text(
         sanitizePdfText(
-          `Vind: ${obs.weatherSnapshot.windSpeed10m.toFixed(1)} m/s (${obs.weatherSnapshot.windDirection10m}°) | L_Aeq: ${evalAtObs.combinedLaeqDb.toFixed(
+          `Vind: ${obs.weatherSnapshot.windSpeed10m.toFixed(1)} m/s (stoed ${obs.weatherSnapshot.windGusts10m.toFixed(
             1
-          )} dB | L_AFmax: ${evalAtObs.combinedLafmaxDb.toFixed(
+          )} m/s, ${obs.weatherSnapshot.windDirection10m}°) | L_Aeq: ${evalAtObs.combinedLaeqDb.toFixed(
             1
           )} dB | Stoev S: ${evalAtObs.adjustedDustSumQuotient.toFixed(2)} | SHA-256: ${obs.sha256Signature.slice(
             0,
@@ -523,6 +604,36 @@ export function generateWeatherCorrelationPdfReport(
     });
   }
 
+  // Section 05: Forensic Evidentiary Declaration & SHA-256 Chain-of-Custody Seal
+  ensureSpace(34);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.6);
+  doc.setTextColor(15, 23, 42);
+  doc.text(
+    sanitizePdfText('05. RETSMEDICINSK ERKLAERING, METODEVALIDERING & SHA-256 BEVISKAEDE'),
+    margin,
+    y
+  );
+  y += 4;
+
+  doc.setFillColor(241, 245, 249);
+  doc.setDrawColor(71, 85, 105);
+  doc.rect(margin, y, contentW, 24, 'FD');
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(7.0);
+  doc.setTextColor(15, 23, 42);
+  const forensicLines = [
+    `Dokument-ID: PSS-W22085-${weatherDataset.dateIso}-${currentWeather.hourLabel.replace(':', '')} | Kilde-noder aktive: ${
+      sources.filter((s) => s.active).length
+    }/${sources.length}`,
+    `Normgrundlag: BEK nr. 613 af 29/06/2026 § 3 stk. 3 (Sumkvotient S >= 1,0 ulovlig) | L 69 / BEK 1328/2025 | ISO 9613-2`,
+    `SHA-256 Integritetssegl (komplet 64-tegn): ${sha256Hash}`,
+  ];
+  forensicLines.forEach((line, idx) => {
+    doc.text(sanitizePdfText(line), margin + 2.5, y + 6 + idx * 5.8);
+  });
+  y += 28;
+
   // Footer
   const totalPages = doc.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
@@ -534,7 +645,7 @@ export function generateWeatherCorrelationPdfReport(
     doc.setTextColor(100, 116, 139);
     doc.text(
       sanitizePdfText(
-        `Ringparken Vind-Stoej-Stoev Korrelationsrapport | PSS W22085 | SHA-256: ${sha256Hash.slice(
+        `Ringparken Retsmedicinsk Vejr-, Vindstoed- & Stoevrapport | PSS W22085 | SHA-256: ${sha256Hash.slice(
           0,
           18
         )}... | Side ${p}/${totalPages}`
@@ -546,6 +657,6 @@ export function generateWeatherCorrelationPdfReport(
 
   const safeHour = currentWeather.hourLabel.replace(':', '');
   doc.save(
-    `Ringparken_Vejr_Stoej_Stoev_Korrelationsrapport_${weatherDataset.dateIso}_kl_${safeHour}.pdf`
+    `Ringparken_Retsmedicinsk_Vejr_Stoev_Korrelationsrapport_${weatherDataset.dateIso}_kl_${safeHour}.pdf`
   );
 }

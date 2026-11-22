@@ -34,6 +34,8 @@ import {
   Filter,
   Flame,
   Gauge,
+  HardHat,
+  Home,
   Landmark,
   Layers,
   Lock,
@@ -54,6 +56,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Sprout,
   Star,
   Stethoscope,
   Sun,
@@ -128,6 +131,10 @@ import {
   runDispersionSimulation,
 } from './services/dispersionEngine';
 import { DispersionMap } from './components/DispersionMap';
+import { RiskZoneMap } from './components/RiskZoneMap';
+import { RoleDashboard } from './components/RoleDashboard';
+import { ComplianceAuditPanel } from './components/ComplianceAuditPanel';
+import { ClimateResiliencePanel } from './components/ClimateResiliencePanel';
 import { Ringparken3DScene } from './components/Ringparken3DScene';
 import { UndergroundPercolation2D } from './components/UndergroundPercolation2D';
 import { BuildingCategoryManagerPanel } from './components/BuildingCategoryManagerPanel';
@@ -142,6 +149,14 @@ import { ExpertPersonaRole, ForensicChatbotPanel } from './components/ForensicCh
 import { BioscienceToxicologyPanel } from './components/BioscienceToxicologyPanel';
 import { WeatherNoiseDustCorrelationPanel } from './components/WeatherNoiseDustCorrelationPanel';
 import { HeaderWeatherCorrelationD3Popup } from './components/HeaderWeatherCorrelationD3Popup';
+import {
+  IndoorClimateAlgedonicLogEntry,
+  IndoorClimateAlgedonicLogPanel,
+  MAX_INDOOR_ALARM_LOG_ENTRIES,
+  createSignedIndoorAlarmEntry,
+  loadStoredIndoorAlarms,
+  persistStoredIndoorAlarms,
+} from './components/IndoorClimateAlgedonicLogPanel';
 import { EksponeringsBadge } from './components/EksponeringsBadge';
 import { SKvotientTendensSparkline } from './components/SKvotientTendensSparkline';
 import { ForensicAudioEvidencePanel } from './components/ForensicAudioEvidencePanel';
@@ -234,6 +249,7 @@ import {
   render2DViewportPrintSnapshotDataUrl,
   validateChainOfCustodyAgainstStateRegistry,
 } from './services/pdfExportService';
+import { generateWeatherCorrelationPdfReport } from './services/weatherCorrelationPdfService';
 import {
   BornehaveSpatialPlumeAlertStatus,
   evaluateBornehaveDaycare3DPlumeAlert,
@@ -470,8 +486,12 @@ export default function App() {
     useState<HeatmapComparisonViewMode>('difference');
   const [comparisonHourAIndex, setComparisonHourAIndex] = useState<number>(8);
   const [viewportMode, setViewportMode] = useState<
-    '3d' | 'underground_3d' | 'underground_2d' | 'underground_split' | 'split' | '2d'
+    '3d' | 'underground_3d' | 'underground_2d' | 'underground_split' | 'split' | '2d' | 'risk_gis'
   >('3d');
+  const [activeUserRole, setActiveUserRole] = useState<
+    'workspace' | 'resident' | 'worker' | 'audit' | 'climate'
+  >('workspace');
+  const [focusedGisBuildingId, setFocusedGisBuildingId] = useState<string | null>(null);
   const [precipitationOverrideMm, setPrecipitationOverrideMm] = useState<number | null>(null);
   const [isFullscreen3D, setIsFullscreen3D] = useState<boolean>(false);
   const [isMapOnlyMode, setIsMapOnlyMode] = useState<boolean>(false);
@@ -2890,6 +2910,39 @@ export default function App() {
     currentWeather.hourIndex,
     handleLogIndoorClimateAlgedonicAlarm,
   ]);
+
+  // Persistent ring-buffer of latest 50 algedonic indoor alarms where S_in > 1.0 with SHA-256 integrity seal
+  const [indoorAlarmRingLog, setIndoorAlarmRingLog] = useState<
+    IndoorClimateAlgedonicLogEntry[]
+  >(() => loadStoredIndoorAlarms());
+  const indoorAlarmDedupeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (indoorClimateTelemetry.indoorSumQuotientSin <= 1.0) return;
+    const quantizedSin = Math.round(indoorClimateTelemetry.indoorSumQuotientSin * 100);
+    const dedupeKey = `${weatherDataset.dateIso}::${currentWeather.hourIndex}::${indoorClimateTelemetry.receptorId}::${indoorClimateTelemetry.ventilationMode}::${quantizedSin}`;
+    if (indoorAlarmDedupeRef.current === dedupeKey) return;
+    indoorAlarmDedupeRef.current = dedupeKey;
+
+    let cancelled = false;
+    void createSignedIndoorAlarmEntry({
+      telemetry: indoorClimateTelemetry,
+      currentWeather,
+      dateIso: weatherDataset.dateIso,
+    }).then((signedEntry) => {
+      if (cancelled) return;
+      setIndoorAlarmRingLog((prev) => {
+        if (prev.some((e) => e.dedupeKey === signedEntry.dedupeKey)) return prev;
+        const next = [signedEntry, ...prev].slice(0, MAX_INDOOR_ALARM_LOG_ENTRIES);
+        persistStoredIndoorAlarms(next);
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [indoorClimateTelemetry, currentWeather, weatherDataset.dateIso]);
 
   // System B Atomar Algedonisk Simultan-Simulering (System 1 + System 3 · T0 -> T1, Δt = 0 ms)
   const [latestSimultaneousChainEntry, setLatestSimultaneousChainEntry] = useState<{
@@ -5335,7 +5388,96 @@ export default function App() {
         onOpenSimultaneousModal={() => simultaneousAlgedonic.setIsSplitModalOpen(true)}
         onAcknowledgeSimultaneousP1={simultaneousAlgedonic.acknowledgeP1}
         onClearSimultaneousSimulation={handleClearSimultaneousAll}
+        onExportWeatherCorrelationPdf={() =>
+          generateWeatherCorrelationPdfReport({
+            weatherDataset,
+            simulation,
+            sources,
+            receptors,
+            observations,
+            sha256Hash,
+          })
+        }
       />
+
+      {/* TOP ROLE NAVIGATION: 1. Beboer & Nabo · 2. Arbejder & AMK · 3. Borgertilsyn & Dokument-Audit */}
+      <nav
+        aria-label="Brugerrolle top-navigation"
+        className="px-4 py-1.5 bg-[#0F141D] border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2 shrink-0"
+      >
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setActiveUserRole('workspace')}
+            className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+              activeUserRole === 'workspace'
+                ? 'bg-cyan-500 text-slate-950 font-semibold'
+                : 'text-slate-300 hover:text-white hover:bg-[#1B2433]'
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5 shrink-0" />
+            <span>GIS &amp; Spredningsoverblik</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveUserRole('resident')}
+            className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+              activeUserRole === 'resident'
+                ? 'bg-cyan-500 text-slate-950 font-semibold'
+                : 'text-slate-300 hover:text-white hover:bg-[#1B2433]'
+            }`}
+          >
+            <Home className="w-3.5 h-3.5 shrink-0" />
+            <span>1. Beboer &amp; Nabo</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveUserRole('worker')}
+            className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+              activeUserRole === 'worker'
+                ? 'bg-amber-400 text-slate-950 font-semibold'
+                : 'text-slate-300 hover:text-white hover:bg-[#1B2433]'
+            }`}
+          >
+            <HardHat className="w-3.5 h-3.5 shrink-0" />
+            <span>2. Arbejder &amp; AMK</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveUserRole('audit')}
+            className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+              activeUserRole === 'audit'
+                ? 'bg-emerald-400 text-slate-950 font-semibold'
+                : 'text-slate-300 hover:text-white hover:bg-[#1B2433]'
+            }`}
+          >
+            <Scale className="w-3.5 h-3.5 shrink-0" />
+            <span>3. Borgertilsyn &amp; Dokument-Audit</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveUserRole('climate')}
+            className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+              activeUserRole === 'climate'
+                ? 'bg-emerald-400 text-slate-950 font-semibold'
+                : 'text-slate-300 hover:text-white hover:bg-[#1B2433]'
+            }`}
+          >
+            <Sprout className="w-3.5 h-3.5 shrink-0" />
+            <span>4. Klima, LCA &amp; LAR</span>
+          </button>
+        </div>
+
+        <div className="hidden lg:flex items-center gap-2 text-[11px] font-mono text-slate-400">
+          <span>Ringparken, 4200 Slagelse</span>
+          <span aria-hidden="true">·</span>
+          <span>Sager 25-019352 / 25-019350 / 25-019157 / 25-019354</span>
+        </div>
+      </nav>
 
       {bulkExportAuditValidation && (
         <div
@@ -6109,7 +6251,49 @@ export default function App() {
         );
       })()}
 
+      {/* ROLLE-SPECIFIKKE VISNINGER: 1. Beboer & Nabo · 2. Arbejder & AMK · 3. Borgertilsyn & Dokument-Audit */}
+      {activeUserRole !== 'workspace' && (
+        <main className="flex-1 min-h-0 w-full overflow-hidden">
+          {(activeUserRole === 'resident' || activeUserRole === 'worker') && (
+            <RoleDashboard
+              role={activeUserRole}
+              onChangeRole={(nextRole) => setActiveUserRole(nextRole)}
+              windFromDeg={currentWeather.windDirection10m}
+              windSpeedMs={currentWeather.windSpeed10m}
+              isDryWeather={(precipitationOverrideMm ?? currentWeather.precipitation) < 0.2}
+              initialBuildingId={focusedGisBuildingId}
+              onOpenOnGisMap={(buildingId) => {
+                setFocusedGisBuildingId(buildingId);
+                setViewportMode('risk_gis');
+                setActiveUserRole('workspace');
+              }}
+            />
+          )}
+          {activeUserRole === 'audit' && (
+            <ComplianceAuditPanel
+              onOpenBuildingOnGis={(buildingId) => {
+                setFocusedGisBuildingId(buildingId);
+                setViewportMode('risk_gis');
+                setActiveUserRole('workspace');
+              }}
+            />
+          )}
+          {activeUserRole === 'climate' && (
+            <ClimateResiliencePanel
+              initialPrecipitationMmH={
+                precipitationOverrideMm ?? currentWeather.precipitation
+              }
+              onOpenGisMap={() => {
+                setViewportMode('risk_gis');
+                setActiveUserRole('workspace');
+              }}
+            />
+          )}
+        </main>
+      )}
+
       {/* MAIN SPLIT-SCREEN WORKSPACE: 2/3 MAP & 3D DIGITAL TWIN (LEFT) + 1/3 FORENSIC PANEL (RIGHT) */}
+      {activeUserRole === 'workspace' && (
       <div
         id="main-workspace-anchor"
         className={`main-workspace flex-1 min-h-0 w-full max-w-full min-w-0 grid grid-cols-1 lg:grid-cols-12 items-stretch ${
@@ -6873,6 +7057,18 @@ export default function App() {
                     simultaneousDispatch={simultaneousAlgedonic.dispatch}
                   />
                 </div>
+              </div>
+            )}
+            {viewportMode === 'risk_gis' && (
+              <div className="w-full h-full min-h-[480px] overflow-y-auto">
+                <RiskZoneMap
+                  initialWindFromDeg={currentWeather.windDirection10m}
+                  initialWindSpeedMs={currentWeather.windSpeed10m}
+                  initialIsDryWeather={
+                    (precipitationOverrideMm ?? currentWeather.precipitation) < 0.2
+                  }
+                  initialSelectedBuildingId={focusedGisBuildingId ?? 'blok-2-kierulffsvej-24-32'}
+                />
               </div>
             )}
             {simultaneousAlgedonic.dispatch.active && !isMapOnlyMode && (
@@ -12004,6 +12200,18 @@ export default function App() {
                     </AnimatePresence>
                   </div>
 
+                  {/* DEDICATED INDOOR ALGEDONIC ALARM LOG VIEW (LATEST 50 S_in > 1.0 WITH SHA-256 VERIFICATION) */}
+                  <IndoorClimateAlgedonicLogPanel
+                    telemetry={indoorClimateTelemetry}
+                    dateIso={weatherDataset.dateIso}
+                    entries={indoorAlarmRingLog}
+                    onClearEntries={() => {
+                      setIndoorAlarmRingLog([]);
+                      persistStoredIndoorAlarms([]);
+                      indoorAlarmDedupeRef.current = null;
+                    }}
+                  />
+
                   <StructuralEnvelopeImpactPanel
                     buildings={buildings}
                     sources={sources}
@@ -12065,6 +12273,7 @@ export default function App() {
           </div>
         </aside>
       </div>
+      )}
 
       {/* MODULE C: FULL-WIDTH BOTTOM INTERACTIVE TIME-SLIDER, 24H PUFF TOGGLE & SCENARIO DECK */}
       <BottomTimelineFooter
@@ -13189,6 +13398,18 @@ export default function App() {
                           simultaneousDispatch={simultaneousAlgedonic.dispatch}
                         />
                       </div>
+                    </div>
+                  )}
+
+                  {viewportMode === 'risk_gis' && (
+                    <div className="w-full h-full overflow-y-auto">
+                      <RiskZoneMap
+                        initialWindFromDeg={currentWeather.windDirection10m}
+                        initialWindSpeedMs={currentWeather.windSpeed10m}
+                        initialIsDryWeather={
+                          (precipitationOverrideMm ?? currentWeather.precipitation) < 0.2
+                        }
+                      />
                     </div>
                   )}
 

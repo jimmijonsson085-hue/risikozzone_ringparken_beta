@@ -196,12 +196,19 @@ export const WindParticleFieldOverlay: React.FC<WindParticleFieldOverlayProps> =
       const perpY = dirX;
 
       // Pixel speed per frame scaled to Open-Meteo wind speed (m/s) and wind gusts (m/s)
+      const isHighWindAbove10 = weather.windSpeed10m > 10;
       const baseSpeedPx = Math.max(
         0.75,
-        Math.min(5.8, weather.windSpeed10m * 0.38 + weather.windGusts10m * 0.095)
+        Math.min(
+          isHighWindAbove10 ? 7.4 : 5.8,
+          weather.windSpeed10m * (isHighWindAbove10 ? 0.46 : 0.38) + weather.windGusts10m * 0.1
+        )
       );
-      const trailMaxPoints = Math.max(9, Math.min(24, Math.round(8 + weather.windSpeed10m * 1.4)));
-      const turbAmp = getTurbulenceAmplitude(weather.pasquillClass);
+      const trailMaxPoints = Math.max(
+        9,
+        Math.min(isHighWindAbove10 ? 30 : 24, Math.round(8 + weather.windSpeed10m * 1.5))
+      );
+      const turbAmp = getTurbulenceAmplitude(weather.pasquillClass) * (isHighWindAbove10 ? 1.25 : 1.0);
 
       // 1. Subtle Wind-Field Vector Grid (animated directional arrows showing wind flow across the map)
       const gridCols = 6;
@@ -226,7 +233,9 @@ export const WindParticleFieldOverlay: React.FC<WindParticleFieldOverlayProps> =
           ctx.beginPath();
           ctx.moveTo(-14, 0);
           ctx.lineTo(10, 0);
-          ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+          ctx.strokeStyle = isHighWindAbove10
+            ? 'rgba(251, 191, 36, 0.28)'
+            : 'rgba(56, 189, 248, 0.22)';
           ctx.lineWidth = 1.4;
           ctx.stroke();
 
@@ -235,7 +244,9 @@ export const WindParticleFieldOverlay: React.FC<WindParticleFieldOverlayProps> =
           ctx.lineTo(5, -4);
           ctx.lineTo(5, 4);
           ctx.closePath();
-          ctx.fillStyle = 'rgba(56, 189, 248, 0.32)';
+          ctx.fillStyle = isHighWindAbove10
+            ? 'rgba(251, 191, 36, 0.38)'
+            : 'rgba(56, 189, 248, 0.32)';
           ctx.fill();
           ctx.restore();
         }

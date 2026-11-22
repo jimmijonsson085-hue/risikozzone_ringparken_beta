@@ -360,6 +360,7 @@ export const WorkspaceViewportToolbar: React.FC<WorkspaceViewportToolbarProps> =
             [
               { id: '3d', label: '3D Digital Tvilling', icon: Box },
               { id: '2d', label: '2D Taktisk Kort', icon: MapPin },
+              { id: 'risk_gis', label: 'GIS Risikokort', icon: Compass },
               { id: 'split', label: 'Split 2D + 3D', icon: Layers },
               { id: 'underground_3d', label: '3D Perkolation', icon: Droplets },
               { id: 'underground_2d', label: '2D Perkolation', icon: CloudRain },

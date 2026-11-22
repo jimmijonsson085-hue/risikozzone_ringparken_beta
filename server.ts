@@ -9,6 +9,49 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const PRIMARY_ANALYTICAL_MODEL = 'gemini-3.8-flash';
+const FALLBACK_ANALYTICAL_MODEL = 'gemini-2.5-flash';
+
+function resolveGeminiApiKey(): string | null {
+  const key = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  if (!key || key === 'MY_GEMINI_API_KEY') return null;
+  return key;
+}
+
+function createServerGeminiClient(apiKey: string): GoogleGenAI {
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+}
+
+async function generateAnalyticalWithFallback(
+  ai: GoogleGenAI,
+  request: Omit<Parameters<GoogleGenAI['models']['generateContent']>[0], 'model'>
+) {
+  try {
+    const response = await ai.models.generateContent({
+      ...request,
+      model: PRIMARY_ANALYTICAL_MODEL,
+    });
+    return { response, usedModel: PRIMARY_ANALYTICAL_MODEL };
+  } catch (primaryErr) {
+    console.warn(
+      `[${PRIMARY_ANALYTICAL_MODEL}] fejl — falder tilbage til ${FALLBACK_ANALYTICAL_MODEL}:`,
+      primaryErr instanceof Error ? primaryErr.message : String(primaryErr)
+    );
+    const response = await ai.models.generateContent({
+      ...request,
+      model: FALLBACK_ANALYTICAL_MODEL,
+    });
+    return { response, usedModel: FALLBACK_ANALYTICAL_MODEL };
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -34,8 +77,8 @@ async function startServer() {
         customQuery,
       } = req.body || {};
 
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+      const apiKey = resolveGeminiApiKey();
+      if (!apiKey) {
         return res.status(200).json({
           text:
             `### Geografisk & Retsmedicinsk Spredningsanalyse (Ringparken, 4200 Slagelse)\n\n` +
@@ -71,14 +114,7 @@ async function startServer() {
         });
       }
 
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      });
+      const ai = createServerGeminiClient(apiKey);
 
       const prompt =
         customQuery ||
@@ -359,8 +395,8 @@ ${sha256Hash}`;
     };
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+      const apiKey = resolveGeminiApiKey();
+      if (!apiKey) {
         return res.status(200).json({
           documentText: buildFallbackLegalDocument(),
           places: defaultPlaces,
@@ -368,14 +404,7 @@ ${sha256Hash}`;
         });
       }
 
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      });
+      const ai = createServerGeminiClient(apiKey);
 
       const prompt = `Du er en højt specialiseret dansk miljø- og arbejdsmiljøjurist samt teknisk retsmediciner.
 Udarbejd en færdigformuleret, formel og juridisk præcis indberetning på dansk til **Arbejdstilsynet** og **Slagelse Kommunes Miljøtilsyn** vedrørende nedrivningsprojektet i **Ringparken, 4200 Slagelse (Plan for Sikkerhed og Sundhed — PSS Sag W22085)** baseret på det nøjagtige tidspunkt valgt på Time-Slideren: **${dateIso} kl. ${hourLabel} (${isoTime})**.
@@ -499,23 +528,16 @@ Indberetningen SKAL være opbygget som et formelt juridisk dokument klar til ind
       `- **Skærpet Strafansvar (Lovforslag L 69) & Entreprenørstop:** Ved spredning af asbest- og tungmetalstøv til omkringliggende boligblokke og offentlig vej har Arbejdstilsynet hjemmel til strakspåbud og entreprenørstop.`;
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+      const apiKey = resolveGeminiApiKey();
+      if (!apiKey) {
         return res.status(200).json({
           text: fallbackText,
           sources: defaultWebSources,
-          modelUsed: 'gemini-3.8-flash (Fallback)',
+          modelUsed: `${PRIMARY_ANALYTICAL_MODEL} (Fallback)`,
         });
       }
 
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      });
+      const ai = createServerGeminiClient(apiKey);
 
       const searchPrompt =
         query ||
@@ -806,8 +828,8 @@ Brug altid disse konkrete tal, bygningsdele, rapport-ID'er, DMA-anbefalinger og 
     };
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+      const apiKey = resolveGeminiApiKey();
+      if (!apiKey) {
         const fallback = buildFallbackChatReply();
         return res.status(200).json({
           text: fallback,
@@ -838,14 +860,7 @@ Brug altid disse konkrete tal, bygningsdele, rapport-ID'er, DMA-anbefalinger og 
         });
       }
 
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      });
+      const ai = createServerGeminiClient(apiKey);
 
       const formattedContents = rawMessages.map(
         (m: { role?: string; text?: string }, idx: number) => ({
@@ -1071,26 +1086,19 @@ Brug altid disse konkrete tal, bygningsdele, rapport-ID'er, DMA-anbefalinger og 
     };
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = resolveGeminiApiKey();
       const cleanBase64 = typeof imageBase64 === 'string'
         ? imageBase64.replace(/^data:[^;]+;base64,/, '')
         : '';
 
-      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || !cleanBase64) {
+      if (!apiKey || !cleanBase64) {
         return res.status(200).json(buildFallbackPhotoAnalysis());
       }
 
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      });
+      const ai = createServerGeminiClient(apiKey);
 
       const systemInstruction = `Du er en dansk retsmedicinsk miljø- og arbejdsmiljøinspektør med speciale i visuel dokumentation af bygge- og nedrivningsarbejder (herunder nedrivningen i Ringparken, 4200 Slagelse, PSS Sag W22085).
-Analyser det uploadede foto grundigt og objektivt på dansk. Beskriv præcist hvad der ses visuelt på billedet (f.eks. støvudvikling, bygningsdele, facade-/tagmaterialer <1997, containere, afskærmning, manglende vanddæmpning, entreprenørmaskiner, jordopgravning, fugt/mudder eller andre arbejdsmiljø- og miljøforhold) og kobl det med den oplyste meteorologiske telemetri og dansk arbejdsmiljø-/miljølovgivning (BEK 613/2026 § 3 stk. 3 Sumformlen, Asbestbekendtgørelsen Bek. 1328/2025, PSS Sag W22085 pkt. 7 & 11.1, Jordforureningslovens § 70 stk. 4 og Lovforslag L 69).`;
+Analyser det uploadede foto grundigt og objektivt på dansk. Beskriv præcist hvad der ses visuelt på billedet (f.eks. støvudvikling, bygningsdele, facade-/tagmaterialer <1997, containere, afskærmning, manglende vanddæmpning, entreprenørmaskiner, jordopgravning, fugt/mudder eller andre arbejdsmiljø- og miljøforhold) og kobl det med den oplyste meteorologiske telemetri og dansk arbejdsmiljø-/miljølovgivning (BEK 613/2026 § 3 stk. 3 Sumformlen, Asbestbekendtgørelsen Bek. 1328/2025, BEK 496/2024 om selektiv nedrivning >250 m², BEK 1399/2021 om <1997 mineraluld, Lokalplan 1269 om regnvandsafledning maks. 2 l/s/ha, PSS Sag W22085 pkt. 7 & 11.1, Jordforureningslovens § 70 stk. 4 og Lovforslag L 69).`;
 
       const promptText = `Foretag en struktureret AI-billedanalyse og visuel beskrivelse til brug som retsmedicinsk bevismateriale.
 Kontekst for foto-optagelsen:
@@ -1104,8 +1112,7 @@ ${userNotes ? `- Indberetters egne noter: ${userNotes}` : ''}
 
 Udfyld alle felter i JSON-skemaet på dansk. For suspectedSubstances må kun bruges værdier blandt: "asbestos", "pcb", "heavyMetals", "quartzWool", "moldSewer". For severityAssessment må kun bruges: "KRITISK", "FORHØJET", "MODERAT".`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+      const { response } = await generateAnalyticalWithFallback(ai, {
         contents: {
           parts: [
             {
@@ -1295,7 +1302,7 @@ Udfyld alle felter i JSON-skemaet på dansk. For suspectedSubstances må kun bru
           confidencePct: 95,
           recommendedObservationType: 'Skriftlig mailkorrespondance (Dokumentbevis / Varsling)',
           analyzedAtIso: new Date().toISOString(),
-          modelUsed: 'Gemini 3 Flash Multimodal PDF Engine (Kalibreret Dokumentanalyse)',
+          modelUsed: 'Gemini 3.8 Flash Multimodal PDF Engine (Kalibreret Dokumentanalyse)',
         };
       }
 
@@ -1323,14 +1330,14 @@ Udfyld alle felter i JSON-skemaet på dansk. For suspectedSubstances må kun bru
           statutoryReferences: [
             'Miljøbeskyttelsesloven § 42 & § 65 (Tilsynspligt og indgrebspligt ved ulovlige forhold)',
             'Forvaltningsloven & Officialmaksimen (Myndighedens pligt til at oplyse sagen fyldestgørende)',
-            'Arbejdsmiljøloven § 77 (Arbejdstilsynets strakspåbud ved overhængende betydelig fare)',
-            'BEK nr. 744 af 2025 (Asbestbekendtgørelsen § 18 om spredningsforebyggelse)',
+            'BEK nr. 496 af 21/05/2024 (Standardiseret nedrivningsplan & selektiv nedrivning > 250 m²)',
+            'BEK nr. 1328 af 19/11/2025 (Asbestbekendtgørelsen) & BEK nr. 1399/2021 (<1997 mineraluld)',
           ],
           severityAssessment: 'KRITISK',
           confidencePct: 96,
           recommendedObservationType: 'Myndighedshenvendelse / Krav om strakspåbud (§ 42)',
           analyzedAtIso: new Date().toISOString(),
-          modelUsed: 'Gemini 3 Flash Multimodal PDF Engine (Kalibreret Dokumentanalyse)',
+          modelUsed: 'Gemini 3.8 Flash Multimodal PDF Engine (Kalibreret Dokumentanalyse)',
         };
       }
 
@@ -1356,28 +1363,28 @@ Udfyld alle felter i JSON-skemaet på dansk. For suspectedSubstances må kun bru
           'Aktindsigtsbesvarelsen dokumenterer et kritisk kontrol- og tilsynsvakuum (System 3* audit-kollaps i VSM). Dokumentet beviser, at myndighed og bygherre ikke kan fremvise måledata, der afkræfter borgerens forensiske telemetri og eksponeringslog, hvilket vender bevisbyrden ved domstole og nævn.',
         statutoryReferences: [
           'Miljøoplysningsloven § 2 & § 3 (Udvidet ret til aktindsigt i miljøoplysninger og emissionsdata)',
-          'Offentlighedsloven § 7 & § 11 (Ret til aktindsigt og meroffentlighed samt dataudtræk)',
-          'Affaldsbekendtgørelsen §§ 68-73 (Krav til screening, kortlægning og selektiv nedrivning)',
+          'BEK nr. 496 af 21/05/2024 (Selektiv nedrivning > 250 m² & standardiseret nedrivningsplan)',
+          'BEK nr. 1399 af 25/06/2021 (<1997 mineraluld som farligt affald) & BEK 1328/2025 (Asbest)',
           'BEK nr. 613/2026 Bilag 2, pkt. 4 (Toksikologisk sumformel for samvirkende luftforureninger)',
         ],
         severityAssessment: 'KRITISK',
         confidencePct: 96,
         recommendedObservationType: 'Aktindsigtssvar (Miljøoplysningsloven) — Dokumentbevis',
         analyzedAtIso: new Date().toISOString(),
-        modelUsed: 'Gemini 3 Flash Multimodal PDF Engine (Kalibreret Dokumentanalyse)',
+        modelUsed: 'Gemini 3.8 Flash Multimodal PDF Engine (Kalibreret Dokumentanalyse)',
       };
     };
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = resolveGeminiApiKey();
     if (!apiKey || !pdfBase64) {
       return res.json(buildFallbackPdfAnalysis());
     }
 
     try {
       const cleanBase64 = String(pdfBase64).replace(/^data:application\/pdf;base64,/, '');
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = createServerGeminiClient(apiKey);
 
-      const systemInstruction = `Du er en Retsmedicinsk Dokumentanalytiker, Miljøjurist (specialiseret i Miljøoplysningsloven, Offentlighedsloven, Miljøbeskyttelsesloven, Almenlejeloven og Arbejdsmiljølovgivning BEK 613/2026) samt Teknisk Revisor på nedrivningssagen Ringparken (Schackenborgvænget, 4200 Slagelse, PSS Sag W22085).
+      const systemInstruction = `Du er en Retsmedicinsk Dokumentanalytiker, Miljøjurist (specialiseret i Miljøoplysningsloven, Offentlighedsloven, Miljøbeskyttelsesloven, Almenlejeloven, BEK nr. 496/2024 om selektiv nedrivning >250 m², BEK nr. 1328/2025 om asbest, BEK nr. 1399/2021 om <1997 mineraluld, Lokalplan 1269 om LAR regnvandsforsinkelse maks. 2 l/s/ha og Arbejdsmiljølovgivning BEK 613/2026) samt Teknisk Revisor på nedrivningssagen Ringparken (Schackenborgvænget, 4200 Slagelse, PSS Sag W22085).
 Du modtager et uploadet PDF-dokument (f.eks. mailkorrespondance med bygherre/udlejer/kommune, svar på anmodning om aktindsigt, eller myndighedshenvendelse/påbud).
 Din opgave er at læse PDF-dokumentet grundigt og udtrække:
 1. Præcis dokumenttitel, afsender, modtager, dokumentdato og sags-/journalnummer.
@@ -1400,8 +1407,7 @@ ${userNotes ? `- Indberetters bemærkninger til dokumentet: ${userNotes}` : ''}
 For detectedCategory må kun bruges en af: "mail_korrespondance", "aktindsigt_svar", "myndighedshenvendelse", "teknisk_rapport_bilag".
 For severityAssessment må kun bruges: "KRITISK", "FORHØJET", "MODERAT".`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+      const { response, usedModel } = await generateAnalyticalWithFallback(ai, {
         contents: {
           parts: [
             {
@@ -1557,7 +1563,7 @@ For severityAssessment må kun bruges: "KRITISK", "FORHØJET", "MODERAT".`;
         recommendedObservationType:
           parsed.recommendedObservationType || fallback.recommendedObservationType,
         analyzedAtIso: new Date().toISOString(),
-        modelUsed: 'Gemini 3 Flash Multimodal PDF Engine',
+        modelUsed: `${usedModel} Multimodal PDF Engine`,
       });
     } catch (_error: unknown) {
       return res.status(200).json(buildFallbackPdfAnalysis());
@@ -1743,20 +1749,20 @@ Vedlagt: ${enclosedPdfAnnexList.length} kryptografisk signerede PDF-bevisbilag +
         enclosedPdfAnnexList,
         violatedStatutesSummary,
         generatedAtIso: new Date().toISOString(),
-        modelUsed: 'Gemini 3 Flash Legal Complaint Drafting Engine',
+        modelUsed: 'Gemini 3.8 Flash Legal Complaint Drafting Engine',
       };
     };
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = resolveGeminiApiKey();
     if (!apiKey) {
       return res.json(buildFallbackComplaintDraft());
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = createServerGeminiClient(apiKey);
       const fallbackDraft = buildFallbackComplaintDraft();
 
-      const systemInstruction = `Du er en førende dansk miljø- og forvaltningsretsadvokat (Møderet for Højesteret) med speciale i Miljøbeskyttelsesloven (§ 42 og § 65), Miljøoplysningsloven, Offentlighedsloven, Forvaltningsloven (officialmaksimen), Almenlejeloven (§§ 14-15 om sundhedsfare og genhusning) samt Arbejdstilsynets BEK nr. 613/2026 (den toksikologiske sumformel og asbest).
+      const systemInstruction = `Du er en førende dansk miljø- og forvaltningsretsadvokat (Møderet for Højesteret) med speciale i Miljøbeskyttelsesloven (§ 42 og § 65), Miljøoplysningsloven, Offentlighedsloven, Forvaltningsloven (officialmaksimen), Almenlejeloven (§§ 14-15 om sundhedsfare og genhusning), BEK nr. 496 af 21/05/2024 (standardiseret nedrivningsplan og selektiv nedrivning >250 m²), BEK nr. 1328 af 19/11/2025 (asbest), BEK nr. 1399 af 25/06/2021 (<1997 mineraluld), Lokalplan 1269 (LAR regnvandsforsinkelse maks. 2 l/s/ha) samt Arbejdstilsynets BEK nr. 613/2026 (den toksikologiske sumformel og asbest).
 Din opgave er at udarbejde et komplet, formelt og juridisk knivskarpt udkast til en klageskrivelse til Slagelse Kommune (Center for Miljø, Plan og Teknik samt Kommunalbestyrelsen) vedrørende nedrivningen af Ringparken, Schackenborgvænget, 4200 Slagelse (PSS Sag W22085).
 Klageskrivelsen SKAL bygge direkte på:
 1. De valgte PDF-beviser (deres titler, journalnumre, afsendere, nøglecitater, mangler og SHA-256 signaturer).
@@ -1810,8 +1816,7 @@ ${JSON.stringify(
   2
 )}`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+      const { response, usedModel } = await generateAnalyticalWithFallback(ai, {
         contents: promptText,
         config: {
           systemInstruction,
@@ -1886,7 +1891,7 @@ ${JSON.stringify(
             ? parsed.violatedStatutesSummary
             : fallbackDraft.violatedStatutesSummary,
         generatedAtIso: new Date().toISOString(),
-        modelUsed: 'Gemini 3 Flash Legal Complaint Drafting Engine',
+        modelUsed: `${usedModel} Legal Complaint Drafting Engine`,
       });
     } catch (_error: unknown) {
       return res.status(200).json(buildFallbackComplaintDraft());
@@ -2030,19 +2035,12 @@ ${JSON.stringify(
     };
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+      const apiKey = resolveGeminiApiKey();
+      if (!apiKey) {
         return res.status(200).json(buildFallbackAgentRecommendation());
       }
 
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      });
+      const ai = createServerGeminiClient(apiKey);
 
       const complaintsText =
         Array.isArray(latestThreeComplaints) && latestThreeComplaints.length > 0
@@ -2108,8 +2106,7 @@ ${complaintsText}
 
 Udarbejd en præcis, teknisk anbefaling med eksakte vinkler (azimut kompatibel med fane-retning ${plumeToDeg}°, hældningsvinkel i grader, vandflow i L/min og evt. pause-varighed i minutter for hydraulisk betonknusning) samt forventet reduktion i Sum-kvotient S og støjniveau dB(A).`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+      const { response } = await generateAnalyticalWithFallback(ai, {
         contents: prompt,
         config: {
           systemInstruction,
@@ -2472,19 +2469,12 @@ Udarbejd en præcis, teknisk anbefaling med eksakte vinkler (azimut kompatibel m
     };
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+      const apiKey = resolveGeminiApiKey();
+      if (!apiKey) {
         return res.status(200).json(buildFallbackMedicalExpertAssessment());
       }
 
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      });
+      const ai = createServerGeminiClient(apiKey);
 
       const substancesText = Array.isArray(substances)
         ? substances
@@ -2527,8 +2517,7 @@ ${substancesText}
 
 Udfyld hele JSON-skemaet på dansk med høj lægefaglig kvalitet, relevante ICD-10 koder og direkte kobling til de målte værdier.`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+      const { response } = await generateAnalyticalWithFallback(ai, {
         contents: prompt,
         config: {
           systemInstruction,
@@ -2794,19 +2783,12 @@ Udfyld hele JSON-skemaet på dansk med høj lægefaglig kvalitet, relevante ICD-
     };
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+      const apiKey = resolveGeminiApiKey();
+      if (!apiKey) {
         return res.status(200).json(buildFallbackMunicipalSummary());
       }
 
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      });
+      const ai = createServerGeminiClient(apiKey);
 
       const fallback = buildFallbackMunicipalSummary();
       const rawViolations = Array.isArray(violations) ? violations : [];
@@ -2822,12 +2804,11 @@ Udfyld hele JSON-skemaet på dansk med høj lægefaglig kvalitet, relevante ICD-
         )
         .join('\n');
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Udarbejd et formelt 'Juridisk Resume' formuleret som et direkte anvendeligt udkast til en klage til Slagelse Kommune (Center for Miljø, Plan og Teknik / Miljøtilsyn, Rådhuspladsen 11, 4200 Slagelse) baseret på følgende valgte lovovertrædelser med S >= 1,0 ved nedrivningen i Ringparken (PSS Sag W22085) den ${dateIso} kl. ${hourLabel} (vind ${windSpeedMs} m/s, stød ${windGustsMs} m/s fra ${windDirectionDeg}° mod ${plumeDirectionDeg}°, Pasquill ${stabilityClass}, Max Sumformel S = ${Number(maxSumQuotient).toFixed(2)}, SHA-256: ${sha256Hash}):\n\n${violationDetails}`,
+      const { response, usedModel } = await generateAnalyticalWithFallback(ai, {
+        contents: `Udarbejd et formelt 'Juridisk Resume' formuleret som et direkte anvendeligt udkast til en klage til Slagelse Kommune (Center for Miljø, Plan og Teknik / Miljøtilsyn, Rådhuspladsen 11, 4200 Slagelse) baseret på følgende valgte deterministisk beregnede lovovertrædelser med S >= 1,0 ved nedrivningen i Ringparken (PSS Sag W22085) den ${dateIso} kl. ${hourLabel} (vind ${windSpeedMs} m/s, stød ${windGustsMs} m/s fra ${windDirectionDeg}° mod ${plumeDirectionDeg}°, Pasquill ${stabilityClass}, Max Sumformel S = ${Number(maxSumQuotient).toFixed(2)}, SHA-256: ${sha256Hash}):\n\n${violationDetails}`,
         config: {
           systemInstruction:
-            'Du er panelet "Gemini 5 Eksperter" (ledet af Juristen). Udarbejd et formelt "Juridisk Resume" på dansk opbygget som et færdigt udkast til en klage til Slagelse Kommune baseret på lovovertrædelser med S >= 1,0. Inddrag eksplicit de relevante paragraffer fra Miljøbeskyttelsesloven (MBL § 19 stk. 1 og § 27 stk. 1 om jord-/grundvandsperkolation af bly og PAH ved Blok 1 og 2, MBL § 42 stk. 1 og 4 om påbud/standsning af bygge- og anlægsforurening, MBL § 65 om tilsynspligt, MBL §§ 68-70 om lovliggørelse og straks-standsningspåbud uden varsel ved sundhedsfare, MBL § 72 om prøvetagningspåbud samt MBL § 110) og BEK nr. 613 af 29. juni 2026 (§ 3, stk. 1-2 & Bilag 1 skærpede grænseværdier: asbest 0,003 fibre/cm³, bly 0,03 mg/m³, kvarts 0,10 mg/m³ samt § 3, stk. 3 Sumformlen S = ∑ C_i/GV_i >= 1,0).',
+            'Du er panelet "Gemini 5 Eksperter" (ledet af Juristen). Udarbejd et formelt "Juridisk Resume" på dansk opbygget som et færdigt udkast til en klage til Slagelse Kommune baseret på deterministisk beregnede lovovertrædelser med S >= 1,0 (beregn aldrig egne værdier, fortolk udelukkende de givne nøgletal). Inddrag eksplicit Miljøbeskyttelsesloven (MBL § 19 stk. 1 og § 27 stk. 1, MBL § 42 stk. 1 og 4, MBL § 65, MBL §§ 68-70, MBL § 72, MBL § 110), BEK nr. 496 af 21/05/2024 (standardiseret nedrivningsplan og selektiv nedrivning > 250 m²), BEK nr. 1328 af 19/11/2025 (asbest), BEK nr. 1399 af 25/06/2021 (<1997 mineraluld som farligt affald), Lokalplan 1269 (LAR regnvandsforsinkelse maks. 2 l/s/ha) og BEK nr. 613 af 29. juni 2026 (§ 3, stk. 1-3 & Bilag 1: asbest 0,003 fibre/cm³, bly 0,03 mg/m³, kvarts 0,10 mg/m³).',
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
@@ -2866,7 +2847,7 @@ Udfyld hele JSON-skemaet på dansk med høj lægefaglig kvalitet, relevante ICD-
           parsed.demandedMunicipalActions.length > 0
             ? parsed.demandedMunicipalActions
             : fallback.demandedMunicipalActions,
-        modelUsed: 'Gemini 3 Flash · Juridisk Klageudkast (MBL & BEK 613/2026)',
+        modelUsed: `${usedModel} · Juridisk Klageudkast (MBL, BEK 496/2024 & BEK 613/2026)`,
       });
     } catch (_err: unknown) {
       return res.status(200).json(buildFallbackMunicipalSummary());
@@ -2931,16 +2912,13 @@ Udfyld hele JSON-skemaet på dansk med høj lægefaglig kvalitet, relevante ICD-
       ],
     });
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = resolveGeminiApiKey();
     if (!apiKey) {
       return res.status(200).json(buildFallback3PointLegalSummary());
     }
 
     try {
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
-      });
+      const ai = createServerGeminiClient(apiKey);
 
       const promptParts: Array<
         | { text: string }
@@ -2972,13 +2950,12 @@ Eksisterende dokument-kontekst:
 - Aktuel spredningstelemetri: Sumkvotient S = ${sumS.toFixed(2)} ved ${peakRec}, vind ${windSpeed.toFixed(1)} m/s.
 
 Krav til de 3 punkter:
-- Punkt 1: Offentligretlige & forvaltningsretlige implikationer over for Slagelse Kommune (Miljøbeskyttelseslovens § 42 påbudspligt, § 65 tilsynspligt, Officialmaksimen).
-- Punkt 2: Strafferetlige & erstatningsretlige implikationer ("The Liability Bomb" / ond tro / mala fides, Asbestbekendtgørelsen BEK 613/2026 grænseværdi 0,003 fibre/cm³, Arbejdsmiljølovens § 82).
+- Punkt 1: Offentligretlige & forvaltningsretlige implikationer over for Slagelse Kommune (Miljøbeskyttelseslovens § 42 påbudspligt, § 65 tilsynspligt, Officialmaksimen, BEK 496/2024 selektiv nedrivning >250 m², Lokalplan 1269 LAR maks. 2 l/s/ha).
+- Punkt 2: Strafferetlige & erstatningsretlige implikationer ("The Liability Bomb" / ond tro / mala fides, Asbestbekendtgørelsen BEK 1328/2025, <1997 mineraluld BEK 1399/2021, BEK 613/2026 grænseværdi 0,003 fibre/cm³, Arbejdsmiljølovens § 82).
 - Punkt 3: Naboretlige & lejeretlige implikationer for beboerne i Ringparken / Schackenborgvænget (Almenlejelovens §§ 14-16 forholdsmæssigt lejeafslag, Retsplejelovens § 344 bevisværdi).`,
       });
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+      const { response } = await generateAnalyticalWithFallback(ai, {
         contents: promptParts,
         config: {
           temperature: 0.2,
@@ -3115,19 +3092,12 @@ Krav til de 3 punkter:
     };
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+      const apiKey = resolveGeminiApiKey();
+      if (!apiKey) {
         return res.status(200).json(buildDeterministicAcousticClassification());
       }
 
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      });
+      const ai = createServerGeminiClient(apiKey);
 
       const parts: Array<
         | { text: string }
@@ -3157,8 +3127,7 @@ Analysér dette lydklip ("${fileName}") og dets målte Web Audio FFT-spektraldat
 Identificér præcist den anvendte maskine / det anvendte værktøj (f.eks. hydraulisk betonhammer/mejselhammer, betonsaks/pulverisator, stålsaks/armeringsklipper, vinkelsliber/diamantskærer, kompressor/ højtryks-spuling eller dumper/container-aflæsning), map til nærmeste maskinkategori ('hydraulic_hammer', 'concrete_crusher' eller 'steel_shear_impact'), vurdér om der udløses +5 dB(A) impuls-/tonetillæg efter MST Vejl. 5/1984, og formulér en retsmedicinsk konklusion til styrkelse af bevisførelsen på dansk.`,
       });
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+      const { response } = await generateAnalyticalWithFallback(ai, {
         contents: { parts },
         config: {
           responseMimeType: 'application/json',
@@ -3233,6 +3202,55 @@ Identificér præcist den anvendte maskine / det anvendte værktøj (f.eks. hydr
       });
     } catch (_err: unknown) {
       return res.status(200).json(buildDeterministicAcousticClassification());
+    }
+  });
+
+  app.post('/api/gemini', async (req, res) => {
+    try {
+      const apiKey = resolveGeminiApiKey();
+      if (!apiKey) {
+        return res.status(503).json({
+          error:
+            'GEMINI_API_KEY er ikke konfigureret på serveren. Konfigurer nøglen under Settings > Secrets.',
+        });
+      }
+
+      const { contents, config, model } = req.body || {};
+      if (!contents) {
+        return res.status(400).json({ error: 'Manglende contents payload i /api/gemini.' });
+      }
+
+      const ai = createServerGeminiClient(apiKey);
+      const requestedModel =
+        typeof model === 'string' && model.trim() ? model.trim() : PRIMARY_ANALYTICAL_MODEL;
+
+      if (requestedModel === PRIMARY_ANALYTICAL_MODEL) {
+        const { response, usedModel } = await generateAnalyticalWithFallback(ai, {
+          contents,
+          config,
+        });
+        return res.status(200).json({
+          text: response.text ?? '',
+          usedModel,
+        });
+      }
+
+      const response = await ai.models.generateContent({
+        model: requestedModel,
+        contents,
+        config,
+      });
+      return res.status(200).json({
+        text: response.text ?? '',
+        usedModel: requestedModel,
+      });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Ukendt fejl ved kald til Gemini API.';
+      console.error('[/api/gemini] fejl:', message);
+      return res.status(502).json({
+        error: `Gemini-analyse fejlede: ${message}`,
+      });
     }
   });
 

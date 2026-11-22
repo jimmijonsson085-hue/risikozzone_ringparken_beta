@@ -2,14 +2,22 @@ import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
+  CheckCircle2,
+  ClipboardCheck,
   Flame,
   Layers,
+  Leaf,
   Recycle,
   Scale,
   ShieldAlert,
   Sliders,
 } from 'lucide-react';
 import { RingparkenBuildingUnit } from '../types/dispersion';
+import {
+  computeDemolitionCo2eKg,
+  evaluateBek496SelectiveDemolition,
+  evaluateWasteAndHp14Classification,
+} from '../utils/riskEngine';
 
 export interface CikMaterialMetabolismSankeyProps {
   buildings: RingparkenBuildingUnit[];
@@ -41,6 +49,7 @@ export const CikMaterialMetabolismSankey: React.FC<
   const [scopeMode, setScopeMode] = useState<'full_73420m2' | 'active_etape'>(
     'full_73420m2'
   );
+  const [hasStandardizedPlan, setHasStandardizedPlan] = useState<boolean>(false);
 
   const activeCategoryCounts = useMemo(() => {
     const dCount = buildings.filter(
@@ -174,6 +183,39 @@ export const CikMaterialMetabolismSankey: React.FC<
       },
     ];
 
+    const bek496Compliance = evaluateBek496SelectiveDemolition({
+      affectedFloorAreaM2: activeAreaM2,
+      hasStandardizedDemolitionPlan: hasStandardizedPlan,
+      hasPreDemolitionResourceMapping: true,
+      hasCertifiedDemolitionManager: hasStandardizedPlan,
+      hasAuthorizedAsbestosContractor: true,
+      hasSeparatePre1997MineralWoolPlan: true,
+      municipalityNotifiedTwoWeeksPrior: hasStandardizedPlan,
+    });
+
+    const hp14WasteSummary = evaluateWasteAndHp14Classification({
+      constructionYear: 1968,
+      asbestosDetected: asbestosTonnes > 0,
+      asbestosTonnes,
+      mineralWoolPre1997Tonnes: mineralWool1997Tonnes,
+      pcbMgPerKg: Math.round(52 + unstrippedRatio * 340),
+      leadMgPerKg: Math.round(480 + unstrippedRatio * 920),
+      pahMgPerKg: Math.round(28 + unstrippedRatio * 85),
+      cadmiumMgPerKg: 14,
+      zincMgPerKg: 620,
+      grossConcreteTonnes: grossMineralConcreteTonnes,
+    });
+
+    const lcaCo2e = computeDemolitionCo2eKg({
+      cleanReuseConcreteTonnes,
+      crossContaminatedConcreteTonnes: riskCrossContaminatedTonnes,
+      asbestosTonnes,
+      pcbTonnes: pcbPrimaryTonnes,
+      heavyMetalPaintTonnes,
+      mineralWoolPre1997Tonnes: mineralWool1997Tonnes,
+      affectedFloorAreaM2: activeAreaM2,
+    });
+
     return {
       activeAreaM2,
       totalMassTonnes,
@@ -187,8 +229,11 @@ export const CikMaterialMetabolismSankey: React.FC<
       riskCrossContaminatedTonnes,
       riskCrossContaminatedEnergyGj,
       subFractions,
+      bek496Compliance,
+      hp14WasteSummary,
+      lcaCo2e,
     };
-  }, [scopeMode, activeCategoryCounts, pcbLeadStrippingCompliancePct]);
+  }, [scopeMode, activeCategoryCounts, pcbLeadStrippingCompliancePct, hasStandardizedPlan]);
 
   const formatMass = (tonnes: number) => {
     if (unitDisplayMode === 'gram_gj') {
@@ -637,6 +682,93 @@ export const CikMaterialMetabolismSankey: React.FC<
             Potentiel sekundær kontaminering af knust beton og tab af indlejret energi, hvis PCB-
             eller blyholdig beton knuses på matriklen uden fuld IN-9-3 sanering.
           </p>
+        </div>
+      </div>
+
+      {/* Deterministisk BEK 496/2024 (>250 m²), HP14 & CO2e Klimaregnskab */}
+      <div
+        data-testid="bek496-hp14-lca-panel"
+        className="grid grid-cols-1 md:grid-cols-3 gap-3 tabular-nums"
+      >
+        <div className="p-3 rounded bg-slate-900/90 border border-slate-700/80 space-y-1.5">
+          <div className="flex items-center justify-between gap-2 text-xs font-mono font-bold">
+            <span className="flex items-center gap-1.5 text-cyan-300">
+              <ClipboardCheck className="w-3.5 h-3.5 shrink-0" />
+              <span>BEK 496/2024 (&gt; 250 m²)</span>
+            </span>
+            <span
+              className={`px-1.5 py-0.5 rounded text-[11px] font-bold whitespace-nowrap ${
+                metabolism.bek496Compliance.status === 'OVERHOLDT'
+                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50'
+                  : 'bg-rose-950 text-rose-300 border border-rose-500/50'
+              }`}
+            >
+              {metabolism.bek496Compliance.status === 'OVERHOLDT' ? 'OVERHOLDT' : 'MANGLER PLAN'}
+            </span>
+          </div>
+          <div className="text-[11px] font-mono text-slate-200">
+            Areal: <strong>{metabolism.activeAreaM2.toLocaleString('da-DK')} m²</strong> · Obligatorisk selektiv nedrivning
+          </div>
+          <button
+            type="button"
+            onClick={() => setHasStandardizedPlan((prev) => !prev)}
+            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-[11px] font-mono font-semibold text-slate-200 whitespace-nowrap cursor-pointer"
+          >
+            {hasStandardizedPlan
+              ? 'Markér Nedrivningsplan som Mangelfuld'
+              : 'Verificér Standardiseret Nedrivningsplan'}
+          </button>
+          {metabolism.bek496Compliance.missingRequirementsDa.length > 0 && (
+            <div className="text-[11px] text-rose-300 leading-snug">
+              {metabolism.bek496Compliance.missingRequirementsDa[0]}
+            </div>
+          )}
+        </div>
+
+        <div className="p-3 rounded bg-slate-900/90 border border-slate-700/80 space-y-1.5">
+          <div className="flex items-center justify-between gap-2 text-xs font-mono font-bold">
+            <span className="flex items-center gap-1.5 text-amber-300">
+              <Scale className="w-3.5 h-3.5 shrink-0" />
+              <span>HP14 Økotoksicitet &amp; Affald</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-950 text-rose-300 border border-rose-500/50 whitespace-nowrap">
+              {metabolism.hp14WasteSummary.classification === 'FARLIGT_AFFALD'
+                ? 'FARLIGT AFFALD'
+                : 'FORURENET'}
+            </span>
+          </div>
+          <div className="text-[11px] font-mono text-slate-200">
+            HP14 Sum: <strong>{metabolism.hp14WasteSummary.hp14WeightedSumPercent.toFixed(2)} %</strong> (kvotient{' '}
+            <strong>{metabolism.hp14WasteSummary.hp14ThresholdQuotient.toFixed(2)}</strong>)
+          </div>
+          <div className="text-[11px] text-slate-300 leading-snug">
+            BEK 1328/2025 (Asbest) &amp; BEK 1399/2021 (&lt;1997 mineraluld: Farligt affald).
+          </div>
+        </div>
+
+        <div className="p-3 rounded bg-slate-900/90 border border-slate-700/80 space-y-1.5">
+          <div className="flex items-center justify-between gap-2 text-xs font-mono font-bold">
+            <span className="flex items-center gap-1.5 text-emerald-300">
+              <Leaf className="w-3.5 h-3.5 shrink-0" />
+              <span>Deterministisk LCA (CO₂e)</span>
+            </span>
+            <span className="text-[11px] font-mono text-emerald-300 whitespace-nowrap">
+              {metabolism.lcaCo2e.recyclingRatePercent.toFixed(1)} % genbrug
+            </span>
+          </div>
+          <div className="text-sm font-mono font-extrabold text-white">
+            {metabolism.lcaCo2e.netEmissionsTonnesCo2e.toLocaleString('da-DK', {
+              maximumFractionDigits: 1,
+            })}{' '}
+            ton CO₂e netto
+          </div>
+          <div className="text-[11px] text-emerald-300 flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3 shrink-0" />
+            <span>
+              Besparelse v/ selektiv sortering:{' '}
+              {Math.round(metabolism.lcaCo2e.avoidedBySelectiveDemolitionKgCo2e / 1000).toLocaleString('da-DK')} t CO₂e
+            </span>
+          </div>
         </div>
       </div>
 

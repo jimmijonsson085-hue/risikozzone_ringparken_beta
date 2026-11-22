@@ -45,6 +45,7 @@ import {
 } from '../types/dispersion';
 import { generatePercolationPdfReport } from '../services/pdfExportService';
 import { CompactSimulerMenu } from './CompactSimulerMenu';
+import { evaluateLokalplan1269LarCompliance } from '../utils/riskEngine';
 
 export interface HydrogeologicalLayerSpec {
   id: string;
@@ -2167,7 +2168,7 @@ export const UndergroundPercolation2D: React.FC<UndergroundPercolation2DProps> =
                 </span>
               </div>
 
-              <div className="flex items-center justify-between py-1">
+              <div className="flex items-center justify-between py-1 border-b border-slate-800/80">
                 <span className="text-cyan-300">Bly (Pb) — Primært magasin (-16,5 m)</span>
                 <span
                   className={`font-bold ${
@@ -2180,6 +2181,36 @@ export const UndergroundPercolation2D: React.FC<UndergroundPercolation2DProps> =
                   <span className="text-slate-400 font-normal">(Krav: 1,0 µg/L)</span>
                 </span>
               </div>
+
+              {(() => {
+                const lar1269 = evaluateLokalplan1269LarCompliance({
+                  catchmentAreaHa: 4.8,
+                  imperviousShare: 0.58,
+                  precipitationMmPerHour: effectivePrecipMm,
+                  stormDurationMinutes: 60,
+                  availableLarDetentionM3: 180,
+                });
+                return (
+                  <div
+                    data-testid="lokalplan-1269-lar-readout"
+                    className="flex items-center justify-between gap-2 pt-1.5"
+                  >
+                    <span className="text-sky-300">
+                      Lokalplan 1269 LAR (Maks 2,0 l/s/ha)
+                    </span>
+                    <span
+                      className={`font-bold text-right ${
+                        lar1269.isCompliant ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {lar1269.actualSpecificRunoffLPerSecPerHa.toFixed(2)} l/s/ha
+                      {lar1269.detentionDeficitM3 > 0
+                        ? ` (+${lar1269.detentionDeficitM3.toFixed(0)} m³ bassin)`
+                        : ' (OK)'}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             {showWaterMainLayer && waterMainTelemetry && (

@@ -14,7 +14,8 @@ export type ViewportVisualizationMode =
   | 'underground_2d'
   | 'underground_split'
   | 'split'
-  | '2d';
+  | '2d'
+  | 'risk_gis';
 
 export type DeviceEditionSelection = 'auto' | 'standard' | 'tablet' | 'mobile';
 export type OrientationSelection = 'auto' | 'portrait' | 'landscape';

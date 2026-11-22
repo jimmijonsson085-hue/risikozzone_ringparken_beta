@@ -10,6 +10,7 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
+  FileDown,
 } from 'lucide-react';
 import {
   AlgedonicObservation,
@@ -27,6 +28,7 @@ export interface HeaderWeatherCorrelationD3PopupProps {
   selectedHourIndex: number;
   machineNoiseOutputDb: number;
   onSelectHour: (hourIndex: number) => void;
+  onExportForensicPdf?: () => void;
 }
 
 export type DustAxisScaleMode = 'linear' | 'logarithmic';
@@ -162,6 +164,7 @@ export const HeaderWeatherCorrelationD3Popup: React.FC<HeaderWeatherCorrelationD
   selectedHourIndex,
   machineNoiseOutputDb,
   onSelectHour,
+  onExportForensicPdf,
 }) => {
   hydrateCorrelationCacheOnce();
 
@@ -851,15 +854,29 @@ export const HeaderWeatherCorrelationD3Popup: React.FC<HeaderWeatherCorrelationD
             · r = {pearsonR >= 0 ? `+${pearsonR.toFixed(2)}` : pearsonR.toFixed(2)}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-rose-600 text-slate-300 hover:text-white border border-slate-700 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
-          title="Luk Vejr-Korrelationsgraf"
-        >
-          <X className="w-3.5 h-3.5" />
-          <span className="text-[11px]">Luk</span>
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onExportForensicPdf && (
+            <button
+              type="button"
+              data-testid="d3-popup-export-forensic-pdf-btn"
+              onClick={onExportForensicPdf}
+              className="px-2 py-0.5 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              title="Generér retsmedicinsk PDF-rapport med seneste 24t vindstød, støvkoncentration og SHA-256"
+            >
+              <FileDown className="w-3.5 h-3.5 shrink-0" />
+              <span>Retsmedicinsk PDF (24t)</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-2 py-0.5 rounded bg-slate-900 hover:bg-rose-600 text-slate-300 hover:text-white border border-slate-700 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+            title="Luk Vejr-Korrelationsgraf"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span className="text-[11px]">Luk</span>
+          </button>
+        </div>
       </div>
 
       {/* Controls Bar: Scale Mode ('Linear' vs 'Logarithmic') + Dust Deposition Axis Unit Toggle ('µg/m²' vs 'mg/m²') + Cache */}

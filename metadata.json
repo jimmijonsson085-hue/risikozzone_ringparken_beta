@@ -1,6 +1,6 @@
 {
   "name": "Ringparken Miljø- & Spredningstelemetri (PSS W22085)",
   "description": "Fysisk-kemisk atmosfærisk spredningsmodel, 24-timers Gaussisk Puff-akkumulering, Open-Meteo vejrtelemetri og retsmedicinsk bevisførelse for nedrivningen i Ringparken, Slagelse.",
-  "requestFramePermissions": ["geolocation"],
+  "requestFramePermissions": ["geolocation", "camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
