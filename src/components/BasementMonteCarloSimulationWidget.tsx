@@ -278,7 +278,7 @@ export const BasementMonteCarloSimulationWidget: React.FC<
   };
 
   return (
-    <div className="bg-slate-900/95 border-2 border-purple-500/50 rounded-md p-3.5 space-y-3.5 shadow-lg">
+    <div className="bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-purple-400 rounded-md p-3.5 space-y-3.5">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800 pb-2.5">
         <div className="space-y-0.5">
@@ -300,13 +300,13 @@ export const BasementMonteCarloSimulationWidget: React.FC<
         </div>
 
         <div className="flex items-center gap-1.5">
-          <span className="px-2 py-0.5 rounded bg-purple-950/90 border border-purple-400/60 text-[10px] font-mono font-bold text-purple-200">
+          <span className="px-2 py-0.5 rounded bg-purple-950/90 border border-purple-400/60 text-[11px] font-mono font-bold text-purple-200">
             seed = {seed} · C_const = {C_const.toFixed(1)} Pa·K/m
           </span>
           <button
             type="button"
             onClick={handleResetCalibratedDefaults}
-            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] font-mono text-slate-200 flex items-center gap-1 cursor-pointer"
+            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-mono text-slate-200 flex items-center gap-1 cursor-pointer"
             title="Nulstil til Python-scriptets kalibrerede standardværdier"
           >
             <RefreshCw className="w-3 h-3 text-cyan-400" />
@@ -316,9 +316,9 @@ export const BasementMonteCarloSimulationWidget: React.FC<
       </div>
 
       {/* Physical Constants & Interactive Sliders */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[10.5px]">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px]">
         <div className="p-2 rounded bg-slate-950/90 border border-slate-800 space-y-1">
-          <div className="flex items-center justify-between text-slate-400 text-[9.5px]">
+          <div className="flex items-center justify-between text-slate-400 text-[11px]">
             <span>HØJDE KÆLDER → 1. SAL (z_1sal)</span>
             <strong className="text-cyan-300">{z1SalMeters.toFixed(1)} m</strong>
           </div>
@@ -331,11 +331,11 @@ export const BasementMonteCarloSimulationWidget: React.FC<
             onChange={(e) => setZ1SalMeters(Number(e.target.value))}
             className="w-full accent-cyan-400 cursor-pointer"
           />
-          <div className="text-[9px] text-slate-400">Standard Blok 6: 4,8 m (1. sal)</div>
+          <div className="text-[11px] text-slate-400">Standard Blok 6: 4,8 m (1. sal)</div>
         </div>
 
         <div className="p-2 rounded bg-slate-950/90 border border-slate-800 space-y-1">
-          <div className="flex items-center justify-between text-slate-400 text-[9.5px]">
+          <div className="flex items-center justify-between text-slate-400 text-[11px]">
             <span>LÆKAGEAREAL RØR/REVNER (A_eff)</span>
             <strong className="text-amber-300">
               {aEffCm2Mean.toFixed(0)} cm² ({(aEffCm2Mean / 10000).toFixed(4)} m²)
@@ -350,11 +350,11 @@ export const BasementMonteCarloSimulationWidget: React.FC<
             onChange={(e) => setAEffCm2Mean(Number(e.target.value))}
             className="w-full accent-amber-400 cursor-pointer"
           />
-          <div className="text-[9px] text-slate-400">Normalfordelt μ=25 cm², σ=6 cm²</div>
+          <div className="text-[11px] text-slate-400">Normalfordelt μ=25 cm², σ=6 cm²</div>
         </div>
 
         <div className="p-2 rounded bg-slate-950/90 border border-slate-800 space-y-1">
-          <div className="flex items-center justify-between text-slate-400 text-[9.5px]">
+          <div className="flex items-center justify-between text-slate-400 text-[11px]">
             <span>BOLIGVOLUMEN 1. SAL (V_bolig)</span>
             <strong className="text-emerald-300">{vBoligM3.toFixed(0)} m³</strong>
           </div>
@@ -367,25 +367,25 @@ export const BasementMonteCarloSimulationWidget: React.FC<
             onChange={(e) => setVBoligM3(Number(e.target.value))}
             className="w-full accent-emerald-400 cursor-pointer"
           />
-          <div className="text-[9px] text-slate-400">k_dep = {kDepPerH} h⁻¹ · Cd = {Cd}</div>
+          <div className="text-[11px] text-slate-400">k_dep = {kDepPerH} h⁻¹ · Cd = {Cd}</div>
         </div>
 
         <div className="p-2 rounded bg-slate-950/90 border border-rose-500/40 space-y-1">
-          <div className="text-slate-400 text-[9.5px]">SPIDS P95 (VINTER · FLYTNING)</div>
+          <div className="text-slate-400 text-[11px]">SPIDS P95 (VINTER · FLYTNING)</div>
           <div className="text-sm font-extrabold text-rose-400">
             {worstRow.cInFibreM3P95.toLocaleString('da-DK', {
               maximumFractionDigits: 0,
             })}{' '}
             fibre/m³
           </div>
-          <div className="text-[9.5px] text-amber-300">
+          <div className="text-[11px] text-amber-300">
             = {worstRow.cInFibreCm3P95.toFixed(4)} f/cm³ ({worstRow.pctOfBek613LimitP95} % af BEK 613/2026)
           </div>
         </div>
       </div>
 
       {/* Formula & Seasonal Filter Bar */}
-      <div className="p-2.5 rounded bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-2 font-mono text-[10.5px]">
+      <div className="p-2.5 rounded bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-2 font-mono text-[11px]">
         <div className="text-slate-200 space-y-0.5">
           <div>
             <span className="text-purple-300 font-bold">Massebalance (1. sal): </span>
@@ -397,7 +397,7 @@ export const BasementMonteCarloSimulationWidget: React.FC<
               Q_op = Cd · A_eff · √(2 · dP_total / ρ_air) · 3600
             </code>
           </div>
-          <div className="text-[10px] text-slate-400">
+          <div className="text-[11px] text-slate-400">
             Aktuel Open-Meteo udetemperatur ({currentOutdoorTempC.toFixed(1)} °C) svarer til:{' '}
             <strong className="text-amber-300">{activeWeatherMatchedSeason}</strong> · BEK 613/2026
             grænseværdi: <strong className="text-rose-300">3.000 fibre/m³ (0,003 fibre/cm³)</strong>
@@ -408,7 +408,7 @@ export const BasementMonteCarloSimulationWidget: React.FC<
           <button
             type="button"
             onClick={() => setSelectedSeasonFilter('ALL')}
-            className={`px-2 py-1 rounded text-[10px] font-mono border cursor-pointer ${
+            className={`px-2 py-1 rounded text-[11px] font-mono border cursor-pointer ${
               selectedSeasonFilter === 'ALL'
                 ? 'bg-purple-500/25 border-purple-400 text-purple-100 font-bold'
                 : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -421,7 +421,7 @@ export const BasementMonteCarloSimulationWidget: React.FC<
               key={s.name}
               type="button"
               onClick={() => setSelectedSeasonFilter(s.name)}
-              className={`px-2 py-1 rounded text-[10px] font-mono border cursor-pointer ${
+              className={`px-2 py-1 rounded text-[11px] font-mono border cursor-pointer ${
                 selectedSeasonFilter === s.name
                   ? 'bg-cyan-500/25 border-cyan-400 text-cyan-100 font-bold'
                   : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -435,14 +435,14 @@ export const BasementMonteCarloSimulationWidget: React.FC<
 
       {/* SVG Visual Comparison of Scenarios (Mean vs. P95 across Seasons) */}
       <div className="p-3 rounded bg-slate-950/95 border border-slate-800 space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[10.5px] font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
           <span className="text-cyan-300 font-bold uppercase flex items-center gap-1.5">
             <Activity className="w-3.5 h-3.5 text-cyan-400" />
             <span>
               Fordeling af Indendørs Asbest på 1. Sal (C_in_fibre_m3_mean vs. P95-percentil)
             </span>
           </span>
-          <span className="text-rose-300 text-[10px]">
+          <span className="text-rose-300 text-[11px]">
             Rød stiplet linje = BEK 613/2026 Grænseværdi (3.000 fibre/m³ = 0,003 fibre/cm³)
           </span>
         </div>
@@ -472,7 +472,7 @@ export const BasementMonteCarloSimulationWidget: React.FC<
                   y={y + 3}
                   textAnchor="end"
                   fill={isLimit ? '#fda4af' : '#94a3b8'}
-                  fontSize="9"
+                  fontSize="9.5"
                   fontFamily="monospace"
                 >
                   {val.toLocaleString('da-DK')}
@@ -483,7 +483,7 @@ export const BasementMonteCarloSimulationWidget: React.FC<
                     y={y - 4}
                     textAnchor="end"
                     fill="#fda4af"
-                    fontSize="8.5"
+                    fontSize="9.5"
                     fontFamily="monospace"
                     fontWeight="bold"
                   >
@@ -557,7 +557,7 @@ export const BasementMonteCarloSimulationWidget: React.FC<
                   y={Math.max(14, 181 - wP95H)}
                   textAnchor="middle"
                   fill="#fecdd3"
-                  fontSize="8.5"
+                  fontSize="9.5"
                   fontFamily="monospace"
                   fontWeight="bold"
                 >
@@ -570,7 +570,7 @@ export const BasementMonteCarloSimulationWidget: React.FC<
                   y={202}
                   textAnchor="middle"
                   fill="#e2e8f0"
-                  fontSize="8.5"
+                  fontSize="9.5"
                   fontFamily="monospace"
                 >
                   {sc.shortLabel}
@@ -582,15 +582,15 @@ export const BasementMonteCarloSimulationWidget: React.FC<
           {/* Legend */}
           <g transform="translate(72, 12)">
             <rect x={0} y={0} width={10} height={8} fill="#38bdf8" rx={1} />
-            <text x={14} y={7.5} fill="#cbd5e1" fontSize="8.5" fontFamily="monospace">
+            <text x={14} y={7.5} fill="#cbd5e1" fontSize="9.5" fontFamily="monospace">
               Vinter Middel (Mean)
             </text>
             <rect x={145} y={0} width={10} height={8} fill="#f43f5e" rx={1} />
-            <text x={159} y={7.5} fill="#fecdd3" fontSize="8.5" fontFamily="monospace">
+            <text x={159} y={7.5} fill="#fecdd3" fontSize="9.5" fontFamily="monospace">
               Vinter 95-Percentil (P95)
             </text>
             <rect x={315} y={0} width={10} height={8} fill="#f59e0b" rx={1} />
-            <text x={329} y={7.5} fill="#fde68a" fontSize="8.5" fontFamily="monospace">
+            <text x={329} y={7.5} fill="#fde68a" fontSize="9.5" fontFamily="monospace">
               Varm Sommer 95-Percentil (P95)
             </text>
           </g>
@@ -600,14 +600,14 @@ export const BasementMonteCarloSimulationWidget: React.FC<
       {/* DataFrame Table (20 rows) */}
       <div className="space-y-1.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[10.5px] font-mono font-bold text-slate-200 uppercase">
+          <span className="text-[11px] font-mono font-bold text-slate-200 uppercase">
             Simulerings-DataFrame (`df_out` · {filteredRows.length} rækker):
           </span>
           <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={handleCopyDataframe}
-              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] font-mono text-cyan-300 flex items-center gap-1 cursor-pointer"
+              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-mono text-cyan-300 flex items-center gap-1 cursor-pointer"
             >
               {copiedTable ? (
                 <>
@@ -638,7 +638,7 @@ export const BasementMonteCarloSimulationWidget: React.FC<
                   setLoggedConfirmation(true);
                   window.setTimeout(() => setLoggedConfirmation(false), 3000);
                 }}
-                className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
               >
                 <ShieldAlert className="w-3 h-3" />
                 <span>
@@ -652,9 +652,9 @@ export const BasementMonteCarloSimulationWidget: React.FC<
         </div>
 
         <div className="overflow-x-auto rounded border border-slate-800 bg-slate-950 max-h-80">
-          <table className="w-full text-left border-collapse font-mono text-[10.5px]">
+          <table className="w-full text-left border-collapse font-mono text-[11px]">
             <thead>
-              <tr className="bg-slate-900/95 border-b border-slate-800 text-slate-300 text-[9.5px] uppercase">
+              <tr className="bg-slate-900/95 border-b border-slate-800 text-slate-300 text-[11px] uppercase">
                 <th className="py-1.5 px-2.5">Årstid</th>
                 <th className="py-1.5 px-2.5">Scenarie (Kælder-Aktivitet)</th>
                 <th className="py-1.5 px-2 text-right">dP_total_Pa_mean</th>
@@ -707,7 +707,7 @@ export const BasementMonteCarloSimulationWidget: React.FC<
                     </td>
                     <td className="py-1.5 px-2.5 text-right whitespace-nowrap">
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold ${
+                        className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
                           exceedsGv
                             ? 'bg-rose-600/90 text-white'
                             : exceedsWho

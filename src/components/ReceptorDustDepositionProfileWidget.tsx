@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { motion } from 'motion/react';
 import {
   Area,
   AreaChart,
@@ -15,9 +16,11 @@ import {
 } from 'recharts';
 import {
   AlertTriangle,
+  Biohazard,
   Clock,
   Download,
   Droplets,
+  FlaskConical,
   Layers,
   MapPin,
   Microscope,
@@ -115,6 +118,10 @@ const FRACTION_COLORS = {
 
 // Reference threshold for forensic surface dust accumulation per m² requiring H-class / wet decontamination
 const SURFACE_DECONTAMINATION_THRESHOLD_UG_M2 = 2500;
+const IMPACT_THRESHOLD_RATIO = 0.75;
+const IMPACT_THRESHOLD_UG_M2 = Math.round(
+  SURFACE_DECONTAMINATION_THRESHOLD_UG_M2 * IMPACT_THRESHOLD_RATIO
+);
 
 export const ReceptorDustDepositionProfileWidget: React.FC<
   ReceptorDustDepositionProfileWidgetProps
@@ -561,10 +568,30 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
 
   if (!selectedProfile) return null;
 
+  const dust24hRatioToLimit =
+    selectedProfile.total24hDustUgM2 / SURFACE_DECONTAMINATION_THRESHOLD_UG_M2;
+  const asbestos24hRatioToLimit =
+    selectedReceptorCategoryAttribution?.dailyAsbestosDoseQuotient ?? 0;
+  const cumulative24hLimitRatio = Math.max(dust24hRatioToLimit, asbestos24hRatioToLimit);
+  const cumulative24hLimitPct = Math.round(cumulative24hLimitRatio * 100);
+  const isImpactThresholdExceeded = cumulative24hLimitRatio > IMPACT_THRESHOLD_RATIO;
+
   return (
-    <div className="bg-slate-900/95 border border-cyan-500/40 rounded-lg shadow-2xl overflow-hidden text-slate-100">
+    <div
+      className={`border rounded-lg overflow-hidden text-[var(--text-primary)] transition-colors ${
+        isImpactThresholdExceeded
+          ? 'bg-gradient-to-br from-orange-950/35 via-[var(--surface-panel)] to-[var(--surface-panel)] border-orange-500/70'
+          : 'bg-[var(--surface-panel)] border-[var(--border-subtle)]'
+      }`}
+    >
       {/* Top Header */}
-      <div className="bg-gradient-to-r from-cyan-950/90 via-slate-900 to-slate-900 px-4 py-3 border-b border-cyan-500/30 flex flex-wrap items-center justify-between gap-3">
+      <div
+        className={`px-4 py-3 border-b flex flex-wrap items-center justify-between gap-3 ${
+          isImpactThresholdExceeded
+            ? 'bg-gradient-to-r from-orange-950/75 via-amber-950/40 to-[var(--surface-card)] border-orange-500/50 border-l-4 border-l-orange-400'
+            : 'bg-[var(--surface-card)] border-[var(--border-subtle)] border-l-4 border-l-sky-400'
+        }`}
+      >
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-lg bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 shadow-inner">
             <Layers className="w-5 h-5" />
@@ -574,7 +601,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
               <h3 className="text-sm font-bold tracking-wide uppercase text-cyan-100">
                 Akkumuleret Støv-Deponeringsprofil (µg/m²) pr. Kvadratmeter
               </h3>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-200 border border-cyan-400/30">
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-200 border border-cyan-400/30">
                 Fysisk Overflade-Ophobning · 1 m² Prøvefelt
               </span>
             </div>
@@ -586,7 +613,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
 
         <div className="flex items-center gap-2 flex-wrap">
           {/* Time Horizon Selector */}
-          <div className="flex items-center bg-slate-950 border border-slate-800 rounded p-0.5 text-[10px] font-mono">
+          <div className="flex items-center bg-slate-950 border border-slate-800 rounded p-0.5 text-[11px] font-mono">
             <button
               type="button"
               onClick={() => setHorizonMode('up_to_hour')}
@@ -653,7 +680,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
           <div className="flex flex-wrap items-center justify-between gap-2">
             <label
               htmlFor="deposition-29-building-select"
-              className="text-[10.5px] font-bold uppercase text-cyan-300 flex items-center gap-1.5"
+              className="text-[11px] font-bold uppercase text-cyan-300 flex items-center gap-1.5"
             >
               <MapPin className="w-3.5 h-3.5 text-cyan-400" />
               <span>Vælg Bygningsenhed / Naboblok (29 Enheder grupperet i kat. a–e):</span>
@@ -666,7 +693,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                   onSelectReceptor(e.target.value);
                 }
               }}
-              className="bg-slate-900 border border-cyan-500/50 hover:border-cyan-400 text-white rounded px-2.5 py-1 text-[10.5px] font-mono font-bold focus:outline-none focus:ring-1 focus:ring-cyan-400 max-w-full sm:max-w-md cursor-pointer"
+              className="bg-slate-900 border border-cyan-500/50 hover:border-cyan-400 text-white rounded px-2.5 py-1 text-[11px] font-mono font-bold focus:outline-none focus:ring-1 focus:ring-cyan-400 max-w-full sm:max-w-md cursor-pointer"
             >
               {buildingsGroupedByCategory.map((grp) => (
                 <optgroup
@@ -691,12 +718,30 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
           </div>
 
           {selectedReceptorCategoryAttribution && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-2 border-t border-slate-800 text-[10px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-2 border-t border-slate-800 text-[11px]">
               {/* Cumulative 24-hour Asbestos Dose vs 2026-GV = 0.003 f/cm³ */}
-              <div className="p-2.5 rounded bg-slate-900/90 border border-rose-500/40 space-y-1">
-                <div className="flex items-center justify-between text-rose-300 font-bold uppercase text-[9.5px]">
-                  <span>☣ Kumulativ 24t Asbestdosis (mod 2026-GV = 0,003 f/cm³)</span>
-                  <span>
+              <div
+                data-testid="impact-threshold-dose-card"
+                className={`p-2.5 rounded border space-y-1 transition-all ${
+                  isImpactThresholdExceeded
+                    ? 'bg-gradient-to-r from-orange-500/25 via-amber-500/15 to-slate-900/95 border-orange-400/80'
+                    : 'bg-slate-900/90 border-rose-500/40'
+                }`}
+              >
+                <div
+                  className={`flex items-center justify-between font-bold uppercase text-[11px] ${
+                    isImpactThresholdExceeded ? 'text-orange-200' : 'text-rose-300'
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {isImpactThresholdExceeded ? (
+                      <AlertTriangle className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                    ) : (
+                      <Biohazard className="w-3.5 h-3.5 shrink-0" />
+                    )}
+                    <span>Kumulativ 24t Asbestdosis (mod 2026-GV = 0,003 f/cm³)</span>
+                  </span>
+                  <span className="tabular-nums">
                     {(selectedReceptorCategoryAttribution.dailyAsbestosDoseQuotient * 100).toFixed(
                       0
                     )}
@@ -704,25 +749,48 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-extrabold text-white">
+                  <span className="text-sm font-extrabold text-white tabular-nums">
                     {selectedReceptorCategoryAttribution.cumulative24hAsbestosDoseFibersCm3H.toFixed(
                       4
                     )}{' '}
                     fibre/cm³·t
                   </span>
-                  <span className="text-rose-200">
+                  <span className={isImpactThresholdExceeded ? 'text-orange-200' : 'text-rose-200'}>
                     Deponeret:{' '}
-                    <strong>
+                    <strong className="tabular-nums">
                       {selectedProfile.horizonFibersM2.toLocaleString('da-DK')} fibre/m²
                     </strong>
                   </span>
                 </div>
+                {isImpactThresholdExceeded && (
+                  <motion.div
+                    data-testid="dust-impact-threshold-alert-banner"
+                    initial={{ opacity: 0, x: -16 }}
+                    animate={{ opacity: [0.82, 1, 0.82], x: 0 }}
+                    transition={{
+                      x: { duration: 0.4, ease: [0.16, 1, 0.3, 1] },
+                      opacity: { duration: 2.0, repeat: Infinity, ease: 'easeInOut' },
+                    }}
+                    className="mt-1 px-2 py-1 rounded bg-gradient-to-r from-orange-500/35 via-amber-500/25 to-orange-600/25 border border-orange-400/70 text-[11px] text-orange-100 font-bold flex items-center justify-between gap-2 tabular-nums"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-orange-300 shrink-0" />
+                      <span>Impact Threshold (&gt;75% sundhedsgrænse)</span>
+                    </span>
+                    <span>
+                      24t Dosis: {cumulative24hLimitPct}% · {selectedProfile.total24hDustUgM2.toLocaleString('da-DK')} µg/m²
+                    </span>
+                  </motion.div>
+                )}
               </div>
 
               {/* Accumulated Heavy Metal & PCB Dust Deposition (µg/m²) from d, c, and e */}
               <div className="p-2.5 rounded bg-slate-900/90 border border-purple-500/40 space-y-1">
-                <div className="flex items-center justify-between text-purple-300 font-bold uppercase text-[9.5px]">
-                  <span>🧪 Tungmetal- &amp; PCB-Støvdeponering fra Kat. d, c &amp; e</span>
+                <div className="flex items-center justify-between text-purple-300 font-bold uppercase text-[11px]">
+                  <span className="inline-flex items-center gap-1">
+                    <FlaskConical className="w-3.5 h-3.5 shrink-0" />
+                    <span>Tungmetal- &amp; PCB-Støvdeponering fra Kat. d, c &amp; e</span>
+                  </span>
                   <span className="text-amber-300">
                     ∑ {selectedReceptorCategoryAttribution.totalHeavyMetalsAndPcbUgM2.toLocaleString(
                       'da-DK'
@@ -730,7 +798,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                     µg/m²
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-1 pt-0.5 text-[9px]">
+                <div className="grid grid-cols-3 gap-1 pt-0.5 text-[11px]">
                   <div className="px-1.5 py-0.5 rounded bg-rose-950/60 border border-rose-500/40 text-rose-200">
                     <strong>Kat. d (Nedriv.):</strong>{' '}
                     {selectedReceptorCategoryAttribution.fromDUgM2} µg/m² (
@@ -762,7 +830,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
               </span>
             </div>
 
-            <div className="flex items-center gap-2 text-[10px] font-mono">
+            <div className="flex items-center gap-2 text-[11px] font-mono">
               <button
                 type="button"
                 onClick={() => setIncludeStreetProbes((prev) => !prev)}
@@ -820,7 +888,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span
-                          className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold ${
+                          className={`px-1.5 py-0.2 rounded text-[11px] font-bold ${
                             idx === 0
                               ? 'bg-rose-600 text-white'
                               : idx === 1
@@ -834,7 +902,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                           {prof.receptorCode}: {prof.receptorName}
                         </span>
                       </div>
-                      <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                      <div className="text-[11px] text-slate-400 truncate mt-0.5">
                         {prof.address} · {prof.distanceMeters} m fra{' '}
                         {prof.nearestSourceName.split(':')[0]}
                       </div>
@@ -848,7 +916,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                       >
                         {prof.horizonDustUgM2.toLocaleString('da-DK')} µg/m²
                       </div>
-                      <div className="text-[9.5px] text-slate-400">
+                      <div className="text-[11px] text-slate-400">
                         +{prof.currentHourInfluxUgM2H} µg/m²·t
                       </div>
                     </div>
@@ -898,7 +966,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-[9.5px] font-mono text-slate-400">
+                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
                     <span>
                       Kl. {currentWeather.hourLabel}:{' '}
                       <strong className="text-slate-200">
@@ -921,19 +989,19 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
           <div className="lg:col-span-5 bg-slate-950/95 border border-slate-800 rounded-lg p-3.5 flex flex-col justify-between space-y-3">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <div className="text-[10px] font-mono uppercase text-cyan-400 font-bold flex items-center gap-1.5">
+                <div className="text-[11px] font-mono uppercase text-cyan-400 font-bold flex items-center gap-1.5">
                   <Microscope className="w-3.5 h-3.5 text-cyan-400" />
                   <span>1,0 m × 1,0 m (1 m²) Fysisk Overflade-Prøvefelt</span>
                 </div>
                 <h4 className="text-xs font-bold text-white mt-0.5">
                   {selectedProfile.receptorCode}: {selectedProfile.receptorName}
                 </h4>
-                <p className="text-[10.5px] text-slate-400">
+                <p className="text-[11px] text-slate-400">
                   Simuleret støvbelægning på 1 m² vandret referenceflade (altan / vindueskarm / legeplads)
                 </p>
               </div>
               <span
-                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border ${
                   selectedProfile.wipeTestExceedanceRatio >= 1.0
                     ? 'bg-rose-950/90 border-rose-500/60 text-rose-200'
                     : 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200'
@@ -949,7 +1017,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
             <div className="grid grid-cols-2 gap-2.5 items-center">
               {/* Top-down 1 m² Wipe Quadrat */}
               <div className="bg-slate-900/90 border border-slate-700 rounded p-2 space-y-1">
-                <div className="flex items-center justify-between text-[9.5px] font-mono text-slate-300">
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-300">
                   <span>1 m² Top-View</span>
                   <span className="text-cyan-300 font-bold">
                     {selectedProfile.horizonDustUgM2.toLocaleString('da-DK')} µg/m²
@@ -959,6 +1027,31 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                   viewBox="0 0 100 100"
                   className="w-full aspect-square rounded bg-[#070b14] border border-slate-700"
                 >
+                  <defs>
+                    <linearGradient id="surfacePlateImpactAlertGrad" x1="0" y1="1" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#ea580c" stopOpacity="0.34">
+                        {isImpactThresholdExceeded && (
+                          <animate
+                            attributeName="stop-opacity"
+                            values="0.22;0.48;0.22"
+                            dur="2.2s"
+                            repeatCount="indefinite"
+                          />
+                        )}
+                      </stop>
+                      <stop offset="55%" stopColor="#f97316" stopOpacity="0.22">
+                        {isImpactThresholdExceeded && (
+                          <animate
+                            attributeName="stop-opacity"
+                            values="0.14;0.34;0.14"
+                            dur="2.2s"
+                            repeatCount="indefinite"
+                          />
+                        )}
+                      </stop>
+                      <stop offset="100%" stopColor="#fb923c" stopOpacity="0.1" />
+                    </linearGradient>
+                  </defs>
                   {/* Grid lines every 25 cm */}
                   <line x1="25" y1="0" x2="25" y2="100" stroke="#1e293b" strokeWidth="0.6" />
                   <line x1="50" y1="0" x2="50" y2="100" stroke="#1e293b" strokeWidth="0.6" />
@@ -967,14 +1060,19 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                   <line x1="0" y1="50" x2="100" y2="50" stroke="#1e293b" strokeWidth="0.6" />
                   <line x1="0" y1="75" x2="100" y2="75" stroke="#1e293b" strokeWidth="0.6" />
 
-                  {/* Settled Dust Haze */}
+                  {/* Settled Dust Haze (shifts to orange alert gradient when 24h cumulative dose > 75% of local limit) */}
                   <rect
                     x="0"
                     y="0"
                     width="100"
                     height="100"
-                    fill="#06b6d4"
-                    fillOpacity={Math.min(0.28, selectedProfile.horizonDustUgM2 / 18000)}
+                    className={isImpactThresholdExceeded ? 'dust-impact-alert-gradient-pulse' : undefined}
+                    fill={isImpactThresholdExceeded ? 'url(#surfacePlateImpactAlertGrad)' : '#06b6d4'}
+                    fillOpacity={
+                      isImpactThresholdExceeded
+                        ? 1
+                        : Math.min(0.28, selectedProfile.horizonDustUgM2 / 18000)
+                    }
                   />
 
                   {/* Settled Particles & Fibers */}
@@ -1007,7 +1105,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                     x="4"
                     y="96"
                     fill="#94a3b8"
-                    fontSize="6.5"
+                    fontSize="9.5"
                     fontFamily="monospace"
                   >
                     1,0 m × 1,0 m (1 m²)
@@ -1017,7 +1115,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
 
               {/* Stratified Vertical Cross-Section of the Dust Layer */}
               <div className="bg-slate-900/90 border border-slate-700 rounded p-2 space-y-1.5">
-                <div className="flex items-center justify-between text-[9.5px] font-mono text-slate-300">
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-300">
                   <span>Lag-Tværsnit</span>
                   <span className="text-amber-300 font-bold">
                     ≈ {selectedProfile.equivalentLayerThicknessUm} µm
@@ -1025,7 +1123,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                 </div>
 
                 <div className="h-32 flex flex-col justify-end bg-[#070b14] border border-slate-800 rounded p-1.5 relative overflow-hidden">
-                  <div className="text-[8.5px] font-mono text-slate-400 absolute top-1 left-1.5">
+                  <div className="text-[11px] font-mono text-slate-400 absolute top-1 left-1.5">
                     Fysisk Støvsøjle pr. m²
                   </div>
 
@@ -1067,7 +1165,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                       title="Respirabelt Kvarts & Betonstøv"
                     />
                   </div>
-                  <div className="w-full h-3 bg-slate-700 text-[8px] font-mono text-center text-slate-200 leading-3">
+                  <div className="w-full h-3 bg-slate-700 text-[11px] font-mono text-center text-slate-200 leading-3">
                     UNDERLAG (1 m²)
                   </div>
                 </div>
@@ -1075,7 +1173,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
             </div>
 
             {/* Fractional Mass Breakdown Table for Selected Receptor */}
-            <div className="space-y-1 pt-1 border-t border-slate-800 font-mono text-[10.5px]">
+            <div className="space-y-1 pt-1 border-t border-slate-800 font-mono text-[11px]">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-slate-300">
                   <span
@@ -1141,25 +1239,56 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
           </div>
 
           {/* Right 7 cols: Interactive Recharts Deposition Profile (Stacked Time Accumulation or All-Receptors Comparison) */}
-          <div className="lg:col-span-7 bg-slate-950/95 border border-slate-800 rounded-lg p-3.5 flex flex-col justify-between space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          <div
+            data-testid="dust-deposition-chart-card"
+            data-impact-alert={isImpactThresholdExceeded ? 'true' : 'false'}
+            className={`relative overflow-hidden lg:col-span-7 border rounded-lg p-3.5 flex flex-col justify-between space-y-3 transition-all ${
+              isImpactThresholdExceeded
+                ? 'bg-gradient-to-br from-orange-950/60 via-amber-950/30 to-slate-950/95 border-orange-500/80'
+                : 'bg-slate-950/95 border-slate-800'
+            }`}
+          >
+            {isImpactThresholdExceeded && (
+              <motion.div
+                aria-hidden="true"
+                data-testid="impact-alert-gradient-pulse-overlay"
+                animate={{ opacity: [0.2, 0.52, 0.2] }}
+                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                className="pointer-events-none absolute inset-0 bg-gradient-to-br from-orange-500/20 via-amber-500/10 to-transparent"
+              />
+            )}
+
+            <div className="relative z-10 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <div className="text-[10px] font-mono uppercase text-cyan-400 font-bold flex items-center gap-1.5">
-                  <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
+                <div
+                  className={`text-[11px] font-mono uppercase font-bold flex items-center gap-1.5 ${
+                    isImpactThresholdExceeded ? 'text-orange-300' : 'text-cyan-400'
+                  }`}
+                >
+                  <TrendingUp
+                    className={`w-3.5 h-3.5 ${
+                      isImpactThresholdExceeded ? 'text-orange-400' : 'text-cyan-400'
+                    }`}
+                  />
                   <span>
                     {chartMode === 'temporal_stack'
                       ? `Lagdelt Ophobningsprofil Over Tid (${selectedProfile.receptorCode})`
                       : 'Sammenligning af Alle Receptorer (µg/m² pr. m²)'}
                   </span>
+                  {isImpactThresholdExceeded && (
+                    <span className="dust-impact-alert-gradient-pulse px-1.5 py-0.5 rounded bg-gradient-to-r from-orange-500/35 to-amber-500/25 border border-orange-400/80 text-orange-100 text-[11px] font-bold tabular-nums">
+                      ⚠ &gt;75% IMPACT ({cumulative24hLimitPct}%)
+                    </span>
+                  )}
                 </div>
-                <p className="text-[10.5px] text-slate-400 mt-0.5">
+                <p className="text-[11px] text-slate-400 mt-0.5">
                   {chartMode === 'temporal_stack'
-                    ? 'Klik på en time på kurven for at inspicere den fysiske støvophobning på det valgte tidspunkt'
-                    : 'Klik på en søjle for at vælge receptoren og inspicere dens 1 m² overfladeprofil'}
+                    ? 'Klik på en time på kurven for at inspicere den fysiske støvophobning · Orange stiplet linje = 75% Impact Threshold'
+                    : 'Klik på en søjle for at vælge receptoren · Orange stiplet linje = 75% Impact Threshold (1.875 µg/m²)'}
                 </p>
               </div>
 
-              <div className="flex items-center bg-slate-900 border border-slate-800 rounded p-0.5 text-[10px] font-mono">
+              <div className="flex items-center bg-slate-900 border border-slate-800 rounded p-0.5 text-[11px] font-mono">
                 <button
                   type="button"
                   onClick={() => setChartMode('temporal_stack')}
@@ -1185,12 +1314,36 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
               </div>
             </div>
 
-            <div className="w-full h-64">
+            {/* Animated Slide-In Impact Threshold Indicator Bar */}
+            <motion.div
+              key={`impact-threshold-bar-${chartMode}`}
+              data-testid="impact-threshold-line-animated-bar"
+              initial={{ opacity: 0, x: -32 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+              className={`relative z-10 flex flex-wrap items-center justify-between gap-2 px-2.5 py-1 rounded border text-[11px] font-mono tabular-nums ${
+                isImpactThresholdExceeded
+                  ? 'bg-gradient-to-r from-orange-500/20 via-amber-500/10 to-transparent border-orange-400/60 text-orange-200'
+                  : 'bg-slate-900/70 border-orange-500/35 text-orange-300'
+              }`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span className="w-6 border-t-2 border-dashed border-orange-400 inline-block shrink-0" />
+                <span className="font-bold">
+                  Impact Threshold Linje: 75% af grænseværdi ({IMPACT_THRESHOLD_UG_M2.toLocaleString('da-DK')} µg/m²)
+                </span>
+              </span>
+              <span className="text-slate-300">
+                Aktuel 24t dosis: <strong className={isImpactThresholdExceeded ? 'text-orange-200' : 'text-cyan-200'}>{cumulative24hLimitPct}%</strong>
+              </span>
+            </motion.div>
+
+            <div key={`chart-wrap-${chartMode}`} className="relative z-10 w-full h-64 dust-impact-threshold-chart">
               <ResponsiveContainer width="100%" height="100%">
                 {chartMode === 'temporal_stack' ? (
                   <AreaChart
                     data={selectedProfile.hourlyCumulativeSeries}
-                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                    margin={{ top: 14, right: 10, left: 0, bottom: 0 }}
                     onClick={(state) => {
                       if (state && typeof state.activeTooltipIndex === 'number') {
                         const idx = state.activeTooltipIndex;
@@ -1200,15 +1353,40 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                       }
                     }}
                   >
+                    <defs>
+                      <linearGradient id="dustImpactAlertGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#fb923c" stopOpacity={0.55}>
+                          {isImpactThresholdExceeded && (
+                            <animate
+                              attributeName="stop-opacity"
+                              values="0.38;0.74;0.38"
+                              dur="2.1s"
+                              repeatCount="indefinite"
+                            />
+                          )}
+                        </stop>
+                        <stop offset="55%" stopColor="#f97316" stopOpacity={0.32}>
+                          {isImpactThresholdExceeded && (
+                            <animate
+                              attributeName="stop-opacity"
+                              values="0.20;0.48;0.20"
+                              dur="2.1s"
+                              repeatCount="indefinite"
+                            />
+                          )}
+                        </stop>
+                        <stop offset="100%" stopColor="#ea580c" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                     <XAxis
                       dataKey="shortHour"
                       stroke="#64748b"
-                      tick={{ fill: '#94a3b8', fontSize: 10, fontFamily: 'monospace' }}
+                      tick={{ fill: '#94a3b8', fontSize: 11, fontFamily: 'monospace' }}
                     />
                     <YAxis
                       stroke="#cbd5e1"
-                      tick={{ fill: '#cbd5e1', fontSize: 10, fontFamily: 'monospace' }}
+                      tick={{ fill: '#cbd5e1', fontSize: 11, fontFamily: 'monospace' }}
                       unit=" µg"
                     />
                     <ReferenceLine
@@ -1218,25 +1396,49 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                       strokeDasharray="3 2"
                     />
                     <ReferenceLine
+                      y={IMPACT_THRESHOLD_UG_M2}
+                      stroke="#f97316"
+                      strokeWidth={2}
+                      strokeDasharray="6 3"
+                      label={{
+                        value: 'Impact Threshold · 75% GV (1.875 µg/m²)',
+                        fill: '#fb923c',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        position: 'insideBottomLeft',
+                      }}
+                    />
+                    <ReferenceLine
                       y={SURFACE_DECONTAMINATION_THRESHOLD_UG_M2}
                       stroke="#f43f5e"
                       strokeDasharray="4 2"
                       label={{
                         value: 'Aftørrings-grænse (2.500 µg/m²)',
                         fill: '#fda4af',
-                        fontSize: 9,
+                        fontSize: 11,
                         position: 'insideTopLeft',
                       }}
                     />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: '#020617',
-                        borderColor: '#334155',
+                        borderColor: isImpactThresholdExceeded ? '#f97316' : '#334155',
                         fontSize: '11px',
                         fontFamily: 'monospace',
                       }}
                     />
-                    <Legend wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace' }} />
+                    <Legend wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace' }} />
+                    {isImpactThresholdExceeded && (
+                      <Area
+                        type="monotone"
+                        dataKey="cumulativeTotalUgM2"
+                        name="24t Kumulativ Dosis (>75% Alert)"
+                        stroke="#fb923c"
+                        strokeWidth={2}
+                        fill="url(#dustImpactAlertGradient)"
+                        fillOpacity={1}
+                      />
+                    )}
                     <Area
                       type="monotone"
                       dataKey="quartzConcreteUgM2"
@@ -1286,7 +1488,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                 ) : (
                   <BarChart
                     data={sortedProfiles}
-                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                    margin={{ top: 14, right: 10, left: 0, bottom: 0 }}
                     onClick={(state) => {
                       if (state && typeof state.activeTooltipIndex === 'number') {
                         const target = sortedProfiles[state.activeTooltipIndex];
@@ -1296,26 +1498,69 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                       }
                     }}
                   >
+                    <defs>
+                      <linearGradient id="dustImpactAlertBarGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#fb923c" stopOpacity={0.95}>
+                          {isImpactThresholdExceeded && (
+                            <animate
+                              attributeName="stop-opacity"
+                              values="0.70;1;0.70"
+                              dur="2.1s"
+                              repeatCount="indefinite"
+                            />
+                          )}
+                        </stop>
+                        <stop offset="100%" stopColor="#ea580c" stopOpacity={0.75}>
+                          {isImpactThresholdExceeded && (
+                            <animate
+                              attributeName="stop-opacity"
+                              values="0.50;0.88;0.50"
+                              dur="2.1s"
+                              repeatCount="indefinite"
+                            />
+                          )}
+                        </stop>
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                     <XAxis
                       dataKey="receptorCode"
                       stroke="#64748b"
-                      tick={{ fill: '#94a3b8', fontSize: 10, fontFamily: 'monospace' }}
+                      tick={{ fill: '#94a3b8', fontSize: 11, fontFamily: 'monospace' }}
                     />
                     <YAxis
                       stroke="#cbd5e1"
-                      tick={{ fill: '#cbd5e1', fontSize: 10, fontFamily: 'monospace' }}
+                      tick={{ fill: '#cbd5e1', fontSize: 11, fontFamily: 'monospace' }}
                       unit=" µg"
+                    />
+                    <ReferenceLine
+                      y={IMPACT_THRESHOLD_UG_M2}
+                      stroke="#f97316"
+                      strokeWidth={2}
+                      strokeDasharray="6 3"
+                      label={{
+                        value: 'Impact Threshold (75% · 1.875 µg/m²)',
+                        fill: '#fb923c',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        position: 'insideBottomLeft',
+                      }}
                     />
                     <ReferenceLine
                       y={SURFACE_DECONTAMINATION_THRESHOLD_UG_M2}
                       stroke="#f43f5e"
                       strokeDasharray="4 2"
+                      label={{
+                        value: 'Grænseværdi (2.500 µg/m²)',
+                        fill: '#fda4af',
+                        fontSize: 11,
+                        position: 'insideTopLeft',
+                      }}
                     />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: '#020617',
-                        borderColor: '#334155',
+                        borderColor: isImpactThresholdExceeded ? '#f97316' : '#334155',
                         fontSize: '11px',
                         fontFamily: 'monospace',
                       }}
@@ -1330,10 +1575,14 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
                           key={entry.receptorId}
                           fill={
                             entry.receptorId === selectedProfile.receptorId
-                              ? '#22d3ee'
+                              ? entry.horizonDustUgM2 > IMPACT_THRESHOLD_UG_M2
+                                ? 'url(#dustImpactAlertBarGradient)'
+                                : '#22d3ee'
                               : entry.horizonDustUgM2 >=
                                 SURFACE_DECONTAMINATION_THRESHOLD_UG_M2
                               ? '#f43f5e'
+                              : entry.horizonDustUgM2 > IMPACT_THRESHOLD_UG_M2
+                              ? 'url(#dustImpactAlertBarGradient)'
                               : '#f59e0b'
                           }
                         />
@@ -1344,7 +1593,7 @@ export const ReceptorDustDepositionProfileWidget: React.FC<
               </ResponsiveContainer>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80 text-[10px] font-mono text-slate-400">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80 text-[11px] font-mono text-slate-400">
               <span className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-cyan-400" />
                 <span>

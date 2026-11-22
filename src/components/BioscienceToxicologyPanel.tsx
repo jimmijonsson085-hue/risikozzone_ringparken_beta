@@ -513,7 +513,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
             <Dna className="w-4 h-4 text-teal-400 shrink-0" />
             <span>Molekylær Toksikologi &amp; Strukturbiologi (DeepMind Science)</span>
           </div>
-          <span className="text-[10px] font-mono text-teal-200">
+          <span className="text-[11px] font-mono text-teal-200">
             AlphaFold v6 · UniProt · PubChem · Europe PMC
           </span>
         </div>
@@ -542,13 +542,13 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
 
         {/* Verificerede Bygningsdele & DMA-Prøveresultater for valgt stof i Ringparken */}
         <div className="p-2.5 rounded bg-slate-950/90 border border-teal-500/30 space-y-1.5">
-          <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+          <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
             <span className="text-teal-300 font-bold uppercase tracking-wider">
               Konstaterede Bygningsdele i Ringparken ({activePreset.shortLabel}) — DMA & Wissenberg PSS W22085
             </span>
             <span className="text-slate-400">RING_K18_C08.7 & 2021-2791</span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-1.5 text-[10px]">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-1.5 text-[11px]">
             {[
               RINGPARKEN_ENVIRONMENTAL_PROFILES.find((p) => p.buildingId === 'BLOK-1'),
               RINGPARKEN_ENVIRONMENTAL_PROFILES.find((p) => p.buildingId === 'BYG-1-BOERNEHAVE'),
@@ -639,7 +639,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                             activeReceptorWhoForecast.whoAqgBreachHourIndex!
                           )
                         }
-                        className="px-2 py-1 rounded bg-rose-500 hover:bg-rose-400 text-slate-950 font-mono text-[10px] font-bold transition-colors whitespace-nowrap shrink-0"
+                        className="px-2 py-1 rounded bg-rose-500 hover:bg-rose-400 text-slate-950 font-mono text-[11px] font-bold transition-colors whitespace-nowrap shrink-0"
                       >
                         Spring til kl.{' '}
                         {activeReceptorWhoForecast.whoAqgBreachHourLabel}
@@ -648,7 +648,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                   <button
                     type="button"
                     onClick={() => setSubTab('who_score')}
-                    className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-emerald-300 border border-emerald-500/40 font-mono text-[10px] font-semibold transition-colors whitespace-nowrap shrink-0"
+                    className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-emerald-300 border border-emerald-500/40 font-mono text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0"
                   >
                     Vis WHO Graf
                   </button>
@@ -661,10 +661,10 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
       {/* Quick-Try Example Pill Bar (Mapped to Ringparken's 5 Demolition Substance Classes) */}
       <div className="p-3 bg-slate-900/70 border border-slate-800 rounded-md space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
+          <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
             Hurtigvalg: Ringparken Nedrivningstoksin → Humant Biomarkør-Target
           </span>
-          <span className="text-[10px] font-mono text-teal-400">
+          <span className="text-[11px] font-mono text-teal-400">
             {activePreset.geneSymbol} ({activePreset.uniprotAccession})
           </span>
         </div>
@@ -684,7 +684,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                 }`}
               >
                 <span className="truncate">{preset.shortLabel}</span>
-                <span className="text-[9px] px-1 py-0.5 rounded bg-slate-900 text-slate-400 shrink-0">
+                <span className="text-[11px] px-1 py-0.5 rounded bg-slate-900 text-slate-400 shrink-0">
                   {preset.uniprotAccession}
                 </span>
               </button>
@@ -700,7 +700,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
           <p className="text-[11px] text-slate-300 leading-relaxed">
             {activePreset.mechanisticSummary}
           </p>
-          <div className="text-[10px] font-mono text-amber-300/90 pt-1 border-t border-slate-800/80">
+          <div className="text-[11px] font-mono text-amber-300/90 pt-1 border-t border-slate-800/80">
             ⚖ {activePreset.bek613RegulatoryNote}
           </div>
         </div>
@@ -716,11 +716,11 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                 {uniprotProfile?.accession || activePreset.uniprotAccession}
               </span>
               {structureSourceMode === 'alphafold' ? (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/40">
                   [Predicted by model · AlphaFold v6]
                 </span>
               ) : (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                   [Experimentally determined · PDB {activePdbId}]
                 </span>
               )}
@@ -736,7 +736,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
             <button
               type="button"
               onClick={() => handleSwitchStructureSource('alphafold')}
-              className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-colors ${
+              className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold transition-colors ${
                 structureSourceMode === 'alphafold'
                   ? 'bg-blue-600 text-white'
                   : 'text-slate-400 hover:text-slate-200'
@@ -747,7 +747,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
             <button
               type="button"
               onClick={() => handleSwitchStructureSource('pdb')}
-              className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-colors ${
+              className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold transition-colors ${
                 structureSourceMode === 'pdb'
                   ? 'bg-emerald-600 text-white'
                   : 'text-slate-400 hover:text-slate-200'
@@ -813,7 +813,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                 Residue: {selectedResidue.resn} {selectedResidue.resi} (Chain {selectedResidue.chain})
               </div>
               {structureSourceMode === 'alphafold' && selectedResidue.plddt > 0 && (
-                <div className="text-[10px] text-slate-300">
+                <div className="text-[11px] text-slate-300">
                   pLDDT Konfidens:{' '}
                   <strong
                     style={{
@@ -832,7 +832,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                 </div>
               )}
               {selectedResidue.description && (
-                <div className="text-[10px] text-amber-300 max-w-[220px] truncate">
+                <div className="text-[11px] text-amber-300 max-w-[220px] truncate">
                   {selectedResidue.description}
                 </div>
               )}
@@ -854,7 +854,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                   key={st.id}
                   type="button"
                   onClick={() => setRenderStyle(st.id)}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                  className={`px-1.5 py-0.5 rounded text-[11px] font-mono transition-colors ${
                     renderStyle === st.id
                       ? 'bg-teal-500 text-slate-950 font-bold'
                       : 'text-slate-300 hover:bg-slate-800'
@@ -869,7 +869,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
               <button
                 type="button"
                 onClick={() => setIsSpinning((s) => !s)}
-                className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                className={`px-1.5 py-0.5 rounded text-[11px] font-mono border ${
                   isSpinning
                     ? 'bg-amber-400 text-slate-950 border-amber-300 font-bold'
                     : 'bg-slate-900 text-slate-300 border-slate-700'
@@ -910,7 +910,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
         {/* Canonical 4-Band AlphaFold pLDDT Confidence Scale Legend & Distribution */}
         {plddtSummary && structureSourceMode === 'alphafold' && (
           <div className="p-2.5 bg-slate-950/90 border border-slate-800 rounded space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] font-mono">
+            <div className="flex items-center justify-between text-[11px] font-mono">
               <span className="text-slate-400 uppercase font-semibold">
                 AlphaFold pLDDT Konfidens-Skala ({plddtSummary.residueCount} aminosyrer)
               </span>
@@ -939,7 +939,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
               />
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 text-[10px] font-mono pt-0.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 text-[11px] font-mono pt-0.5">
               <div className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: '#0053D6' }} />
                 <span className="text-slate-300 truncate">&gt;90 ({plddtSummary.veryHighPct}%)</span>
@@ -1022,10 +1022,10 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
           {plddtSummary && plddtSummary.residues.length > 0 && (
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase text-slate-400 font-semibold">
+                <span className="text-[11px] font-mono uppercase text-slate-400 font-semibold">
                   Interaktiv Aminosyresekvens (Klik på residue for 3D-zoom)
                 </span>
-                <span className="text-[10px] font-mono text-teal-300">
+                <span className="text-[11px] font-mono text-teal-300">
                   1–{ Math.min(180, plddtSummary.residues.length) } af {plddtSummary.residueCount} aa
                 </span>
               </div>
@@ -1055,7 +1055,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                       }
                       title={`${res.residueName} ${res.residueNumber} · pLDDT: ${res.plddt}`}
                       style={{ backgroundColor: bgColor, color: textColor }}
-                      className={`w-4 h-4 rounded-xs flex items-center justify-center font-bold text-[10px] transition-transform ${
+                      className={`w-4 h-4 rounded-xs flex items-center justify-center font-bold text-[11px] transition-transform ${
                         isSel ? 'ring-2 ring-white scale-125 z-10' : 'hover:scale-110'
                       }`}
                     >
@@ -1070,7 +1070,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
           {/* UniProt Functional Description & Subcellular Location */}
           <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md space-y-2 text-xs">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-mono uppercase text-slate-400 font-semibold">
+              <span className="text-[11px] font-mono uppercase text-slate-400 font-semibold">
                 UniProtKB Funktion &amp; Biologisk Rolle [Literature curated]
               </span>
               <div className="flex items-center gap-2 font-mono text-[11px]">
@@ -1111,7 +1111,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
             {/* Experimental RCSB PDB Cross-References */}
             {uniprotProfile.pdbIds.length > 0 && (
               <div className="pt-1 space-y-1">
-                <div className="text-[10px] font-mono text-slate-400">
+                <div className="text-[11px] font-mono text-slate-400">
                   Eksperimentelle RCSB PDB Strukturer [Experimentally determined] (Klik for 3D-skift):
                 </div>
                 <div className="flex flex-wrap gap-1">
@@ -1120,7 +1120,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                       key={pdb}
                       type="button"
                       onClick={() => handleSwitchStructureSource('pdb', pdb)}
-                      className={`px-2 py-0.5 rounded font-mono text-[10px] border transition-colors ${
+                      className={`px-2 py-0.5 rounded font-mono text-[11px] border transition-colors ${
                         structureSourceMode === 'pdb' && activePdbId === pdb
                           ? 'bg-emerald-500 text-slate-950 border-emerald-300 font-bold'
                           : 'bg-slate-950 text-emerald-300 border-emerald-500/30 hover:bg-emerald-950/60'
@@ -1138,10 +1138,10 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
           {uniprotProfile.features.length > 0 && (
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase text-slate-400 font-semibold">
+                <span className="text-[11px] font-mono uppercase text-slate-400 font-semibold">
                   Funktionelle Domæner, Aktive Sites &amp; Varianter (1-klik 3D-fokus)
                 </span>
-                <span className="text-[10px] font-mono text-slate-400">
+                <span className="text-[11px] font-mono text-slate-400">
                   {uniprotProfile.features.length} loci
                 </span>
               </div>
@@ -1163,7 +1163,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span
-                          className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold uppercase ${
+                          className={`px-1.5 py-0.2 rounded text-[11px] font-mono font-bold uppercase ${
                             feat.type === 'Active site' || feat.type === 'Binding site'
                               ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
                               : feat.type === 'Natural variant' || feat.type === 'Mutagenesis'
@@ -1178,7 +1178,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                         </span>
                       </div>
                     </div>
-                    <span className="font-mono text-[10px] text-teal-300 shrink-0">
+                    <span className="font-mono text-[11px] text-teal-300 shrink-0">
                       aa {feat.start}
                       {feat.end !== feat.start ? `–${feat.end}` : ''} →
                     </span>
@@ -1191,7 +1191,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
           {/* Reactome Biological Pathways */}
           {uniprotProfile.reactomePathways.length > 0 && (
             <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-md space-y-1.5">
-              <div className="text-[10px] font-mono uppercase text-slate-400 font-semibold">
+              <div className="text-[11px] font-mono uppercase text-slate-400 font-semibold">
                 Reactome Signalveje &amp; Biologiske Netværk
               </div>
               <div className="space-y-1">
@@ -1204,7 +1204,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                     className="flex items-center justify-between gap-2 p-1.5 rounded bg-slate-950 border border-slate-800 hover:border-teal-500/40 text-[11px]"
                   >
                     <span className="text-slate-200 truncate">{pw.name}</span>
-                    <span className="font-mono text-[10px] text-teal-400 shrink-0 flex items-center gap-1">
+                    <span className="font-mono text-[11px] text-teal-400 shrink-0 flex items-center gap-1">
                       {pw.id}
                       <ExternalLink className="w-3 h-3" />
                     </span>
@@ -1259,10 +1259,10 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
                       PubChem CID: {pubchemProfile.cid}
                     </span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    <span className="px-1.5 py-0.5 rounded text-[11px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                       [Experimentally / Computed PUG REST]
                     </span>
                   </div>
@@ -1285,7 +1285,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
               {/* Dual 2D Chemical Structure View: SmilesDrawer Canvas + PubChem Official 2D PNG */}
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-2 rounded bg-slate-950 border border-slate-800 flex flex-col items-center justify-center">
-                  <div className="text-[10px] font-mono text-slate-400 mb-1">
+                  <div className="text-[11px] font-mono text-slate-400 mb-1">
                     SmilesDrawer 2D (WebGL/Canvas)
                   </div>
                   <canvas
@@ -1296,7 +1296,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                   />
                 </div>
                 <div className="p-2 rounded bg-white border border-slate-700 flex flex-col items-center justify-center">
-                  <div className="text-[10px] font-mono text-slate-700 font-semibold mb-1">
+                  <div className="text-[11px] font-mono text-slate-700 font-semibold mb-1">
                     PubChem PUG REST 2D Depiction
                   </div>
                   <img
@@ -1310,17 +1310,17 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
               {/* Physicochemical & Toxicokinetic Properties Grid */}
               <div className="grid grid-cols-3 gap-2 font-mono text-xs">
                 <div className="p-2 bg-slate-950 rounded border border-slate-800">
-                  <div className="text-[10px] text-slate-400">SUMFORMEL</div>
+                  <div className="text-[11px] text-slate-400">SUMFORMEL</div>
                   <div className="font-bold text-white mt-0.5">{pubchemProfile.molecularFormula}</div>
                 </div>
                 <div className="p-2 bg-slate-950 rounded border border-slate-800">
-                  <div className="text-[10px] text-slate-400">MOLEKYLVÆGT</div>
+                  <div className="text-[11px] text-slate-400">MOLEKYLVÆGT</div>
                   <div className="font-bold text-white mt-0.5">
                     {pubchemProfile.molecularWeight.toFixed(2)} Da
                   </div>
                 </div>
                 <div className="p-2 bg-slate-950 rounded border border-slate-800">
-                  <div className="text-[10px] text-slate-400">LIPOFILICITET (XLogP)</div>
+                  <div className="text-[11px] text-slate-400">LIPOFILICITET (XLogP)</div>
                   <div
                     className={`font-bold mt-0.5 ${
                       pubchemProfile.xlogp !== null && pubchemProfile.xlogp > 4
@@ -1332,17 +1332,17 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                   </div>
                 </div>
                 <div className="p-2 bg-slate-950 rounded border border-slate-800">
-                  <div className="text-[10px] text-slate-400">TPSA (Polær Overfl.)</div>
+                  <div className="text-[11px] text-slate-400">TPSA (Polær Overfl.)</div>
                   <div className="font-bold text-cyan-300 mt-0.5">{pubchemProfile.tpsa} Å²</div>
                 </div>
                 <div className="p-2 bg-slate-950 rounded border border-slate-800">
-                  <div className="text-[10px] text-slate-400">H-DONOR / ACCEPTOR</div>
+                  <div className="text-[11px] text-slate-400">H-DONOR / ACCEPTOR</div>
                   <div className="font-bold text-white mt-0.5">
                     {pubchemProfile.hBondDonorCount} / {pubchemProfile.hBondAcceptorCount}
                   </div>
                 </div>
                 <div className="p-2 bg-slate-950 rounded border border-slate-800">
-                  <div className="text-[10px] text-slate-400">ROTERBARE BINDINGER</div>
+                  <div className="text-[11px] text-slate-400">ROTERBARE BINDINGER</div>
                   <div className="font-bold text-white mt-0.5">
                     {pubchemProfile.rotatableBondCount}
                   </div>
@@ -1351,7 +1351,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
 
               {/* Lipinski Rule of Five & Veber Bioavailability / Bioaccumulation Heuristics */}
               <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-1.5 text-[11px] font-mono">
-                <div className="text-[10px] uppercase text-slate-400 font-semibold">
+                <div className="text-[11px] uppercase text-slate-400 font-semibold">
                   Toksikokinetisk Membran- &amp; Bioakkumulerings-Profil (Lipinski / Veber)
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -1385,12 +1385,12 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                   </span>
                 </div>
                 {pubchemProfile.canonicalSmiles && (
-                  <div className="text-[10px] text-slate-400 break-all pt-1">
+                  <div className="text-[11px] text-slate-400 break-all pt-1">
                     <strong className="text-slate-300">Canonical SMILES:</strong>{' '}
                     {pubchemProfile.canonicalSmiles}
                   </div>
                 )}
-                <div className="text-[10px] text-slate-500 break-all">
+                <div className="text-[11px] text-slate-500 break-all">
                   <strong>InChIKey:</strong> {pubchemProfile.inchikey}
                 </div>
               </div>
@@ -1452,7 +1452,7 @@ export const BioscienceToxicologyPanel: React.FC<BioscienceToxicologyPanelProps>
                   key={articleKey}
                   className="p-3 bg-slate-900/80 border border-slate-800 rounded-md space-y-1.5 text-xs"
                 >
-                  <div className="flex items-center justify-between gap-2 font-mono text-[10px]">
+                  <div className="flex items-center justify-between gap-2 font-mono text-[11px]">
                     <div className="flex items-center gap-1.5">
                       {art.pmid && (
                         <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-bold">

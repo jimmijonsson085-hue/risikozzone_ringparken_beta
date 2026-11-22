@@ -497,15 +497,15 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800 pb-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/60 text-cyan-200 text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/60 text-cyan-200 text-[11px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
               <Fan className="w-3 h-3 text-cyan-400" />
               CAV-Udsugningens Påvirkning · BR18 § 443 &amp; DS 447
             </span>
-            <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-200 text-[10px] font-mono font-semibold">
+            <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-200 text-[11px] font-mono font-semibold">
               Kontinuitet: Q_ind = Q_ud = {calc.qCavLPerSec} l/s ({calc.qCavM3PerH} m³/h)
             </span>
             <span
-              className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+              className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border ${
                 calc.indoorSumQuotientSin >= 1.0
                   ? 'bg-rose-600/30 border-rose-400 text-rose-100 s-quotient-warning-pulse'
                   : 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200'
@@ -538,7 +538,7 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
             setDs447StaticPressureDevPct(14.8);
             setDs447MainFlowDevPct(19.2);
           }}
-          className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-mono text-cyan-300 shrink-0 transition-colors cursor-pointer"
+          className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] font-mono text-cyan-300 shrink-0 transition-colors cursor-pointer"
         >
           ↺ Kalibreret Reference (82 m² · ΔP_CAV = -45,3 Pa · S_in = 3,15)
         </button>
@@ -546,7 +546,7 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
 
       {/* Cybernetic CAV Interlock Alert Banner when S_out >= 0.5 and CAV is active */}
       {calc.interlockTriggered ? (
-        <div className="p-3 rounded-lg bg-rose-950/90 border-2 border-rose-500 space-y-2 shadow-lg">
+        <div className="p-3 rounded-lg bg-rose-950/90 border border-[var(--border-subtle)] border-l-4 border-l-rose-500 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-xs font-mono font-extrabold text-rose-200">
               <AlertOctagon className="w-4 h-4 text-rose-400 animate-pulse shrink-0" />
@@ -559,7 +559,7 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
               <button
                 type="button"
                 onClick={onOpenInterlockTab}
-                className="px-2 py-0.5 rounded bg-rose-500/30 hover:bg-rose-500/40 border border-rose-300 text-[10px] font-mono text-white font-bold cursor-pointer"
+                className="px-2 py-0.5 rounded bg-rose-500/30 hover:bg-rose-500/40 border border-rose-300 text-[11px] font-mono text-white font-bold cursor-pointer"
               >
                 Åbn PSS Interlock-Fane →
               </button>
@@ -597,7 +597,7 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
           <button
             type="button"
             onClick={() => handleSelectVentMode('cav_central_exhaust')}
-            className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-300 hover:text-white cursor-pointer"
+            className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-[11px] text-slate-300 hover:text-white cursor-pointer"
           >
             Simulér ufiltreret CAV-drift (-45,3 Pa)
           </button>
@@ -612,14 +612,14 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
             1. BR18 Kap. 22 § 443 &amp; DS 447 Parametrisering (Lejlighedsstørrelse &amp;
             Ventilationsdrift)
           </h4>
-          <span className="text-[10px] font-mono text-amber-300">
+          <span className="text-[11px] font-mono text-amber-300">
             Ældre normkrav: 150–200 m³/h pr. lejlighed (Aktuel: {calc.qCavM3PerH} m³/h)
           </span>
         </div>
 
         {/* Apartment Size Selector (55, 75, 82, 95 m²) */}
         <div className="space-y-1.5">
-          <div className="text-[10px] font-mono uppercase text-slate-400">
+          <div className="text-[11px] font-mono uppercase text-slate-400">
             Vælg Lejlighedsstørrelse i Beboede Naboblokke (Afd. 23, 24, 26, 32, Rødtjørnevej 2 &amp;
             Kierulffsvej 4):
           </div>
@@ -641,12 +641,12 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
                   <div className="text-xs font-bold flex items-center justify-between">
                     <span>{spec.labelDa}</span>
                     {sz === 82 && (
-                      <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-500/30 text-cyan-200">
+                      <span className="text-[11px] px-1 py-0.2 rounded bg-cyan-500/30 text-cyan-200">
                         Ref.
                       </span>
                     )}
                   </div>
-                  <div className="text-[9.5px] text-slate-400 mt-0.5">
+                  <div className="text-[11px] text-slate-400 mt-0.5">
                     BR18 ≥ 0,30 l/(s·m²) = <strong className="text-cyan-300">{spec.br18MinBaseLPerSec} l/s</strong>
                   </div>
                 </button>
@@ -657,7 +657,7 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
 
         {/* Ventilation Operating Mode Selector */}
         <div className="space-y-1.5">
-          <div className="text-[10px] font-mono uppercase text-slate-400">
+          <div className="text-[11px] font-mono uppercase text-slate-400">
             Vælg Ventilationsdrift (`cav_central_exhaust`, `cav_plus_range_hood_120`,
             `natural_passive`, `balanced_hepa_overpress`):
           </div>
@@ -679,7 +679,7 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
                   <div className="flex items-center justify-between gap-1 font-mono text-[11px] font-bold">
                     <span>{spec.shortLabel}</span>
                     <span
-                      className="px-1.5 py-0.5 rounded text-[9.5px]"
+                      className="px-1.5 py-0.5 rounded text-[11px]"
                       style={{
                         backgroundColor: `${spec.badgeColor}25`,
                         color: spec.badgeColor,
@@ -689,7 +689,7 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
                       {modeKey}
                     </span>
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                  <div className="text-[11px] text-slate-400 mt-1 leading-snug">
                     {spec.descriptionDa}
                   </div>
                 </button>
@@ -699,7 +699,7 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
         </div>
 
         {/* Statutory BR18 Kap. 22 § 443 Table + Trickle Vents Toggle */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-2 pt-1 border-t border-slate-800 text-[10px] font-mono">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-2 pt-1 border-t border-slate-800 text-[11px] font-mono">
           <div className="p-2 rounded bg-slate-950 border border-slate-800">
             <div className="text-slate-400">Grundluftskifte (§ 443)</div>
             <div className="text-white font-bold mt-0.5">≥ 0,30 l/(s·m²)</div>
@@ -754,13 +754,13 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
               <Gauge className="w-3.5 h-3.5 text-rose-400" />
               2. Kontinuitetsligning (Q_ind = Q_ud) &amp; Vakuum-Indsugningsmeter
             </h4>
-            <span className="text-[10px] font-mono text-rose-300 font-bold">
+            <span className="text-[11px] font-mono text-rose-300 font-bold">
               ΔP_CAV = {calc.deltaPCavPa > 0 ? `+${calc.deltaPCavPa.toFixed(1)}` : calc.deltaPCavPa.toFixed(1)} Pa
             </span>
           </div>
 
           {/* Horizontal Vacuum Pressure Bar Meter */}
-          <div className="p-2.5 rounded bg-slate-950 border border-slate-800 space-y-1.5 font-mono text-[10px]">
+          <div className="p-2.5 rounded bg-slate-950 border border-slate-800 space-y-1.5 font-mono text-[11px]">
             <div className="flex items-center justify-between text-slate-300">
               <span className="text-emerald-400 font-bold">+10 Pa (HEPA Overtryk)</span>
               <span className="text-amber-300">DS 447 Modtryksgrænse (-25 til -50 Pa)</span>
@@ -768,11 +768,11 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
             </div>
             <div className="relative h-4 w-full rounded-full bg-gradient-to-r from-emerald-500/40 via-amber-500/50 to-rose-600/80 border border-slate-700 overflow-hidden">
               <div
-                className="absolute top-0 bottom-0 w-1.5 bg-white shadow-[0_0_8px_#fff] transition-all duration-300"
+                className="absolute top-0 bottom-0 w-1.5 bg-white border border-slate-900 transition-all duration-300"
                 style={{ left: `calc(${vacuumGaugeRatio * 100}% - 3px)` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[10.5px]">
+            <div className="flex items-center justify-between text-[11px]">
               <span className="text-slate-400">
                 Formel: <code className="text-cyan-300">ΔP_CAV = -75 · (Q_CAV / (A_env · q₇₅,deg))^(1/0,65)</code>
               </span>
@@ -794,13 +794,13 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
             <text x="68" y="32" textAnchor="middle" fill="#FDA4AF" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
               UDENDØRS STØVFANE
             </text>
-            <text x="68" y="46" textAnchor="middle" fill="#F8FAFC" fontSize="9" fontFamily="monospace">
+            <text x="68" y="46" textAnchor="middle" fill="#F8FAFC" fontSize="9.5" fontFamily="monospace">
               S_out = {calc.outdoorSumQuotientSout.toFixed(2)}
             </text>
-            <text x="68" y="60" textAnchor="middle" fill="#FBBF24" fontSize="8.5" fontFamily="monospace">
+            <text x="68" y="60" textAnchor="middle" fill="#FBBF24" fontSize="9.5" fontFamily="monospace">
               PPV = {ppvMmPerSec} mm/s (3 Hz)
             </text>
-            <text x="68" y="74" textAnchor="middle" fill="#38BDF8" fontSize="8.5" fontFamily="monospace">
+            <text x="68" y="74" textAnchor="middle" fill="#38BDF8" fontSize="9.5" fontFamily="monospace">
               q₇₅,deg = {q75DegM3PerHm2} m³/(h·m²)
             </text>
 
@@ -825,16 +825,16 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
               points={calc.deltaPCavPa < 0 ? '176,105 166,100 166,110' : '124,105 134,100 134,110'}
               fill={calc.deltaPCavPa < 0 ? '#F43F5E' : '#10B981'}
             />
-            <text x="263" y="114" textAnchor="middle" fill="#CBD5E1" fontSize="8.5" fontFamily="monospace">
+            <text x="263" y="114" textAnchor="middle" fill="#CBD5E1" fontSize="9.5" fontFamily="monospace">
               Facaderevner &amp; PCB-fuger: {calc.facadeCrackInfiltrationM3PerH.toFixed(1)} m³/h
             </text>
 
             {/* Basement / Crawlspace Unsealed Pipe Shafts (Bottom) */}
             <rect x="148" y="166" width="230" height="40" rx="4" fill="#1E1B4B" stroke="#F59E0B" strokeWidth="1.4" />
-            <text x="263" y="182" textAnchor="middle" fill="#FDE68A" fontSize="9" fontFamily="monospace" fontWeight="bold">
+            <text x="263" y="182" textAnchor="middle" fill="#FDE68A" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
               KRYBEKÆLDER &amp; UTÆTTE RØRSKAKTE (COWI A205732)
             </text>
-            <text x="263" y="197" textAnchor="middle" fill="#FCA5A5" fontSize="9" fontFamily="monospace">
+            <text x="263" y="197" textAnchor="middle" fill="#FCA5A5" fontSize="9.5" fontFamily="monospace">
               Skakt-indsugning Q_op = {calc.shaftSuctionQopM3PerH.toFixed(1)} m³/h (Asbest &amp; Skimmel)
             </text>
 
@@ -854,19 +854,19 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
             <text x="453" y="58" textAnchor="middle" fill="#FFFFFF" fontSize="10" fontFamily="monospace" fontWeight="bold">
               Q_ud = {calc.qCavLPerSec} l/s
             </text>
-            <text x="453" y="73" textAnchor="middle" fill="#94A3B8" fontSize="9" fontFamily="monospace">
+            <text x="453" y="73" textAnchor="middle" fill="#94A3B8" fontSize="9.5" fontFamily="monospace">
               ({calc.qCavM3PerH} m³/h)
             </text>
-            <text x="453" y="96" textAnchor="middle" fill="#E2E8F0" fontSize="8.5" fontFamily="monospace">
+            <text x="453" y="96" textAnchor="middle" fill="#E2E8F0" fontSize="9.5" fontFamily="monospace">
               Køkken: {calc.kitchenLPerSec} l/s
             </text>
-            <text x="453" y="110" textAnchor="middle" fill="#E2E8F0" fontSize="8.5" fontFamily="monospace">
+            <text x="453" y="110" textAnchor="middle" fill="#E2E8F0" fontSize="9.5" fontFamily="monospace">
               Bad: {calc.bathLPerSec} l/s
             </text>
-            <text x="453" y="124" textAnchor="middle" fill="#E2E8F0" fontSize="8.5" fontFamily="monospace">
+            <text x="453" y="124" textAnchor="middle" fill="#E2E8F0" fontSize="9.5" fontFamily="monospace">
               WC/Bryggers: {calc.wcUtilityLPerSec} l/s
             </text>
-            <text x="453" y="148" textAnchor="middle" fill="#FBBF24" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+            <text x="453" y="148" textAnchor="middle" fill="#FBBF24" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
               Q_ind = Q_ud
             </text>
 
@@ -884,7 +884,7 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
               DS 447 Kap. 6.3.2 &amp; 6.3.3 Acceptkriterier &amp; Indlejrede Formler
             </h4>
             <span
-              className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+              className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border ${
                 calc.ds447AnyBreach
                   ? 'bg-rose-500/25 border-rose-400 text-rose-200'
                   : 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200'
@@ -895,7 +895,7 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
           </div>
 
           {/* DS 447 Interactive Inspection Controls */}
-          <div className="space-y-2 text-[10.5px] font-mono">
+          <div className="space-y-2 text-[11px] font-mono">
             <label className="flex items-start justify-between gap-2 p-2 rounded bg-slate-950 border border-slate-800 cursor-pointer">
               <div className="flex items-start gap-2">
                 <input
@@ -908,13 +908,13 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
                   <div className="font-bold text-white">
                     DS 447 kap. 6.3.2: Kanaler ikke rengjorte for byggestøv / asbestslam
                   </div>
-                  <div className="text-[9.5px] text-slate-400">
+                  <div className="text-[11px] text-slate-400">
                     Aflejret nedrivningsstøv i ventilationskanaler øger tryktabet og resuspenderer partikler ved tilbageslag.
                   </div>
                 </div>
               </div>
               <span
-                className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold shrink-0 ${
+                className={`px-1.5 py-0.5 rounded text-[11px] font-bold shrink-0 ${
                   ds447DuctsUncleaned
                     ? 'bg-rose-500 text-slate-950'
                     : 'bg-emerald-500/20 text-emerald-300'
@@ -979,13 +979,13 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
                 <div className="text-slate-300 font-bold">
                   DS 447 Kritisk Modtryk (25–50 Pa grænse i boligen):
                 </div>
-                <div className="text-[9.5px] text-slate-400">
+                <div className="text-[11px] text-slate-400">
                   Aktuelt modtryk |ΔP_CAV| = {calc.absBackpressurePa.toFixed(1)} Pa (Skakt-sug Q_op ={' '}
                   {calc.shaftSuctionQopM3PerH.toFixed(1)} m³/h)
                 </div>
               </div>
               <span
-                className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold shrink-0 ${
+                className={`px-1.5 py-0.5 rounded text-[11px] font-bold shrink-0 ${
                   calc.ds447BackpressureBreach
                     ? 'bg-rose-500 text-slate-950'
                     : 'bg-emerald-500/20 text-emerald-300'
@@ -999,8 +999,8 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
           </div>
 
           {/* Embedded Mathematical Formulas Box */}
-          <div className="p-2.5 rounded bg-slate-950 border border-amber-500/35 font-mono text-[10px] space-y-1 text-slate-200">
-            <div className="text-amber-300 font-bold uppercase text-[9.5px]">
+          <div className="p-2.5 rounded bg-slate-950 border border-amber-500/35 font-mono text-[11px] space-y-1 text-slate-200">
+            <div className="text-amber-300 font-bold uppercase text-[11px]">
               Matematiske Formler Indlejret i Beregningsmotoren:
             </div>
             <div>
@@ -1015,8 +1015,8 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
           </div>
 
           {/* Summary Box of Calibrated Reference & Evidence Values */}
-          <div className="p-2.5 rounded bg-slate-950 border border-cyan-500/30 font-mono text-[10px] space-y-1 text-slate-200">
-            <div className="text-cyan-300 font-bold uppercase text-[9.5px]">
+          <div className="p-2.5 rounded bg-slate-950 border border-cyan-500/30 font-mono text-[11px] space-y-1 text-slate-200">
+            <div className="text-cyan-300 font-bold uppercase text-[11px]">
               Aktuelle Kalibrerings- og Bevistal fra Beregneren:
             </div>
             <div>
@@ -1036,21 +1036,21 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
       </div>
 
       {/* 3. CRYPTOGRAPHIC PROOF-OF-STATE & MERKLE-ROOT INTEGRATION */}
-      <div className="bg-gradient-to-r from-slate-900 via-cyan-950/30 to-slate-900 border border-cyan-500/50 rounded-lg p-3 space-y-2.5">
+      <div className="bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-sky-500 rounded-lg p-3 space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-cyan-200">
             <Lock className="w-3.5 h-3.5 text-cyan-400" />
             Kryptografisk Beviskrav (Retssikkerhed · Retsplejelovens § 823 &amp; ISO/IEC 27037)
           </div>
-          <span className="text-[10px] font-mono text-slate-400">
+          <span className="text-[11px] font-mono text-slate-400">
             Tidsstempel: {dateIso} · kl. {currentWeather.hourLabel} ({currentWeather.isoTime})
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] font-mono">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] font-mono">
           <div className="bg-slate-950/90 border border-slate-800 rounded p-2 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="text-slate-400 text-[9px] uppercase">
+              <div className="text-slate-400 text-[11px] uppercase">
                 64-Tegns SHA-256 Proof-of-State (S_in, ΔP_CAV, z_NPL, PPV &amp; DS 447):
               </div>
               <div className="text-emerald-300 truncate font-semibold" title={proofSha256}>
@@ -1077,7 +1077,7 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
           </div>
 
           <div className="bg-slate-950/90 border border-slate-800 rounded p-2">
-            <div className="text-slate-400 text-[9px] uppercase">
+            <div className="text-slate-400 text-[11px] uppercase">
               Merkle-Root Beviskæde Ankepunkt ({observations.length} registrerede beviser):
             </div>
             <div className="text-cyan-300 truncate font-semibold" title={merkleHeadHash}>
@@ -1091,11 +1091,11 @@ export const CavExhaustImpactWidget: React.FC<CavExhaustImpactWidgetProps> = ({
             type="button"
             onClick={handleLogCavEvidence}
             disabled={isSubmitting}
-            className="w-full sm:w-auto flex-1 px-3.5 py-2 rounded bg-gradient-to-r from-cyan-600 via-rose-600 to-amber-600 hover:from-cyan-500 hover:via-rose-500 hover:to-amber-500 text-white font-mono text-xs font-bold shadow-lg border border-cyan-300/50 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            className="w-full sm:w-auto flex-1 px-3.5 py-2 rounded bg-[var(--surface-overlay)] hover:bg-slate-700 text-[var(--text-primary)] font-mono text-xs font-bold border border-sky-500/60 flex items-center justify-center gap-2 transition-colors cursor-pointer"
           >
-            <PlusCircle className="w-4 h-4 shrink-0" />
+            <PlusCircle className="w-4 h-4 text-sky-400 shrink-0" />
             <span>
-              ➕ Føj CAV-Udsugnings &amp; DS 447 Vakuum-Bevis til Beviser (SHA-256)
+              Føj CAV-Udsugnings &amp; DS 447 Vakuum-Bevis til Beviser (SHA-256)
             </span>
           </button>
 

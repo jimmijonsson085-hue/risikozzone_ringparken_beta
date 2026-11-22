@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
 import {
   APIProvider,
   Map as GoogleMap,
@@ -8,10 +8,18 @@ import {
   Polyline,
 } from '@vis.gl/react-google-maps';
 import {
+  Activity,
+  AlertOctagon,
   AlertTriangle,
   ArrowLeftRight,
+  Bell,
+  BellOff,
+  Biohazard,
+  Calendar,
   Camera,
   Check,
+  Clock,
+  CloudFog,
   Crosshair,
   Download,
   Droplets,
@@ -19,10 +27,14 @@ import {
   Flame,
   GripHorizontal,
   Layers,
+  Lock,
+  Map,
+  MapPin,
   Maximize2,
   Minimize2,
   Minus,
   Navigation,
+  Network,
   Pin,
   PlusCircle,
   Play,
@@ -30,13 +42,27 @@ import {
   Printer,
   Radio,
   RotateCcw,
+  ShieldCheck,
+  Target,
   Volume2,
+  Waves,
   Wind,
   X,
+  Zap,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
 import { Animated24hWindWidget } from './Animated24hWindWidget';
+import { CompactSimulerMenu } from './CompactSimulerMenu';
+import { WaterMainBek1272Badge } from './WaterMainBek1272Badge';
+import { WaterMainVibrationSankeyWidget } from './WaterMainVibrationSankeyWidget';
+import { WaterMainVibrationSparkline } from './WaterMainVibrationSparkline';
+import {
+  computeVirtualLeakPercolationImpact,
+  computeWaterMainLast6HoursTrend,
+  exportWaterMainBek1272ComplianceCsv,
+  snapPointToWaterMainPolyline,
+} from '../services/waterMainPhysicsService';
 import {
   AlgedonicObservation,
   BuildingOperationalCategory,
@@ -54,6 +80,10 @@ import {
   ReceptorZone,
   RingparkenBuildingUnit,
   RiskZoneLevel,
+  SimultaneousAlgedonicDispatch,
+  SubstanceKey,
+  VirtualLeakPinImpact,
+  WaterMainLiveTelemetry,
 } from '../types/dispersion';
 import {
   BUILDING_CATEGORY_METADATA,
@@ -62,12 +92,42 @@ import {
   getReceptorIdForBuilding,
   getSourceIdForBuilding,
 } from '../data/ringparkenData';
+import {
+  KIERULFFSVEJ_DAR_CONTROL_POINTS,
+  KIERULFFSVEJ_SCENE_CONTROL_POINTS,
+} from '../data/kierulffsvejWaterMainData';
 import { degreesToCompass } from '../services/weatherService';
+import { evaluateReceptorAtHour } from '../services/dispersionEngine';
 import {
   generate2DViewportPrintPdfReport,
   render2DViewportPrintSnapshotDataUrl,
 } from '../services/pdfExportService';
 import { WindParticleFieldOverlay } from './WindParticleFieldOverlay';
+import { buildAutonomousReceptorMeshNetwork } from '../services/autonomousReceptorMeshService';
+import {
+  BlockComplaintDensityItem,
+  ComplaintDensityFilterMode,
+  NeighborComplaintDensityOverlay,
+  computeNeighborComplaintBlockDensity,
+} from './NeighborComplaintDensityOverlay';
+import {
+  MyceliumNetworkSimulationSnapshot,
+  MyceliumSimulationScenario,
+} from '../types/myceliumAlert';
+import { simulateMyceliumNetwork } from '../services/myceliumSimulationEngine';
+import { useMyceliumLiveAlerts } from '../hooks/useMyceliumLiveAlerts';
+import {
+  MyceliumGoogleMapsOverlayLayer,
+  MyceliumSvgOverlayLayer,
+} from './mycelium/MyceliumMapLayers';
+import { MyceliumControlAndSankeyPanel } from './mycelium/MyceliumControlAndSankeyPanel';
+import { MyceliumToastOverlay } from './mycelium/MyceliumToastOverlay';
+import { SystemBFormulaSimulatorModal } from './mycelium/SystemBFormulaSimulatorModal';
+import {
+  WindDirectionalNoiseHudCard,
+  WindDirectionalNoiseSvgLayer,
+  computeWindDirectionalNoiseCells,
+} from './WindDirectionalNoiseHeatmapLayer';
 
 export type MapOverlayWindowId =
   | 'wind_hud'
@@ -77,7 +137,8 @@ export type MapOverlayWindowId =
   | 'puff_24h_peak_heatmap'
   | 'forecast_6h_heatmap'
   | 'high_wind_notification'
-  | 'map_legend_heatmap_key';
+  | 'map_legend_heatmap_key'
+  | 'mycelium_alert_center';
 
 export type TacticalHeatmapLayerMode = 'asbestos' | 'dust_deposition' | 'noise_contour';
 
@@ -171,7 +232,7 @@ const MapOverlayWindowControlStrip: React.FC<MapOverlayWindowBarProps> = ({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      className={`-mx-3 -mt-2.5 px-2.5 py-1.5 bg-gradient-to-r from-slate-900/95 via-slate-900/90 to-slate-950/95 flex items-center justify-between gap-2 cursor-grab active:cursor-grabbing select-none transition-all duration-200 ${
+      className={`-mx-3 -mt-2.5 px-2.5 py-1.5 bg-[var(--surface-panel)] flex items-center justify-between gap-2 cursor-grab active:cursor-grabbing select-none transition-colors duration-200 ${
         state.isMinimized
           ? '-mb-2.5 rounded border-b-0'
           : 'mb-2 rounded-t border-b border-slate-800'
@@ -180,16 +241,16 @@ const MapOverlayWindowControlStrip: React.FC<MapOverlayWindowBarProps> = ({
     >
       <div className="flex items-center gap-1.5 min-w-0">
         <GripHorizontal className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-        <span className={`text-[10.5px] font-mono font-bold truncate ${accentColorClass}`}>
+        <span className={`text-[11px] font-mono font-bold truncate ${accentColorClass}`}>
           {title}
         </span>
         {badgeText && (
-          <span className="px-1.5 py-0.2 rounded bg-slate-950/90 border border-slate-700 font-mono text-[9px] font-bold text-slate-200 shrink-0">
+          <span className="px-1.5 py-0.2 rounded bg-slate-950/90 border border-slate-700 font-mono text-[11px] font-bold text-slate-200 shrink-0">
             {badgeText}
           </span>
         )}
         {state.isReleased && (
-          <span className="px-1 py-0.2 rounded bg-indigo-500/30 border border-indigo-400/60 text-[8.5px] font-mono text-indigo-200 font-bold shrink-0">
+          <span className="px-1 py-0.2 rounded bg-indigo-500/30 border border-indigo-400/60 text-[11px] font-mono text-indigo-200 font-bold shrink-0">
             FRIGIVET
           </span>
         )}
@@ -202,7 +263,7 @@ const MapOverlayWindowControlStrip: React.FC<MapOverlayWindowBarProps> = ({
             e.stopPropagation();
             onToggleRelease(windowId);
           }}
-          className={`px-2 py-0.5 rounded font-mono text-[9.5px] font-bold flex items-center gap-1 border transition-colors cursor-pointer ${
+          className={`px-2 py-0.5 rounded font-mono text-[11px] font-bold flex items-center gap-1 border transition-colors cursor-pointer ${
             state.isReleased
               ? 'bg-cyan-500/25 hover:bg-cyan-500/40 border-cyan-400/70 text-cyan-200'
               : 'bg-indigo-500/25 hover:bg-indigo-500/45 border-indigo-400/70 text-indigo-200'
@@ -232,7 +293,7 @@ const MapOverlayWindowControlStrip: React.FC<MapOverlayWindowBarProps> = ({
             e.stopPropagation();
             onToggleMinimize(windowId);
           }}
-          className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-400 hover:text-slate-950 border border-amber-400/70 text-amber-200 font-mono text-[9.5px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+          className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-400 hover:text-slate-950 border border-amber-400/70 text-amber-200 font-mono text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
           title={state.isMinimized ? 'Gendan / Udvid vindue' : 'Minimer vindue på kort-siden'}
         >
           <Minus className="w-2.5 h-2.5 stroke-[2.5]" />
@@ -246,7 +307,7 @@ const MapOverlayWindowControlStrip: React.FC<MapOverlayWindowBarProps> = ({
               e.stopPropagation();
               onClose();
             }}
-            className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-rose-600 border border-slate-700 hover:border-rose-400 text-slate-400 hover:text-white font-mono text-[9.5px] transition-colors cursor-pointer"
+            className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-rose-600 border border-slate-700 hover:border-rose-400 text-slate-400 hover:text-white font-mono text-[11px] transition-colors cursor-pointer"
             title="Skjul dette heatmap-lag på kortet"
           >
             <X className="w-2.5 h-2.5" />
@@ -307,6 +368,42 @@ interface DispersionMapProps {
   onToggleMapOnly?: () => void;
   selectedDateIso?: string;
   onChangeDateIso?: (nextDateIso: string) => void;
+  myceliumSnapshot?: MyceliumNetworkSimulationSnapshot;
+  hiddenSourceIds?: string[];
+  visibleSubstances?: Record<SubstanceKey, boolean>;
+  onChangeVisibleSubstances?: (next: Record<SubstanceKey, boolean>) => void;
+  showWindNoiseHeatmap?: boolean;
+  onToggleWindNoiseHeatmap?: (next?: boolean) => void;
+  showPlumeConcentrationHeatmap?: boolean;
+  onTogglePlumeConcentrationHeatmap?: (next?: boolean) => void;
+  plumeHeatmapPasquillThreshold?: number;
+  showWeatherCorrelationHeatmap?: boolean;
+  onToggleWeatherCorrelationHeatmap?: (next?: boolean) => void;
+  waterMainTelemetry?: WaterMainLiveTelemetry;
+  showWaterMainLayer?: boolean;
+  onToggleWaterMainLayer?: () => void;
+  showLerBuffer?: boolean;
+  onToggleLerBuffer?: () => void;
+  hasSteelRoadPlates?: boolean;
+  onToggleSteelRoadPlates?: () => void;
+  simulatedPipeRuptureActive?: boolean;
+  onToggleSimulatedPipeRupture?: () => void;
+  isS3ValveLockoutActive?: boolean;
+  onToggleS3ValveLockout?: () => void;
+  onToggleSourceActive?: (id: string) => void;
+  onIsolateNearbyMachinery?: () => void;
+  onRestoreAllMachinery?: () => void;
+  virtualLeakPinPoint?: LatLngPoint | null;
+  virtualLeakImpact?: VirtualLeakPinImpact | null;
+  onChangeVirtualLeakPinPoint?: (pt: LatLngPoint | null) => void;
+  onLogWaterMainObservation?: (
+    telemetry: WaterMainLiveTelemetry,
+    detailLabel?: string
+  ) => void;
+  simultaneousDispatch?: SimultaneousAlgedonicDispatch | null;
+  onAcknowledgeSimultaneousP1?: () => void;
+  onOpenSimultaneousModal?: () => void;
+  machineNoiseOutputDb?: number;
 }
 
 const RISK_COLORS: Record<
@@ -431,7 +528,7 @@ function getDifferenceCellVisualStyle(cell: HeatmapGridCell) {
   };
 }
 
-export const DispersionMap: React.FC<DispersionMapProps> = ({
+const DispersionMapComponent: React.FC<DispersionMapProps> = ({
   sources,
   receptors,
   plumeZones,
@@ -482,6 +579,39 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
   onToggleMapOnly,
   selectedDateIso,
   onChangeDateIso,
+  myceliumSnapshot,
+  hiddenSourceIds = [],
+  visibleSubstances: externalVisibleSubstances,
+  onChangeVisibleSubstances,
+  showWindNoiseHeatmap: externalShowWindNoiseHeatmap,
+  onToggleWindNoiseHeatmap,
+  showPlumeConcentrationHeatmap: externalShowPlumeConcentrationHeatmap,
+  onTogglePlumeConcentrationHeatmap,
+  plumeHeatmapPasquillThreshold = 0.25,
+  showWeatherCorrelationHeatmap: externalShowWeatherCorrelationHeatmap,
+  onToggleWeatherCorrelationHeatmap,
+  waterMainTelemetry,
+  showWaterMainLayer = false,
+  onToggleWaterMainLayer,
+  showLerBuffer = true,
+  onToggleLerBuffer,
+  hasSteelRoadPlates = false,
+  onToggleSteelRoadPlates,
+  simulatedPipeRuptureActive = false,
+  onToggleSimulatedPipeRupture,
+  isS3ValveLockoutActive = false,
+  onToggleS3ValveLockout,
+  onToggleSourceActive,
+  onIsolateNearbyMachinery,
+  onRestoreAllMachinery,
+  virtualLeakPinPoint,
+  virtualLeakImpact,
+  onChangeVirtualLeakPinPoint,
+  onLogWaterMainObservation,
+  simultaneousDispatch,
+  onAcknowledgeSimultaneousP1,
+  onOpenSimultaneousModal,
+  machineNoiseOutputDb = 114,
 }) => {
   const [internalMapOnly, setInternalMapOnly] = useState<boolean>(false);
   const effectiveMapOnly = isMapOnly !== undefined ? isMapOnly : internalMapOnly;
@@ -504,7 +634,34 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [internalMapOnly]);
 
+  const hiddenSourceSet = useMemo(() => new Set(hiddenSourceIds), [hiddenSourceIds]);
+  const visibleSources = useMemo(
+    () => sources.filter((s) => !hiddenSourceSet.has(s.id)),
+    [sources, hiddenSourceSet]
+  );
+
   const [selectedPopupBuildingId, setSelectedPopupBuildingId] = useState<string | null>(null);
+  const [showWaterMainInspector, setShowWaterMainInspector] = useState<boolean>(false);
+  const [showWaterMainSankeyInInspector, setShowWaterMainSankeyInInspector] = useState<boolean>(false);
+  const [selectedWaterMainSectionId, setSelectedWaterMainSectionId] = useState<string>('');
+  const [waterMainCsvExportedJustNow, setWaterMainCsvExportedJustNow] = useState<boolean>(false);
+  const [waterMainLoggedJustNow, setWaterMainLoggedJustNow] = useState<boolean>(false);
+  const [isLeakPinDropMode, setIsLeakPinDropMode] = useState<boolean>(false);
+  const [localVirtualLeakPinPoint, setLocalVirtualLeakPinPoint] = useState<LatLngPoint | null>(null);
+  const [isolatedMachineryJustNow, setIsolatedMachineryJustNow] = useState<boolean>(false);
+  const [eStopToastData, setEStopToastData] = useState<{
+    id: number;
+    isolatedCodes: string[];
+    totalStoppedCount: number;
+    triggeredAtLabel: string;
+    ppvBeforeMmPerSec: number;
+  } | null>(null);
+  const eStopFeedbackTimerRef = useRef<number | null>(null);
+  const eStopToastTimerRef = useRef<number | null>(null);
+  const [showHighWindCorrelationHud, setShowHighWindCorrelationHud] = useState<boolean>(true);
+  const [showSource85DbWavefronts, setShowSource85DbWavefronts] = useState<boolean>(true);
+  const [showEvacuationFlowAnimation, setShowEvacuationFlowAnimation] = useState<boolean>(true);
+  const [showWeatherCorrelationHud, setShowWeatherCorrelationHud] = useState<boolean>(true);
   const visibleBuildings = useMemo(
     () => buildings.filter((b) => activeCategoryFilters.includes(b.category)),
     [buildings, activeCategoryFilters]
@@ -573,6 +730,30 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
     window.setTimeout(() => setWeatherJsonExportedJustNow(false), 3500);
   };
   const [showAsbestosRiskLayer, setShowAsbestosRiskLayer] = useState(true);
+  const [internalVisibleSubstances, setInternalVisibleSubstances] = useState<
+    Record<SubstanceKey, boolean>
+  >({
+    asbestos: true,
+    heavyMetals: true,
+    pcb: true,
+    quartzWool: true,
+    moldSewer: true,
+  });
+  const visibleDispersionSubstances = externalVisibleSubstances ?? internalVisibleSubstances;
+  const setVisibleDispersionSubstances = (
+    updater:
+      | Record<SubstanceKey, boolean>
+      | ((prev: Record<SubstanceKey, boolean>) => Record<SubstanceKey, boolean>)
+  ) => {
+    const next =
+      typeof updater === 'function' ? updater(visibleDispersionSubstances) : updater;
+    if (onChangeVisibleSubstances) {
+      onChangeVisibleSubstances(next);
+    } else {
+      setInternalVisibleSubstances(next);
+    }
+  };
+  const [isLayerControlExpanded, setIsLayerControlExpanded] = useState<boolean>(true);
   const [showGroundwaterLeachingWarning, setShowGroundwaterLeachingWarning] = useState(true);
   const [leachingSimMode, setLeachingSimMode] = useState<'live' | 'saturated_rain' | 'cloudburst'>('live');
   const [isLeachingCardMinimized, setIsLeachingCardMinimized] = useState(false);
@@ -658,6 +839,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
     forecast_6h_heatmap: { isMinimized: false, isReleased: false, x: 490, y: 340, zIndex: 95 },
     high_wind_notification: { isMinimized: false, isReleased: false, x: 460, y: 260, zIndex: 96 },
     map_legend_heatmap_key: { isMinimized: false, isReleased: false, x: 36, y: 540, zIndex: 97 },
+    mycelium_alert_center: { isMinimized: false, isReleased: false, x: 52, y: 150, zIndex: 98 },
   });
   const topMapWindowZRef = useRef(105);
 
@@ -733,6 +915,257 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
   };
 
   const isHighWindAlert = currentWeather.windSpeed10m > 10;
+  const [showAutonomousMesh, setShowAutonomousMesh] = useState<boolean>(true);
+  const [showMapBlockPressureWaves, setShowMapBlockPressureWaves] = useState<boolean>(true);
+  const [showComplaintDensityOverlay, setShowComplaintDensityOverlay] = useState<boolean>(true);
+  const [complaintDensityFilterMode, setComplaintDensityFilterMode] =
+    useState<ComplaintDensityFilterMode>('all');
+  const [complaintDensityOpacityPct, setComplaintDensityOpacityPct] = useState<number>(68);
+  const [internalShowWindNoiseHeatmapLayer, setInternalShowWindNoiseHeatmapLayer] =
+    useState<boolean>(false);
+  const showWindNoiseHeatmapLayer =
+    externalShowWindNoiseHeatmap !== undefined
+      ? externalShowWindNoiseHeatmap
+      : internalShowWindNoiseHeatmapLayer;
+  const setShowWindNoiseHeatmapLayer = (
+    updater: boolean | ((prev: boolean) => boolean)
+  ) => {
+    const nextVal =
+      typeof updater === 'function' ? updater(showWindNoiseHeatmapLayer) : updater;
+    if (onToggleWindNoiseHeatmap) {
+      onToggleWindNoiseHeatmap(nextVal);
+    } else {
+      setInternalShowWindNoiseHeatmapLayer(nextVal);
+    }
+  };
+  const [internalShowPlumeConcentrationHeatmap, setInternalShowPlumeConcentrationHeatmap] =
+    useState<boolean>(false);
+  const showPlumeConcentrationHeatmapLayer =
+    externalShowPlumeConcentrationHeatmap !== undefined
+      ? externalShowPlumeConcentrationHeatmap
+      : internalShowPlumeConcentrationHeatmap;
+  const setShowPlumeConcentrationHeatmapLayer = (
+    updater: boolean | ((prev: boolean) => boolean)
+  ) => {
+    const nextVal =
+      typeof updater === 'function' ? updater(showPlumeConcentrationHeatmapLayer) : updater;
+    if (onTogglePlumeConcentrationHeatmap) {
+      onTogglePlumeConcentrationHeatmap(nextVal);
+    } else {
+      setInternalShowPlumeConcentrationHeatmap(nextVal);
+    }
+  };
+  const [internalShowWeatherCorrelationHeatmap, setInternalShowWeatherCorrelationHeatmap] =
+    useState<boolean>(true);
+  const showWeatherCorrelationHeatmapLayer =
+    externalShowWeatherCorrelationHeatmap !== undefined
+      ? externalShowWeatherCorrelationHeatmap
+      : internalShowWeatherCorrelationHeatmap;
+  const setShowWeatherCorrelationHeatmapLayer = (
+    updater: boolean | ((prev: boolean) => boolean)
+  ) => {
+    const nextVal =
+      typeof updater === 'function'
+        ? updater(showWeatherCorrelationHeatmapLayer)
+        : updater;
+    if (onToggleWeatherCorrelationHeatmap) {
+      onToggleWeatherCorrelationHeatmap(nextVal);
+    } else {
+      setInternalShowWeatherCorrelationHeatmap(nextVal);
+    }
+  };
+  const [overrideNoiseWindFromDeg, setOverrideNoiseWindFromDeg] = useState<number | null>(null);
+
+  const effectiveNoiseWindFromDeg = overrideNoiseWindFromDeg ?? currentWeather.windDirection10m;
+  const windDirectionalNoiseCells = useMemo(
+    () =>
+      computeWindDirectionalNoiseCells({
+        sources,
+        receptors,
+        windFromDeg: effectiveNoiseWindFromDeg,
+        windSpeedMs: currentWeather.windSpeed10m,
+        windGustMs: currentWeather.windGusts10m,
+      }),
+    [
+      sources,
+      receptors,
+      effectiveNoiseWindFromDeg,
+      currentWeather.windSpeed10m,
+      currentWeather.windGusts10m,
+    ]
+  );
+
+  useEffect(() => {
+    const onMinHud = () => {
+      handleMinimizeAllMapWindows();
+    };
+    const onResHud = () => {
+      handleRestoreAllMapWindows();
+    };
+    window.addEventListener('ringparken-minimize-map-hud-overlays', onMinHud);
+    window.addEventListener('ringparken-restore-map-hud-overlays', onResHud);
+    return () => {
+      window.removeEventListener('ringparken-minimize-map-hud-overlays', onMinHud);
+      window.removeEventListener('ringparken-restore-map-hud-overlays', onResHud);
+    };
+  }, []);
+
+  const complaintDensitySummary = useMemo(
+    () =>
+      computeNeighborComplaintBlockDensity({
+        observations,
+        sources,
+        receptors,
+        buildings,
+        filterMode: complaintDensityFilterMode,
+      }),
+    [observations, sources, receptors, buildings, complaintDensityFilterMode]
+  );
+
+  const handleFocusComplaintDensityItem = (item: BlockComplaintDensityItem) => {
+    setGmpCenter(item.center);
+    setZoom((z) => Math.max(z, 17.6));
+    setPanOffsetPx({ x: 0, y: 0 });
+    if (item.linkedSourceId) {
+      onSelectSource(item.linkedSourceId);
+    } else if (item.linkedReceptorId) {
+      onSelectReceptor(item.linkedReceptorId);
+    }
+  };
+
+  const autonomousMesh = useMemo(
+    () =>
+      buildAutonomousReceptorMeshNetwork({
+        receptors,
+        sources,
+        receptorExposures,
+        observations,
+        currentWeather,
+      }),
+    [receptors, sources, receptorExposures, observations, currentWeather]
+  );
+
+  // System B Mycelienetværk: Biokybernetisk Simulering, ISA-18.2 Hysterese & Scrubbing-Sikret Live Varsling
+  const [showMyceliumAlertCenter, setShowMyceliumAlertCenter] = useState<boolean>(false);
+  const [isFormulaSimulatorOpen, setIsFormulaSimulatorOpen] = useState<boolean>(false);
+  const [myceliumScenario, setMyceliumScenario] =
+    useState<MyceliumSimulationScenario>('live_telemetry');
+  const [manualCraterNodeIds, setManualCraterNodeIds] = useState<string[]>([]);
+  const [manualSpoofNodeIds, setManualSpoofNodeIds] = useState<string[]>([]);
+  const [realitySummitOverride, setRealitySummitOverride] = useState<boolean>(false);
+  const myceliumAiHistoryRef = useRef<number[]>([0.92, 0.89, 0.87]);
+
+  const myceliumSimState = useMemo(
+    () =>
+      simulateMyceliumNetwork({
+        receptors,
+        sources,
+        receptorExposures,
+        observations,
+        currentWeather,
+        scenario: myceliumScenario,
+        manualCraterNodeIds,
+        manualSpoofNodeIds,
+        previousAiHistory: myceliumAiHistoryRef.current,
+        realitySummitOverride,
+      }),
+    [
+      receptors,
+      sources,
+      receptorExposures,
+      observations,
+      currentWeather,
+      myceliumScenario,
+      manualCraterNodeIds,
+      manualSpoofNodeIds,
+      realitySummitOverride,
+    ]
+  );
+
+  useEffect(() => {
+    myceliumAiHistoryRef.current = myceliumSimState.aiHistory;
+  }, [myceliumSimState.aiHistory]);
+
+  const handleFocusMyceliumNode = (nodeId: string) => {
+    const targetRec = receptors.find((r) => r.id === nodeId);
+    if (targetRec) {
+      setGmpCenter(targetRec.center);
+      setZoom((z) => Math.max(z, 17.6));
+      setPanOffsetPx({ x: 0, y: 0 });
+      onSelectReceptor(targetRec.id);
+    }
+  };
+
+  const myceliumLiveAlerts = useMyceliumLiveAlerts({
+    simulationState: myceliumSimState,
+    snapshot: myceliumSnapshot,
+    currentWeather,
+    dateIso: selectedDateIso || puff24h.dateIso,
+    selectedHourIndex: currentWeather.hourIndex,
+    timelineProgress: (plumeRouteProgress ?? 0) + forecast6hProgress,
+    isPlayingTimeline: Boolean(isAnimatingPlumeRoute) || isPlaying6hDustForecast,
+    onFocusNodeOnMap: handleFocusMyceliumNode,
+  });
+
+  const myceliumScrubMountedRef = useRef<boolean>(false);
+  const notifyTimelineScrubFn = myceliumLiveAlerts.notifyTimelineScrub;
+  useEffect(() => {
+    if (!myceliumScrubMountedRef.current) {
+      myceliumScrubMountedRef.current = true;
+      return;
+    }
+    notifyTimelineScrubFn();
+  }, [
+    currentWeather.hourIndex,
+    selectedDateIso,
+    forecast6hProgress,
+    plumeRouteProgress,
+    comparisonHourAIndex,
+    comparisonHourBIndex,
+    notifyTimelineScrubFn,
+  ]);
+
+  // CSS pressure-wave animation per neighbor block on Ringparken map is specifically activated when windSpeed10m > 10 m/s
+  const isMapBlockPressureWaveActive = isHighWindAlert && showMapBlockPressureWaves;
+
+  const mapWaveSpeedTierClass =
+    currentWeather.windSpeed10m >= 14
+      ? 'map-block-wave-fast'
+      : currentWeather.windSpeed10m >= 12
+      ? 'map-block-wave-med'
+      : 'map-block-wave-std';
+
+  const neighborBlockPressureTargets = useMemo(() => {
+    const residentialOrCustom = receptors.filter(
+      (r) => r.category === 'residential_block' || r.category === 'custom_receptor'
+    );
+    const targetReceptors = residentialOrCustom.length > 0 ? residentialOrCustom : receptors;
+    return targetReceptors.map((rec) => {
+      const node = autonomousMesh.nodesByReceptorId[rec.id];
+      const complaintCount = node?.matchedObservations.length ?? 0;
+      const estimatedLafmaxDb = node?.estimatedLafmaxDb ?? 74;
+      const sumQ = node?.sumQuotient ?? 0;
+      const isCriticalImpulse =
+        complaintCount > 0 || estimatedLafmaxDb >= 80 || sumQ >= 1.0;
+      return {
+        receptor: rec,
+        node,
+        complaintCount,
+        estimatedLafmaxDb,
+        sumQ,
+        isCriticalImpulse,
+      };
+    });
+  }, [receptors, autonomousMesh]);
+
+  const firstHighWindHourInDataset = useMemo(() => {
+    if (!weatherHours || weatherHours.length === 0) return null;
+    const highWindHours = weatherHours.filter((h) => h.windSpeed10m > 10);
+    if (highWindHours.length === 0) return null;
+    return highWindHours.reduce((best, curr) =>
+      curr.windSpeed10m > best.windSpeed10m ? curr : best
+    );
+  }, [weatherHours]);
 
   const top3ReceptorExposures = useMemo(
     () => [...receptorExposures].sort((a, b) => b.sumQuotient - a.sumQuotient).slice(0, 3),
@@ -749,6 +1182,578 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
     return rankMap;
   }, [isHighWindAlert, top3ReceptorExposures]);
 
+  const computeGeoMeters = (a: LatLngPoint, b: LatLngPoint): number => {
+    const dLat = (b.lat - a.lat) * 111320;
+    const dLng = (b.lng - a.lng) * 63180;
+    return Math.hypot(dLat, dLng);
+  };
+
+  // Item 6: > 85 dB acoustic wavefront propagation from active demolition sources into 'støj-følsomme' neighbor zones
+  const sourceWavefrontTargets = useMemo(() => {
+    const sensitiveReceptors = receptors.filter(
+      (r) =>
+        r.category === 'residential_block' ||
+        r.category === 'custom_receptor' ||
+        /skole|børnehave|daginst/i.test(r.name)
+    );
+    const activeSrcList = visibleSources.filter((s) => s.active);
+    const windDownwindDeg = (currentWeather.windDirection10m + 180) % 360;
+    const gustBonusDb = Math.max(0, (currentWeather.windGusts10m - 6) * 0.42);
+    const effectiveLwa = Math.max(85, machineNoiseOutputDb || 114);
+
+    return activeSrcList
+      .map((src) => {
+        const hits = sensitiveReceptors
+          .map((rec) => {
+            const dLatM = (rec.center.lat - src.position.lat) * 111320;
+            const dLngM = (rec.center.lng - src.position.lng) * 63180;
+            const distM = Math.max(8, Math.hypot(dLatM, dLngM));
+            if (distM > 280) return null;
+
+            const bearingDeg = ((Math.atan2(dLngM, dLatM) * 180) / Math.PI + 360) % 360;
+            const angleDiff = Math.abs(((bearingDeg - windDownwindDeg + 540) % 360) - 180);
+            const downwindFactor = Math.max(0, Math.cos((angleDiff * Math.PI) / 180));
+            const estimatedLafmaxDb = Number(
+              (
+                effectiveLwa -
+                20 * Math.log10(distM) -
+                6.5 +
+                downwindFactor * (2.5 + gustBonusDb)
+              ).toFixed(1)
+            );
+            return {
+              receptor: rec,
+              distMeters: Math.round(distM),
+              estimatedLafmaxDb,
+              exceeds85Db: estimatedLafmaxDb > 85,
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => item !== null && item.exceeds85Db)
+          .sort((a, b) => b.estimatedLafmaxDb - a.estimatedLafmaxDb);
+
+        const peakLafmaxDb =
+          hits[0]?.estimatedLafmaxDb ??
+          Number((effectiveLwa - 24 + gustBonusDb).toFixed(1));
+        return {
+          source: src,
+          peakLafmaxDb,
+          exceeds85Db: hits.length > 0 || peakLafmaxDb > 85,
+          impactedReceptors: hits.slice(0, 4),
+        };
+      })
+      .filter((entry) => entry.exceeds85Db && entry.impactedReceptors.length > 0);
+  }, [
+    receptors,
+    visibleSources,
+    currentWeather.windDirection10m,
+    currentWeather.windGusts10m,
+    machineNoiseOutputDb,
+  ]);
+
+  // Item 7: High-Wind Dispersion Correlation (triggered when windGusts10m > 12 m/s)
+  const isHighGustAlert = currentWeather.windGusts10m > 12;
+  const firstHighGustHourInDataset = useMemo(() => {
+    if (!weatherHours || weatherHours.length === 0) return null;
+    const matches = weatherHours.filter((h) => h.windGusts10m > 12);
+    if (matches.length === 0) return null;
+    return matches.reduce((best, curr) =>
+      curr.windGusts10m > best.windGusts10m ? curr : best
+    );
+  }, [weatherHours]);
+
+  const highGustPearsonR = useMemo(() => {
+    if (!weatherHours || weatherHours.length < 3) return null;
+    const series = weatherHours.map((h) => {
+      const gust = h.windGusts10m;
+      const suspensionFlux = Number(
+        (0.32 * Math.pow(Math.max(1, gust) / 10, 1.45) + h.windSpeed10m * 0.038).toFixed(3)
+      );
+      return { gust, suspensionFlux };
+    });
+    const n = series.length;
+    const meanX = series.reduce((acc, p) => acc + p.gust, 0) / n;
+    const meanY = series.reduce((acc, p) => acc + p.suspensionFlux, 0) / n;
+    let num = 0;
+    let denX = 0;
+    let denY = 0;
+    for (const p of series) {
+      const dx = p.gust - meanX;
+      const dy = p.suspensionFlux - meanY;
+      num += dx * dy;
+      denX += dx * dx;
+      denY += dy * dy;
+    }
+    const denom = Math.sqrt(denX * denY);
+    return denom > 1e-6 ? Number((num / denom).toFixed(3)) : 0;
+  }, [weatherHours]);
+
+  const highGustCorrelationData = useMemo(() => {
+    const pearsonR =
+      highGustPearsonR ??
+      (() => {
+        const gust = currentWeather.windGusts10m;
+        const _flux = 0.32 * Math.pow(Math.max(1, gust) / 10, 1.45) + currentWeather.windSpeed10m * 0.038;
+        return _flux > 0 ? 0.91 : 0;
+      })();
+
+    const windDownwindDeg = (currentWeather.windDirection10m + 180) % 360;
+    const primarySource = visibleSources.find((s) => s.active) ?? visibleSources[0];
+    const rankedReceptors = [...receptors]
+      .map((rec) => {
+        const exp = receptorExposures.find((e) => e.receptorId === rec.id);
+        const sVal = exp?.sumQuotient ?? 0;
+        let alignment = 0.5;
+        if (primarySource) {
+          const dLatM = (rec.center.lat - primarySource.position.lat) * 111320;
+          const dLngM = (rec.center.lng - primarySource.position.lng) * 63180;
+          const bearingDeg = ((Math.atan2(dLngM, dLatM) * 180) / Math.PI + 360) % 360;
+          const diff = Math.abs(((bearingDeg - windDownwindDeg + 540) % 360) - 180);
+          alignment = Math.max(0, Math.cos((diff * Math.PI) / 180));
+        }
+        const gustScore = sVal * (0.7 + alignment * 0.85) * (currentWeather.windGusts10m / 12);
+        return {
+          receptor: rec,
+          sumQuotient: sVal,
+          downwindAlignmentPct: Math.round(alignment * 100),
+          gustImpactScore: Number(gustScore.toFixed(2)),
+        };
+      })
+      .sort((a, b) => b.gustImpactScore - a.gustImpactScore)
+      .slice(0, 4);
+
+    return {
+      pearsonR,
+      affectedReceptors: rankedReceptors,
+      affectedReceptorIds: new Set(rankedReceptors.map((r) => r.receptor.id)),
+      maxGustMs: currentWeather.windGusts10m,
+    };
+  }, [
+    highGustPearsonR,
+    currentWeather,
+    receptors,
+    receptorExposures,
+    visibleSources,
+  ]);
+
+  // Item 3: Vejr-Korrelations Heatmap (6-hour rolling correlation between wind gusts and dust deposition S-quotient > 0.8)
+  const weatherCorrelationHeatmapData = useMemo(() => {
+    const allHours = weatherHours.length > 0 ? weatherHours : [currentWeather];
+    const hourLen = allHours.length;
+    const endIdx = Math.max(
+      0,
+      Math.min(
+        hourLen - 1,
+        allHours.findIndex((h) => h.hourIndex === currentWeather.hourIndex) >= 0
+          ? allHours.findIndex((h) => h.hourIndex === currentWeather.hourIndex)
+          : currentWeather.hourIndex % hourLen
+      )
+    );
+    const windowSize = Math.min(6, hourLen);
+    const window6h: HourlyWeatherPoint[] = [];
+    for (let offset = windowSize - 1; offset >= 0; offset--) {
+      const idx = (endIdx - offset + hourLen) % hourLen;
+      window6h.push(allHours[idx]);
+    }
+
+    const activeSources = visibleSources.filter((s) => s.active);
+    const gustSeries = window6h.map((h) => h.windGusts10m);
+    const meanGust =
+      gustSeries.reduce((acc, v) => acc + v, 0) / Math.max(1, gustSeries.length);
+
+    const receptorCorrelations = receptors.map((rec) => {
+      const sSeries = window6h.map(
+        (hr) => evaluateReceptorAtHour(rec, activeSources, hr).sumQuotient
+      );
+      const meanS =
+        sSeries.reduce((acc, v) => acc + v, 0) / Math.max(1, sSeries.length);
+      const maxS6h = sSeries.reduce((m, v) => Math.max(m, v), 0);
+      const currentS = sSeries[sSeries.length - 1] ?? 0;
+
+      let num = 0;
+      let denG = 0;
+      let denS = 0;
+      for (let i = 0; i < window6h.length; i++) {
+        const dg = gustSeries[i] - meanGust;
+        const ds = sSeries[i] - meanS;
+        num += dg * ds;
+        denG += dg * dg;
+        denS += ds * ds;
+      }
+      const denom = Math.sqrt(denG * denS);
+      const pearsonR = denom > 1e-8 ? Number((num / denom).toFixed(3)) : 0;
+      const isHighCorrelation = pearsonR > 0.8 && maxS6h > 0.01;
+
+      return {
+        receptor: rec,
+        pearsonR,
+        maxS6h: Number(maxS6h.toFixed(2)),
+        currentS: Number(currentS.toFixed(2)),
+        meanS6h: Number(meanS.toFixed(2)),
+        isHighCorrelation,
+      };
+    });
+
+    const highlightedAreas = receptorCorrelations
+      .filter((item) => item.isHighCorrelation)
+      .sort((a, b) => b.pearsonR - a.pearsonR || b.maxS6h - a.maxS6h);
+
+    const highlightedReceptorIds = new Set(
+      highlightedAreas.map((a) => a.receptor.id)
+    );
+
+    const highlightedBuildingIds = new Set<string>();
+    visibleBuildings.forEach((b) => {
+      const recId = getReceptorIdForBuilding(b.id);
+      if (highlightedReceptorIds.has(recId)) {
+        highlightedBuildingIds.add(b.id);
+      }
+    });
+
+    const maxGust6h = gustSeries.reduce((m, v) => Math.max(m, v), 0);
+    const windowStartLabel = window6h[0]?.hourLabel ?? currentWeather.hourLabel;
+    const windowEndLabel =
+      window6h[window6h.length - 1]?.hourLabel ?? currentWeather.hourLabel;
+
+    return {
+      windowStartLabel,
+      windowEndLabel,
+      maxGust6h: Number(maxGust6h.toFixed(1)),
+      allCorrelations: receptorCorrelations,
+      highlightedAreas,
+      highlightedReceptorIds,
+      highlightedBuildingIds,
+    };
+  }, [weatherHours, currentWeather, visibleSources, receptors, visibleBuildings]);
+
+  // Item 8: Dynamic 'Emergency Evacuation Flow' with evacuation speed (m/s) derived from elevation slope & local dust plume density
+  const evacuationFlowSegments = useMemo(() => {
+    const estimateElevationMoh = (pt: LatLngPoint): number => {
+      // Kierulffsvej west (~33.4 m.o.h.) rising east toward Rosenkildevej (~36.1 m.o.h.) & south toward Valbyvej (~35.4 m.o.h.)
+      const eastDelta = (pt.lng - 11.3514) * 320;
+      const southDelta = (55.4148 - pt.lat) * 280;
+      return Number((33.4 + eastDelta + southDelta * 0.45).toFixed(1));
+    };
+
+    const estimateLocalPlumeDensity = (mid: LatLngPoint): number => {
+      let peakS = 0.25;
+      for (const exp of receptorExposures) {
+        const rec = receptors.find((r) => r.id === exp.receptorId);
+        if (!rec) continue;
+        const dM = computeGeoMeters(mid, rec.center);
+        const weight = Math.max(0.15, 1 - dM / 180);
+        peakS = Math.max(peakS, exp.sumQuotient * weight);
+      }
+      return Number(Math.min(2.4, peakS).toFixed(2));
+    };
+
+    const baseCorridors: Array<{
+      id: string;
+      streetName: string;
+      origin: LatLngPoint;
+      target: LatLngPoint;
+    }> =
+      simultaneousDispatch?.active &&
+      simultaneousDispatch.system1State.escapeVectors.length > 0
+        ? simultaneousDispatch.system1State.escapeVectors.map((vec) => ({
+            id: vec.id,
+            streetName: vec.streetName,
+            origin: vec.origin,
+            target: vec.targetMusterPoint,
+          }))
+        : [
+            {
+              id: 'evac-valbyvej',
+              streetName: 'Valbyvej Opsamlingspunkt',
+              origin: { lat: 55.41295, lng: 11.35365 }, // Blok 1 front
+              target: { lat: 55.41215, lng: 11.35225 },
+            },
+            {
+              id: 'evac-rosenkildevej',
+              streetName: 'Rosenkildevej Øst',
+              origin: { lat: 55.4131, lng: 11.35415 },
+              target: { lat: 55.41365, lng: 11.35555 },
+            },
+          ];
+
+    return baseCorridors.map((c) => {
+      const distM = Math.max(15, Math.round(computeGeoMeters(c.origin, c.target)));
+      const originMoh = estimateElevationMoh(c.origin);
+      const targetMoh = estimateElevationMoh(c.target);
+      const slopePct = Number((((targetMoh - originMoh) / distM) * 100).toFixed(1));
+      const midPt: LatLngPoint = {
+        lat: (c.origin.lat + c.target.lat) * 0.5,
+        lng: (c.origin.lng + c.target.lng) * 0.5,
+      };
+      const localPlumeDensityS = estimateLocalPlumeDensity(midPt);
+      // Unimpeded pedestrian evacuation ~1.48 m/s; penalized by positive uphill slope and dense dust plume visibility impairment
+      const speedMs = Number(
+        Math.max(
+          0.55,
+          Math.min(
+            1.95,
+            1.48 - Math.max(0, slopePct) * 0.042 - Math.min(1.6, localPlumeDensityS) * 0.28
+          )
+        ).toFixed(2)
+      );
+      const cssDurationSec = Number(Math.max(0.55, Math.min(2.4, 1.55 / speedMs)).toFixed(2));
+      return {
+        ...c,
+        distMeters: distM,
+        originMoh,
+        targetMoh,
+        slopePct,
+        localPlumeDensityS,
+        speedMs,
+        cssDurationSec,
+      };
+    });
+  }, [simultaneousDispatch, receptorExposures, receptors]);
+
+  // Item 10: BEK nr. 1272/2025 Status Indicator (Pb <= 5.0, 4-PAH <= 0.10, PCB <= 0.50 µg/L)
+  const waterMainBek1272Status = useMemo(() => {
+    if (!waterMainTelemetry) return null;
+    const pbUgL = waterMainTelemetry.estimatedLeadIntrusionUgL;
+    const pah4UgL = waterMainTelemetry.estimatedPah4SumUgL;
+    const pcbUgL = waterMainTelemetry.estimatedPcbIntrusionUgL ?? 0.08;
+    const exceeds = pbUgL > 5.0 || pah4UgL > 0.1 || pcbUgL > 0.5 || waterMainTelemetry.intrusionRiskLevel === 'active_backsiphonage';
+    const elevated =
+      !exceeds &&
+      (pbUgL >= 3.0 ||
+        pah4UgL >= 0.06 ||
+        pcbUgL >= 0.3 ||
+        waterMainTelemetry.intrusionRiskLevel === 'high' ||
+        waterMainTelemetry.intrusionRiskLevel === 'moderate');
+
+    const tier: 'critical' | 'warning' | 'nominal' = exceeds
+      ? 'critical'
+      : elevated
+      ? 'warning'
+      : 'nominal';
+
+    return {
+      tier,
+      pbUgL,
+      pah4UgL,
+      pcbUgL,
+      shortBadgeDa:
+        tier === 'critical'
+          ? 'BEK 1272/2025: OVERSKRIDELSE'
+          : tier === 'warning'
+          ? 'BEK 1272/2025: SKÆRPET OPSYN'
+          : 'BEK 1272/2025: OVERHOLDT',
+      symbolChar: tier === 'critical' ? '▲' : tier === 'warning' ? '◆' : '●',
+      strokeHex:
+        tier === 'critical' ? '#f43f5e' : tier === 'warning' ? '#f59e0b' : '#10b981',
+      fillHex:
+        tier === 'critical' ? '#4c0519' : tier === 'warning' ? '#451a03' : '#022c22',
+      textClass:
+        tier === 'critical'
+          ? 'fill-rose-200'
+          : tier === 'warning'
+          ? 'fill-amber-200'
+          : 'fill-emerald-200',
+    };
+  }, [waterMainTelemetry]);
+
+  // Focus Mode Item 2: Pulsing red border on drikkevands-hovedrør tooltip when pipePpvMmPerSec > 50 mm/s or simulatedPipeRuptureActive is true
+  const isWaterMainCriticalPulse = Boolean(
+    waterMainTelemetry &&
+      (waterMainTelemetry.pipePpvMmPerSec > 50 ||
+        waterMainTelemetry.simulatedPipeRuptureActive)
+  );
+
+  // Vibrationsfare (DIN 4150-3): dynamically evaluates pipe PPV against the 25 mm/s Eternit threshold (alert >= 22.5 mm/s)
+  const din4150ThresholdMmPerSec = 25.0;
+  const ppvValMmPerSec = waterMainTelemetry ? waterMainTelemetry.pipePpvMmPerSec : 0;
+  const isStructuralIntegrityAlert = Boolean(
+    waterMainTelemetry && ppvValMmPerSec >= 22.5
+  );
+  const isDin4150ThresholdExceeded = Boolean(
+    waterMainTelemetry && ppvValMmPerSec >= din4150ThresholdMmPerSec
+  );
+  const ppvPctOf25Threshold = waterMainTelemetry
+    ? Math.round((ppvValMmPerSec / din4150ThresholdMmPerSec) * 100)
+    : 0;
+  const ppvDeltaFrom25MmPerSec = Number(
+    (ppvValMmPerSec - din4150ThresholdMmPerSec).toFixed(1)
+  );
+  const ppvGaugeWidthPct = Math.min(100, Math.max(6, ppvPctOf25Threshold));
+
+  const effectiveVirtualLeakPinPoint =
+    virtualLeakPinPoint !== undefined ? virtualLeakPinPoint : localVirtualLeakPinPoint;
+
+  const effectiveVirtualLeakImpact = useMemo<VirtualLeakPinImpact | null>(() => {
+    if (virtualLeakImpact !== undefined && virtualLeakPinPoint !== undefined) {
+      return virtualLeakImpact;
+    }
+    if (!effectiveVirtualLeakPinPoint || !waterMainTelemetry) return null;
+    return computeVirtualLeakPercolationImpact({
+      pinPoint: effectiveVirtualLeakPinPoint,
+      telemetry: waterMainTelemetry,
+      buildings,
+    });
+  }, [
+    virtualLeakImpact,
+    virtualLeakPinPoint,
+    effectiveVirtualLeakPinPoint,
+    waterMainTelemetry,
+    buildings,
+  ]);
+
+  const setVirtualLeakPin = (pt: LatLngPoint | null) => {
+    if (onChangeVirtualLeakPinPoint) {
+      onChangeVirtualLeakPinPoint(pt);
+    } else {
+      setLocalVirtualLeakPinPoint(pt);
+    }
+  };
+
+  const handlePlaceVirtualLeakPinAtPoint = (rawPt: LatLngPoint) => {
+    if (!waterMainTelemetry) return;
+    const snapped = snapPointToWaterMainPolyline(rawPt, waterMainTelemetry);
+    setVirtualLeakPin(snapped.snappedPoint);
+    setIsLeakPinDropMode(false);
+    if (!showWaterMainLayer && onToggleWaterMainLayer) {
+      onToggleWaterMainLayer();
+    }
+  };
+
+  const handleToggleVirtualLeakPinQuick = () => {
+    if (effectiveVirtualLeakPinPoint) {
+      setVirtualLeakPin(null);
+      setIsLeakPinDropMode(false);
+    } else if (waterMainTelemetry) {
+      setVirtualLeakPin(waterMainTelemetry.inspectionCenter);
+      setIsLeakPinDropMode(false);
+      if (!showWaterMainLayer && onToggleWaterMainLayer) {
+        onToggleWaterMainLayer();
+      }
+    }
+  };
+
+  const handleTriggerIsolateNearbyMachinery = () => {
+    const inspectionOrigin =
+      waterMainTelemetry?.inspectionCenter ?? { lat: 55.4126, lng: 11.3531 };
+    const activeSourcesList = sources.filter((s) => s.active);
+    let nearbyActive = activeSourcesList.filter(
+      (s) => computeGeoMeters(s.position, inspectionOrigin) <= 65
+    );
+    if (nearbyActive.length === 0 && activeSourcesList.length > 0) {
+      const sorted = [...activeSourcesList].sort(
+        (a, b) =>
+          computeGeoMeters(a.position, inspectionOrigin) -
+          computeGeoMeters(b.position, inspectionOrigin)
+      );
+      nearbyActive = sorted.slice(0, 1);
+    }
+
+    if (onIsolateNearbyMachinery) {
+      onIsolateNearbyMachinery();
+    } else if (onToggleSourceActive) {
+      nearbyActive.forEach((s) => onToggleSourceActive(s.id));
+    }
+
+    if (eStopFeedbackTimerRef.current) {
+      window.clearTimeout(eStopFeedbackTimerRef.current);
+    }
+    if (eStopToastTimerRef.current) {
+      window.clearTimeout(eStopToastTimerRef.current);
+    }
+
+    setIsolatedMachineryJustNow(true);
+    setEStopToastData({
+      id: Date.now(),
+      isolatedCodes:
+        nearbyActive.length > 0
+          ? nearbyActive.map((s) => s.code)
+          : ['Nærmeste maskiner'],
+      totalStoppedCount: nearbyActive.length,
+      triggeredAtLabel: new Date().toLocaleTimeString('da-DK', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }),
+      ppvBeforeMmPerSec: ppvValMmPerSec,
+    });
+
+    eStopFeedbackTimerRef.current = window.setTimeout(() => {
+      setIsolatedMachineryJustNow(false);
+    }, 5000);
+    eStopToastTimerRef.current = window.setTimeout(() => {
+      setEStopToastData(null);
+    }, 6500);
+  };
+
+  const buildGeoCirclePolygon = (
+    center: LatLngPoint,
+    radiusMeters: number,
+    segments = 28
+  ): LatLngPoint[] => {
+    const latRad = (center.lat * Math.PI) / 180;
+    const degLatPerM = 1 / 111320;
+    const degLngPerM = 1 / (111320 * Math.cos(latRad));
+    const pts: LatLngPoint[] = [];
+    for (let i = 0; i < segments; i++) {
+      const ang = (i / segments) * Math.PI * 2;
+      pts.push({
+        lat: Number((center.lat + Math.sin(ang) * radiusMeters * degLatPerM).toFixed(6)),
+        lng: Number((center.lng + Math.cos(ang) * radiusMeters * degLngPerM).toFixed(6)),
+      });
+    }
+    return pts;
+  };
+
+  const availableWaterMainSections = useMemo(() => {
+    if (!waterMainTelemetry) return [];
+    return waterMainTelemetry.coordinateMode === 'dar_verified_wgs84'
+      ? waterMainTelemetry.darSegments
+      : waterMainTelemetry.sceneSegments;
+  }, [waterMainTelemetry]);
+
+  const effectiveWaterMainSectionId = useMemo(() => {
+    if (availableWaterMainSections.length === 0) return 'all';
+    if (
+      selectedWaterMainSectionId === 'all' ||
+      availableWaterMainSections.some((s) => s.id === selectedWaterMainSectionId)
+    ) {
+      return selectedWaterMainSectionId;
+    }
+    return availableWaterMainSections[0].id;
+  }, [availableWaterMainSections, selectedWaterMainSectionId]);
+
+  const waterMainLast6HoursPoints = useMemo(() => {
+    if (!showWaterMainLayer || !waterMainTelemetry) return [];
+    return computeWaterMainLast6HoursTrend({
+      telemetry: waterMainTelemetry,
+      currentWeather,
+      weatherHours,
+      sources,
+      buildings,
+      manualMachineNoiseOutputDb: machineNoiseOutputDb,
+      hasSteelRoadPlates: waterMainTelemetry.hasSteelRoadPlates,
+      simulatedPipeRuptureActive: waterMainTelemetry.simulatedPipeRuptureActive,
+    });
+  }, [
+    showWaterMainLayer,
+    waterMainTelemetry,
+    currentWeather,
+    weatherHours,
+    sources,
+    buildings,
+    machineNoiseOutputDb,
+  ]);
+
+  const handleExportWaterMainBek1272Csv = () => {
+    if (!waterMainTelemetry) return;
+    exportWaterMainBek1272ComplianceCsv({
+      telemetry: waterMainTelemetry,
+      selectedSectionId: effectiveWaterMainSectionId,
+      observedTimestampIso: currentWeather.isoTime,
+    });
+    setWaterMainCsvExportedJustNow(true);
+    window.setTimeout(() => setWaterMainCsvExportedJustNow(false), 2800);
+  };
+
   const handleExport2DViewportPrintPdf = () => {
     generate2DViewportPrintPdfReport({
       sources,
@@ -762,6 +1767,9 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
       zoom,
       panOffsetPx,
       showHourlyPuffLobes,
+      waterMainTelemetry,
+      showWaterMainLayer,
+      showLerBuffer,
     });
     setPdfExportedJustNow(true);
     window.setTimeout(() => {
@@ -805,6 +1813,22 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
     if (showHeatmapComparison) {
       activeLayers.push(`Heatmap-Sammenligning (${heatmapComparisonViewMode})`);
     }
+    if (showWindNoiseHeatmapLayer) {
+      activeLayers.push(`Vind-Støj Varmegraf (${Math.round(effectiveNoiseWindFromDeg)}°)`);
+    }
+    if (showPlumeConcentrationHeatmapLayer) {
+      activeLayers.push('Plume Koncentrations-Heatmap (Høj-Konc. vs. Sikker Zone)');
+    }
+    if (showWeatherCorrelationHeatmapLayer) {
+      activeLayers.push(
+        `Vejr-Korrelations Heatmap (6t r>0,80: ${weatherCorrelationHeatmapData.highlightedAreas.length} zoner)`
+      );
+    }
+    if (showWaterMainLayer && waterMainTelemetry) {
+      activeLayers.push(
+        `Drikkevands-Hovedrør Kierulffsvej (${waterMainTelemetry.dimension} · -${waterMainTelemetry.burialDepthMeters}m)`
+      );
+    }
 
     const modeDescriptor =
       showHeatmapComparison && heatmapComparison
@@ -825,6 +1849,10 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
       zoom,
       panOffsetPx,
       showHourlyPuffLobes,
+      waterMainTelemetry,
+      showWaterMainLayer,
+      showLerBuffer,
+      simultaneousDispatch,
     });
 
     const capturedAtIso = new Date().toISOString();
@@ -1064,6 +2092,10 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
         zoom,
         panOffsetPx,
         showHourlyPuffLobes,
+        waterMainTelemetry,
+        showWaterMainLayer,
+        showLerBuffer,
+        simultaneousDispatch,
       });
       if (!fallbackSnap.dataUrl) {
         drawForensicBannersAndSave();
@@ -1133,6 +2165,220 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
     return puff24h.mergedEnvelopePolygons;
   }, [isPuffMode, plumeZones, puff24h, showHourlyPuffLobes]);
 
+  const activeSubstanceLayerCount = useMemo(
+    () =>
+      [
+        visibleDispersionSubstances.asbestos,
+        visibleDispersionSubstances.heavyMetals,
+        visibleDispersionSubstances.pcb,
+        visibleDispersionSubstances.quartzWool,
+        visibleDispersionSubstances.moldSewer,
+      ].filter(Boolean).length,
+    [visibleDispersionSubstances]
+  );
+
+  // Filter active dispersion polygons by toggled-ON substances in Layer Control and visually hidden source nodes
+  const filteredActivePolygons = useMemo(() => {
+    const visiblePolygons =
+      hiddenSourceSet.size === 0
+        ? activePolygons
+        : activePolygons.filter((zone) => {
+            if (zone.sourceId && hiddenSourceSet.has(zone.sourceId)) return false;
+            const matchedSrc = sources.find(
+              (s) => s.id === zone.sourceId || zone.id.includes(s.id)
+            );
+            if (matchedSrc && hiddenSourceSet.has(matchedSrc.id)) return false;
+            return true;
+          });
+
+    if (activeSubstanceLayerCount === 0) return [];
+    const selectedKeys: SubstanceKey[] = [];
+    if (visibleDispersionSubstances.asbestos) selectedKeys.push('asbestos');
+    if (visibleDispersionSubstances.heavyMetals) selectedKeys.push('heavyMetals');
+    if (visibleDispersionSubstances.pcb) selectedKeys.push('pcb');
+    if (visibleDispersionSubstances.quartzWool) selectedKeys.push('quartzWool');
+    if (visibleDispersionSubstances.moldSewer) selectedKeys.push('moldSewer');
+
+    // When all 5 are active, show the full set cleanly
+    if (activeSubstanceLayerCount === 5) return visiblePolygons;
+
+    // When a subset is chosen, filter polygons matching sources with selected substances
+    // and restrict risk tiers so toggling any of the 5 substances noticeably declutters the map
+    const filtered = visiblePolygons.filter((zone) => {
+      const matchedSrc = sources.find(
+        (s) => s.id === zone.sourceId || zone.id.includes(s.id)
+      );
+      const hasMatchingSubstance = matchedSrc
+        ? selectedKeys.some((k) => matchedSrc.substances.includes(k))
+        : true;
+      if (!hasMatchingSubstance) return false;
+      if (zone.level === 'blue' && !visibleDispersionSubstances.moldSewer) {
+        return false;
+      }
+      if (zone.level === 'yellow' && !visibleDispersionSubstances.asbestos && !visibleDispersionSubstances.quartzWool) {
+        return false;
+      }
+      if (
+        zone.level === 'orange' &&
+        !visibleDispersionSubstances.pcb &&
+        !visibleDispersionSubstances.heavyMetals &&
+        !visibleDispersionSubstances.asbestos
+      ) {
+        return false;
+      }
+      if (
+        zone.level === 'red' &&
+        !visibleDispersionSubstances.asbestos &&
+        !visibleDispersionSubstances.pcb &&
+        !visibleDispersionSubstances.heavyMetals
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    return filtered;
+  }, [activePolygons, activeSubstanceLayerCount, visibleDispersionSubstances, sources, hiddenSourceSet]);
+
+  // Concentration Heatmap Layer derived strictly from simulation.plumeZones (distinguishing high-concentration areas vs. safe zones)
+  const plumeConcentrationHeatmapData = useMemo(() => {
+    const levelOrder: Record<RiskZoneLevel, number> = {
+      yellow: 1,
+      blue: 2,
+      orange: 3,
+      red: 4,
+    };
+    const selectedKeys: SubstanceKey[] = [];
+    if (visibleDispersionSubstances.asbestos) selectedKeys.push('asbestos');
+    if (visibleDispersionSubstances.heavyMetals) selectedKeys.push('heavyMetals');
+    if (visibleDispersionSubstances.pcb) selectedKeys.push('pcb');
+    if (visibleDispersionSubstances.quartzWool) selectedKeys.push('quartzWool');
+    if (visibleDispersionSubstances.moldSewer) selectedKeys.push('moldSewer');
+
+    const visibleSourcePlumeZones =
+      activeSubstanceLayerCount === 0
+        ? []
+        : plumeZones.filter((zone) => {
+            if (zone.sourceId && hiddenSourceSet.has(zone.sourceId)) return false;
+            const matchedSrc = sources.find(
+              (s) => s.id === zone.sourceId || zone.id.includes(s.id)
+            );
+            if (matchedSrc && hiddenSourceSet.has(matchedSrc.id)) return false;
+            if (activeSubstanceLayerCount < 5) {
+              const hasMatchingSubstance = matchedSrc
+                ? selectedKeys.some((k) => matchedSrc.substances.includes(k))
+                : true;
+              if (!hasMatchingSubstance) return false;
+              if (zone.level === 'blue' && !visibleDispersionSubstances.moldSewer) return false;
+              if (
+                zone.level === 'yellow' &&
+                !visibleDispersionSubstances.asbestos &&
+                !visibleDispersionSubstances.quartzWool
+              ) {
+                return false;
+              }
+              if (
+                zone.level === 'orange' &&
+                !visibleDispersionSubstances.pcb &&
+                !visibleDispersionSubstances.heavyMetals &&
+                !visibleDispersionSubstances.asbestos
+              ) {
+                return false;
+              }
+              if (
+                zone.level === 'red' &&
+                !visibleDispersionSubstances.asbestos &&
+                !visibleDispersionSubstances.pcb &&
+                !visibleDispersionSubstances.heavyMetals
+              ) {
+                return false;
+              }
+            }
+            return true;
+          });
+    const obsThreshold = Number(
+      Math.max(0.1, Math.min(1.0, plumeHeatmapPasquillThreshold)).toFixed(2)
+    );
+    const elevatedThreshold = Number((obsThreshold * 2).toFixed(2));
+    const criticalThreshold = Number((obsThreshold * 4).toFixed(2));
+
+    const classifyZoneLevel = (
+      zone: PlumePolygonZone
+    ): 'safe' | 'yellow' | 'orange' | 'red' | 'blue' => {
+      if (zone.level === 'blue') return 'blue';
+      const repQuotient =
+        zone.maxSumQuotient > 0
+          ? zone.maxSumQuotient
+          : zone.level === 'red'
+          ? 1.15
+          : zone.level === 'orange'
+          ? 0.65
+          : 0.32;
+      if (repQuotient < obsThreshold) return 'safe';
+      if (repQuotient >= criticalThreshold) return 'red';
+      if (repQuotient >= elevatedThreshold) return 'orange';
+      return 'yellow';
+    };
+
+    const classifiedZones: Array<{
+      zone: PlumePolygonZone;
+      heatmapLevel: 'yellow' | 'orange' | 'red' | 'blue';
+    }> = [];
+    for (const zone of visibleSourcePlumeZones) {
+      const tier = classifyZoneLevel(zone);
+      if (tier !== 'safe') {
+        classifiedZones.push({ zone, heatmapLevel: tier });
+      }
+    }
+    classifiedZones.sort(
+      (a, b) => (levelOrder[a.heatmapLevel] ?? 0) - (levelOrder[b.heatmapLevel] ?? 0)
+    );
+
+    const sortedZones = classifiedZones.map((item) => item.zone);
+    const criticalCount = classifiedZones.filter((z) => z.heatmapLevel === 'red').length;
+    const elevatedCount = classifiedZones.filter((z) => z.heatmapLevel === 'orange').length;
+    const observationCount = classifiedZones.filter((z) => z.heatmapLevel === 'yellow').length;
+    const runoffCount = classifiedZones.filter((z) => z.heatmapLevel === 'blue').length;
+    const safeReceptorIds = new Set(
+      receptorExposures
+        .filter((e) => e.sumQuotient < obsThreshold)
+        .map((e) => e.receptorId)
+    );
+    const maxZoneQuotient = sortedZones.reduce(
+      (max, z) => Math.max(max, z.maxSumQuotient || 0),
+      0
+    );
+    return {
+      sortedZones,
+      classifiedZones,
+      obsThreshold,
+      elevatedThreshold,
+      criticalThreshold,
+      criticalCount,
+      elevatedCount,
+      observationCount,
+      runoffCount,
+      safeReceptorIds,
+      safeReceptorsCount: safeReceptorIds.size,
+      impactedReceptorsCount: Math.max(0, receptorExposures.length - safeReceptorIds.size),
+      maxZoneQuotient,
+      safeZonePerimeter: [
+        { lat: 55.4152, lng: 11.3485 },
+        { lat: 55.4152, lng: 11.3588 },
+        { lat: 55.4102, lng: 11.3588 },
+        { lat: 55.4102, lng: 11.3485 },
+      ] as LatLngPoint[],
+    };
+  }, [
+    plumeZones,
+    hiddenSourceSet,
+    sources,
+    receptorExposures,
+    activeSubstanceLayerCount,
+    visibleDispersionSubstances,
+    plumeHeatmapPasquillThreshold,
+  ]);
+
   // Smooth Cross-Fade Animation State when switching visualization modes or time intervals
   const currentModeDescriptor = useMemo(() => {
     if (showHeatmapComparison && heatmapComparison) {
@@ -1172,8 +2418,8 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
 
   useEffect(() => {
     const prev = lastSnapshotRef.current;
-    if (prev.signature === visualStateSignature) {
-      // Keep ref polygons fresh if data loaded for the same signature
+    if (prev.signature === visualStateSignature || isAnimatingPlumeRoute) {
+      // Keep ref polygons fresh without launching a competing cross-fade RAF loop during continuous playback
       lastSnapshotRef.current = {
         signature: visualStateSignature,
         modeDescriptor: currentModeDescriptor,
@@ -1184,6 +2430,10 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
         heatmapComparisonViewMode,
         heatmapComparison,
       };
+      if (isAnimatingPlumeRoute && outgoingSnapshot) {
+        setOutgoingSnapshot(null);
+        setCrossFadeProgress(1);
+      }
       return;
     }
 
@@ -1252,8 +2502,8 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
     heatmapComparison,
   ]);
 
-  // 24-Hour Animated Wind-Plume Route ('Animér Fanevej-Rute') connecting source -> 24h plume path -> most affected areas
-  const plumeRouteAnimationData = useMemo(() => {
+  // Static 24-Hour Plume-Path Route base (does not recompute when timeline slider moves)
+  const plumeRouteStaticBase = useMemo(() => {
     const activeSources = sources.filter((s) => s.active);
     const originSource =
       activeSources.find((s) => s.id === selectedSourceId) ||
@@ -1271,6 +2521,21 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
     ]
       .sort((a, b) => b.cumulativeSumDose - a.cumulativeSumDose)
       .slice(0, 3);
+
+    const full24hTipLoop: LatLngPoint[] = sourceTrajectories.map((t) => t.puffCenterEnd);
+
+    return {
+      originSource,
+      sourceTrajectories,
+      topAffectedReceptors,
+      full24hTipLoop,
+    };
+  }, [sources, selectedSourceId, puff24h]);
+
+  // 24-Hour Animated Wind-Plume Route ('Animér Fanevej-Rute') connecting source -> 24h plume path -> most affected areas
+  const plumeRouteAnimationData = useMemo(() => {
+    const { originSource, sourceTrajectories, topAffectedReceptors, full24hTipLoop } =
+      plumeRouteStaticBase;
 
     const clampProg = Math.max(0, Math.min(23.99, plumeRouteProgress));
     const curIdx = Math.floor(clampProg);
@@ -1290,18 +2555,14 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
         ? lerpPt(curTraj.puffCenterEnd, nextTraj.puffCenterEnd, frac)
         : originSource.position;
 
-    // 24-hour continuous trajectory loop connecting the hourly plume tips
-    const full24hTipLoop: LatLngPoint[] = sourceTrajectories.map((t) => t.puffCenterEnd);
     const activeTrailPoints: LatLngPoint[] = [
       originSource.position,
       ...sourceTrajectories.slice(0, curIdx + 1).map((t) => t.puffCenterEnd),
       frontPoint,
     ];
 
-    // Direct animated corridors from originSource through the plume front to the top 3 most affected receptor areas
     const receptorCorridors = topAffectedReceptors.map((rec, rankIdx) => {
       const phase = (clampProg * 0.45 + rankIdx * 0.33) % 1;
-      // 2-segment route: Source -> Active Plume Front / Peak Puff -> Affected Receptor
       const midControl =
         rankIdx === 0
           ? frontPoint
@@ -1320,6 +2581,80 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
       };
     });
 
+    if (!isAnimatingPlumeRoute) {
+      return {
+        originSource,
+        sourceTrajectories,
+        topAffectedReceptors,
+        curIdx,
+        curTraj,
+        frontPoint,
+        full24hTipLoop,
+        activeTrailPoints,
+        receptorCorridors,
+        intersectingHighDensityReceptors: [],
+      };
+    }
+
+    const toMetersXY = (pt: LatLngPoint, ref: LatLngPoint) => {
+      const latFactor = 111320;
+      const lngFactor = 111320 * Math.cos((ref.lat * Math.PI) / 180);
+      return {
+        x: (pt.lng - ref.lng) * lngFactor,
+        y: (pt.lat - ref.lat) * latFactor,
+      };
+    };
+    const pointToSegmentDistMeters = (
+      p: LatLngPoint,
+      a: LatLngPoint,
+      b: LatLngPoint
+    ): number => {
+      const pM = toMetersXY(p, originSource.position);
+      const aM = toMetersXY(a, originSource.position);
+      const bM = toMetersXY(b, originSource.position);
+      const abx = bM.x - aM.x;
+      const aby = bM.y - aM.y;
+      const abLenSq = abx * abx + aby * aby;
+      if (abLenSq < 1e-3) {
+        return Math.hypot(pM.x - aM.x, pM.y - aM.y);
+      }
+      const t = Math.max(
+        0,
+        Math.min(1, ((pM.x - aM.x) * abx + (pM.y - aM.y) * aby) / abLenSq)
+      );
+      const projX = aM.x + t * abx;
+      const projY = aM.y + t * aby;
+      return Math.hypot(pM.x - projX, pM.y - projY);
+    };
+
+    const intersectingHighDensityReceptors = receptors
+      .filter(
+        (rec) =>
+          (rec.residentCountEstimate ?? 0) >= 60 ||
+          rec.category === 'residential_block' ||
+          /børnehave|skole|institution|vuggestue/i.test(rec.name)
+      )
+      .map((rec) => {
+        const distToPathMeters = Math.round(
+          pointToSegmentDistMeters(rec.center, originSource.position, frontPoint)
+        );
+        const exp = receptorExposures.find((e) => e.receptorId === rec.id);
+        const sumQuotient = exp?.sumQuotient ?? 0;
+        const residentCount = rec.residentCountEstimate ?? 80;
+        const isIntersected =
+          distToPathMeters <= 125 || (distToPathMeters <= 175 && sumQuotient >= 0.5);
+        return {
+          receptor: rec,
+          distToPathMeters,
+          residentCount,
+          sumQuotient,
+          isCritical: sumQuotient >= 1.0 || distToPathMeters <= 80,
+          isIntersected,
+        };
+      })
+      .filter((item) => item.isIntersected)
+      .sort((a, b) => a.distToPathMeters - b.distToPathMeters);
+
     return {
       originSource,
       sourceTrajectories,
@@ -1330,8 +2665,15 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
       full24hTipLoop,
       activeTrailPoints,
       receptorCorridors,
+      intersectingHighDensityReceptors,
     };
-  }, [sources, selectedSourceId, puff24h, plumeRouteProgress]);
+  }, [
+    plumeRouteStaticBase,
+    plumeRouteProgress,
+    isAnimatingPlumeRoute,
+    receptors,
+    receptorExposures,
+  ]);
 
   // Continuous 60fps Animation Loop for 6-Hour Dust Movement Forecast (+0t -> +6t)
   useEffect(() => {
@@ -1395,11 +2737,12 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
       return [...leftSide, ...rightSide.reverse()]; // Fixed 14-vertex polygon for smooth vertex-to-vertex morphing
     };
 
-    const activeSources = sources.filter((s) => s.active);
+    const activeSources = visibleSources.filter((s) => s.active);
     const originSource =
       activeSources.find((s) => s.id === selectedSourceId) ||
       activeSources.find((s) => s.code === 'BLOK-1') ||
       activeSources[0] ||
+      visibleSources[0] ||
       sources[0];
 
     const startHrIdx = currentWeather.hourIndex;
@@ -2268,7 +3611,16 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
   };
 
   const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (mapClickMode === 'none' || !svgRef.current) return;
+    if (!svgRef.current) return;
+    if (isLeakPinDropMode && waterMainTelemetry) {
+      const rect = svgRef.current.getBoundingClientRect();
+      const relX = ((e.clientX - rect.left) / rect.width) * VIEW_W;
+      const relY = ((e.clientY - rect.top) / rect.height) * VIEW_H;
+      const pt = unprojectPx(relX, relY);
+      handlePlaceVirtualLeakPinAtPoint(pt);
+      return;
+    }
+    if (mapClickMode === 'none') return;
     const rect = svgRef.current.getBoundingClientRect();
     const relX = ((e.clientX - rect.left) / rect.width) * VIEW_W;
     const relY = ((e.clientY - rect.top) / rect.height) * VIEW_H;
@@ -2390,6 +3742,57 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
     []
   );
 
+  // Memoized SVG Geometry Projections (decoupled from timeline slider / weather updates during playback)
+  const memoizedSvgBaseGeometry = useMemo(() => {
+    const sf = Math.pow(2, zoom - 17);
+    const pxLat = 195000 * sf;
+    const pxLng = 110800 * sf;
+    const proj = (pt: LatLngPoint) => ({
+      x: 500 + (pt.lng - RINGPARKEN_CENTER.lng) * pxLng + panOffsetPx.x,
+      y: 360 + (RINGPARKEN_CENTER.lat - pt.lat) * pxLat + panOffsetPx.y,
+    });
+    const toSvgPts = (pts: LatLngPoint[]) =>
+      pts
+        .map((p) => {
+          const { x, y } = proj(p);
+          return `${x.toFixed(1)},${y.toFixed(1)}`;
+        })
+        .join(' ');
+
+    const streets = streetNetwork.map((st) => {
+      const pts = st.pts.map(proj);
+      const d = pts
+        .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+        .join(' ');
+      const mid = pts[1] || pts[0];
+      return {
+        name: st.name,
+        strokeWidth: st.width * sf,
+        d,
+        midX: mid.x,
+        midY: mid.y,
+      };
+    });
+
+    const receptorSvgPointsById: Record<string, string> = {};
+    for (const rec of receptors) {
+      receptorSvgPointsById[rec.id] = toSvgPts(rec.polygon);
+    }
+
+    const buildingsProjected = visibleBuildings.map((b) => ({
+      building: b,
+      meta: BUILDING_CATEGORY_METADATA[b.category],
+      cPx: proj(b.center),
+      points: toSvgPts(b.footprint),
+    }));
+
+    return {
+      streets,
+      receptorSvgPointsById,
+      buildingsProjected,
+    };
+  }, [streetNetwork, receptors, visibleBuildings, zoom, panOffsetPx]);
+
   // Auto-pan tactical canvas when selecting a receptor outside current viewport
   useEffect(() => {
     if (!selectedReceptorId) return;
@@ -2461,14 +3864,14 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               <div
                 className={`relative w-12 h-12 rounded-full border flex items-center justify-center shrink-0 ${
                   currentWeather.windSpeed10m > 10
-                    ? 'border-rose-300 bg-rose-600/80 animate-pulse'
-                    : 'border-slate-700 bg-slate-900/90'
+                    ? 'border-rose-400 bg-rose-950/90'
+                    : 'border-[var(--border-subtle)] bg-[var(--surface-card)]'
                 }`}
               >
-                <span className="absolute top-0.5 text-[9px] font-mono text-slate-200">N</span>
-                <span className="absolute bottom-0.5 text-[9px] font-mono text-slate-300">S</span>
-                <span className="absolute right-1 text-[9px] font-mono text-slate-300">Ø</span>
-                <span className="absolute left-1 text-[9px] font-mono text-slate-300">V</span>
+                <span className="absolute top-0.5 text-[11px] font-mono text-slate-200">N</span>
+                <span className="absolute bottom-0.5 text-[11px] font-mono text-slate-300">S</span>
+                <span className="absolute right-1 text-[11px] font-mono text-slate-300">Ø</span>
+                <span className="absolute left-1 text-[11px] font-mono text-slate-300">V</span>
                 <div
                   className="w-8 h-8 flex items-center justify-center transition-transform duration-300"
                   style={{ transform: `rotate(${plumeDirectionDeg}deg)` }}
@@ -2494,8 +3897,8 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   <span
                     className={
                       currentWeather.windSpeed10m > 10
-                        ? 'bg-rose-600 text-white font-bold px-2 py-0.5 rounded border border-rose-200 animate-pulse flex items-center gap-1 shadow-[0_0_12px_rgba(225,29,72,0.85)]'
-                        : 'text-cyan-400 font-semibold'
+                        ? 'bg-rose-600 text-white font-bold px-2 py-0.5 rounded border border-rose-300 flex items-center gap-1'
+                        : 'text-sky-300 font-semibold'
                     }
                   >
                     {currentWeather.windSpeed10m > 10 && (
@@ -2505,7 +3908,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       Vind: {currentWeather.windSpeed10m} m/s (stød {currentWeather.windGusts10m} m/s)
                     </span>
                     {currentWeather.windSpeed10m > 10 && (
-                      <span className="ml-1 px-1 py-0.2 rounded bg-slate-950/90 text-rose-200 text-[10px] font-extrabold uppercase">
+                      <span className="ml-1 px-1 py-0.2 rounded bg-slate-950/90 text-rose-200 text-[11px] font-extrabold uppercase">
                         ⚠ HØJRISIKO (&gt; 10 m/s)
                       </span>
                     )}
@@ -2529,7 +3932,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   <button
                     type="button"
                     onClick={handleExportSelectedDayWeatherJson}
-                    className={`ml-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 border transition-colors cursor-pointer ${
+                    className={`ml-1 px-2 py-0.5 rounded text-[11px] font-mono font-bold flex items-center gap-1 border transition-colors cursor-pointer ${
                       weatherJsonExportedJustNow
                         ? 'bg-emerald-400 text-slate-950 border-white'
                         : 'bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-200 border-emerald-400/60'
@@ -2561,7 +3964,14 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             hours={weatherHours}
             currentWeather={currentWeather}
             dateIso={currentWeather.isoTime ? currentWeather.isoTime.slice(0, 10) : puff24h.dateIso}
-            onSelectHour={onSelectHourFromPeak}
+            onSelectHour={
+              onSelectHourFromPeak
+                ? (hr) => {
+                    myceliumLiveAlerts.notifyTimelineScrub();
+                    onSelectHourFromPeak(hr);
+                  }
+                : undefined
+            }
             onExportWeatherJson={handleExportSelectedDayWeatherJson}
             jsonExportedJustNow={weatherJsonExportedJustNow}
             variant="map-hud-box"
@@ -2631,20 +4041,20 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             onClick={handleSaveMapSnapshotToObservations}
             className={`px-2.5 py-1.5 rounded text-xs font-mono font-extrabold flex items-center gap-1.5 transition-all whitespace-nowrap shrink-0 cursor-pointer border shadow-sm ${
               mapSnapshotSavedJustNow
-                ? 'bg-emerald-400 text-slate-950 border-white ring-2 ring-emerald-300'
-                : 'bg-amber-400 hover:bg-amber-300 text-slate-950 border-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.45)]'
+                ? 'bg-emerald-400 text-slate-950 border-emerald-200 ring-1 ring-emerald-300'
+                : 'bg-amber-400 hover:bg-amber-300 text-slate-950 border-amber-200'
             }`}
             title={`Snapshot Map — Gem aktuelt 2D kort-udsnit (Zoom Z:${zoom.toFixed(1)}, geografiske grænser/bounds og aktive kortlag) som tidsstemplet retsmedicinsk observation i Algedonisk Observationslog`}
           >
             {mapSnapshotSavedJustNow ? (
               <>
                 <Check className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                <span>✓ Snapshot Map Gemt i Beviser (Z:{zoom.toFixed(1)})!</span>
+                <span>Snapshot Map Gemt i Beviser (Z:{zoom.toFixed(1)})</span>
               </>
             ) : (
               <>
                 <Camera className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                <span>📸 Snapshot Map (Gem Kort som Bevis)</span>
+                <span>Snapshot Map (Gem Kort som Bevis)</span>
               </>
             )}
           </button>
@@ -2662,11 +4072,11 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             }`}
             title={`Fit to Receptors — Tilpas automatisk 2D kort-viewport (zoom og centrering) så alle ${receptors.length} aktive receptorzoner er synlige`}
           >
-            <Maximize2 className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
+            <Target className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
             <span>
               {fittedToReceptorsJustNow
-                ? `✓ Fit to Receptors (${receptors.length} Receptorer)`
-                : `🎯 Fit to Receptors (${receptors.length})`}
+                ? `Fit to Receptors (${receptors.length} Receptorer)`
+                : `Fit to Receptors (${receptors.length})`}
             </span>
           </button>
 
@@ -2692,11 +4102,11 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               onChange={(e) =>
                 handleSelectHeatmapLayerMode(e.target.value as TacticalHeatmapLayerMode)
               }
-              className="bg-slate-900 text-cyan-200 border border-slate-700 rounded px-1.5 py-0.5 text-[10.5px] font-mono font-bold cursor-pointer focus:outline-none focus:border-cyan-400"
+              className="bg-slate-900 text-cyan-200 border border-slate-700 rounded px-1.5 py-0.5 text-[11px] font-mono font-bold cursor-pointer focus:outline-none focus:border-cyan-400"
             >
-              <option value="asbestos">asbestos (☣ Asbest)</option>
-              <option value="dust_deposition">dust_deposition (🌫️ Støv µg/m²)</option>
-              <option value="noise_contour">noise_contour (🔊 Støjkontur dB)</option>
+              <option value="asbestos">asbestos (Asbest)</option>
+              <option value="dust_deposition">dust_deposition (Støv µg/m²)</option>
+              <option value="noise_contour">noise_contour (Støjkontur dB)</option>
             </select>
 
             <button
@@ -2710,7 +4120,8 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               }`}
               title="Skift til 'asbestos' heatmap-lag (<1997 asbest-fiberdeposition i fibre/m² & fibre/cm³)"
             >
-              <span>☣ asbestos</span>
+              <Biohazard className="w-3 h-3 shrink-0" />
+              <span>asbestos</span>
             </button>
 
             <button
@@ -2725,7 +4136,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               title="Skift til 'dust_deposition' heatmap-lag (24t kumulativ støv-, bly- & PCB-deponering i µg/m²)"
             >
               <Flame className="w-3 h-3 shrink-0" />
-              <span>🌫️ dust_deposition (µg/m²)</span>
+              <span>dust_deposition (µg/m²)</span>
             </button>
 
             <button
@@ -2740,13 +4151,13 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               title="Skift til 'noise_contour' heatmap-lag (vind-refrakterede akustiske støjkonturer i dB(A) iht. ISO 9613-2 / Nord2000)"
             >
               <Volume2 className="w-3 h-3 shrink-0" />
-              <span>🔊 noise_contour (dB)</span>
+              <span>noise_contour (dB)</span>
             </button>
 
             {isHeatmapLayerMenuOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-80 rounded-md bg-[#0B0E17] border-2 border-cyan-400/80 shadow-2xl p-2.5 z-50 font-mono text-xs space-y-2">
+              <div className="absolute right-0 top-full mt-1.5 w-80 rounded-md bg-[var(--surface-overlay)] border border-[var(--border-subtle)] shadow-lg p-2.5 z-50 font-mono text-xs space-y-2">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                  <span className="text-[10.5px] font-extrabold uppercase text-cyan-300">
+                  <span className="text-[11px] font-extrabold uppercase text-cyan-300">
                     Vælg Aktivt 2D Heatmap-Lag
                   </span>
                   <button
@@ -2765,7 +4176,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       title: "1. 'asbestos' — Asbest-Risikolag (<1997)",
                       subtitle:
                         'Bygningsmateriale-alder (<1997), asbest-fiberdeposition (fibre/m²) og 2026-grænseværdi (0,003 fibre/cm³).',
-                      badge: '☣ Fibre/m²',
+                      badge: 'Fibre/m²',
                       activeClass: 'border-emerald-400 bg-emerald-950/50 text-emerald-200',
                     },
                     {
@@ -2803,11 +4214,11 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-bold text-[11px] text-white">{item.title}</span>
-                        <span className="px-1.5 py-0.2 rounded bg-slate-950 border border-slate-700 text-[9.5px] font-bold">
+                        <span className="px-1.5 py-0.2 rounded bg-slate-950 border border-slate-700 text-[11px] font-bold">
                           {item.badge}
                         </span>
                       </div>
-                      <p className="text-[10px] text-slate-300 leading-snug">{item.subtitle}</p>
+                      <p className="text-[11px] text-slate-300 leading-snug">{item.subtitle}</p>
                     </button>
                   );
                 })}
@@ -2825,7 +4236,8 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             }`}
             title="Vis/skjul Asbest-Risikolag (<1997 bygningsmateriale-alder, fiberdeposition & sundhedsrisiko)"
           >
-            <span>☣ Asbest-Risikolag (&lt;1997)</span>
+            <Biohazard className="w-3.5 h-3.5 shrink-0" />
+            <span>Asbest-Risikolag (&lt;1997)</span>
           </button>
 
           <button
@@ -2838,7 +4250,8 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             }`}
             title="Aktivér et visuelt 24-timers akkumuleret støv- og asbestpartikel-heatmap baseret på puff-simuleringen"
           >
-            <span>🔥 24t Akkumuleret Støv &amp; Asbest Heatmap (Puff)</span>
+            <Flame className="w-3.5 h-3.5 shrink-0" />
+            <span>24t Akkumuleret Støv &amp; Asbest Heatmap (Puff)</span>
           </button>
 
           <button
@@ -2855,7 +4268,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
           >
             <Droplets className="w-3.5 h-3.5 text-cyan-300" />
             <span>
-              💧 Grundvands-Udvaskning ({groundwaterLeachingData.globalSoilSaturationPct}% Mætning ·{' '}
+              Grundvands-Udvaskning ({groundwaterLeachingData.globalSoilSaturationPct}% Mætning ·{' '}
               {groundwaterLeachingData.effectiveAccumulatedPrecipMm} mm)
             </span>
           </button>
@@ -2867,8 +4280,8 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 onClick={onToggleHeatmapComparison}
                 className={`px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1.5 transition-colors whitespace-nowrap ${
                   showHeatmapComparison
-                    ? 'bg-gradient-to-r from-cyan-500/35 via-fuchsia-500/35 to-amber-500/35 text-white border border-amber-400 shadow-md'
-                    : 'bg-slate-900 text-amber-300 border border-amber-500/40 hover:bg-slate-800'
+                    ? 'bg-amber-400/20 text-white border border-amber-400'
+                    : 'bg-[var(--surface-card)] text-amber-300 border border-amber-500/40 hover:bg-[var(--surface-overlay)]'
                 }`}
                 title="Vis/skjul Heatmap-sammenligning mellem T_A og T_B på kortet"
               >
@@ -2932,8 +4345,8 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               onClick={() => setShow6hDustForecast((v) => !v)}
               className={`px-2.5 py-1 rounded text-xs font-mono font-bold flex items-center gap-1.5 transition-colors whitespace-nowrap ${
                 show6hDustForecast
-                  ? 'bg-gradient-to-r from-cyan-500 to-amber-400 text-slate-950 shadow-sm'
-                  : 'bg-slate-900 text-cyan-300 hover:text-white'
+                  ? 'bg-amber-400 text-slate-950'
+                  : 'bg-[var(--surface-card)] text-sky-300 hover:text-white'
               }`}
               title="Visuel 2D-animation på kortet, der simulerer støvets bevægelse over de næste 6 timer (+0t til +6t) baseret på den aktuelle vindprognose"
             >
@@ -3030,6 +4443,247 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             }`}
           >
             Matrikel-Labels
+          </button>
+
+          <button
+            type="button"
+            data-testid="toggle-autonomous-receptor-mesh-btn"
+            onClick={() => setShowAutonomousMesh((v) => !v)}
+            className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              showAutonomousMesh
+                ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/60'
+                : 'bg-slate-900 text-slate-400 border border-slate-800'
+            }`}
+            title={`Vis/skjul forbundet netværk af Autonome Noder (${autonomousMesh.totalNodes} receptorer · ${autonomousMesh.totalEdges} forbindelser) med ZKP-identifikation og automatisk Nabotest`}
+          >
+            <Network className="w-3.5 h-3.5 shrink-0" />
+            <span className="font-mono tabular-nums">
+              Autonome Noder ({autonomousMesh.totalNodes}/{autonomousMesh.totalEdges})
+            </span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="map-toolbar-mycelium-live-toggle-btn"
+            onClick={myceliumLiveAlerts.toggleLiveEnabled}
+            className={`px-2.5 py-1.5 rounded text-xs font-mono font-bold flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              myceliumLiveAlerts.isLiveEnabled
+                ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/70'
+                : 'bg-slate-900 text-slate-400 border border-slate-800'
+            }`}
+            title="Skift Global Live Varsling ON/OFF (ISA-18.2 Calmer Defaults & Gate 1 Filter)"
+          >
+            {myceliumLiveAlerts.isLiveEnabled ? (
+              <Bell className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+            ) : (
+              <BellOff className="w-3.5 h-3.5 shrink-0" />
+            )}
+            <span className="tabular-nums">
+              Live Varsling {myceliumLiveAlerts.isLiveEnabled ? 'ON' : 'OFF'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="map-toolbar-open-mycelium-center-btn"
+            onClick={() => {
+              if (!showMyceliumAlertCenter) {
+                setShowMyceliumAlertCenter(true);
+                setMapWindowStates((prev) => ({
+                  ...prev,
+                  mycelium_alert_center: { ...prev.mycelium_alert_center, isMinimized: false },
+                }));
+                handleFocusMapWindow('mycelium_alert_center');
+              } else if (mapWindowStates.mycelium_alert_center.isMinimized) {
+                setMapWindowStates((prev) => ({
+                  ...prev,
+                  mycelium_alert_center: { ...prev.mycelium_alert_center, isMinimized: false },
+                }));
+                handleFocusMapWindow('mycelium_alert_center');
+              } else if (mapWindowStates.mycelium_alert_center.isReleased) {
+                handleFocusMapWindow('mycelium_alert_center');
+              } else {
+                setShowMyceliumAlertCenter(false);
+              }
+            }}
+            className={`px-2.5 py-1.5 rounded text-xs font-mono font-bold flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              showMyceliumAlertCenter
+                ? 'bg-cyan-500/25 text-cyan-100 border border-cyan-300 shadow-sm'
+                : 'bg-slate-900 text-cyan-200 border border-cyan-500/50 hover:bg-slate-800'
+            }`}
+            title="Åbn/fokusér Fællesskabets Mycelienetværk (System B) Kontrol-, Simulerings- & CiK 2.0 Sankey-Center"
+          >
+            <Network className="w-3.5 h-3.5 shrink-0" />
+            <span>Mycelie-Netværk</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="toggle-map-neighbor-pressure-waves-btn"
+            onClick={() => {
+              if (!isHighWindAlert && firstHighWindHourInDataset && onSelectHourFromPeak) {
+                setShowMapBlockPressureWaves(true);
+                onSelectHourFromPeak(firstHighWindHourInDataset.hourIndex);
+              } else {
+                setShowMapBlockPressureWaves((v) => !v);
+              }
+            }}
+            className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              isMapBlockPressureWaveActive
+                ? 'bg-rose-500/25 text-rose-200 border border-rose-400/70 font-bold'
+                : isHighWindAlert
+                ? 'bg-slate-900 text-slate-400 border border-slate-800'
+                : 'bg-slate-900 text-amber-300/90 border border-amber-500/40'
+            }`}
+            title={
+              isHighWindAlert
+                ? `CSS-trykbølgeanimation pr. naboblok er AKTIV ved v = ${currentWeather.windSpeed10m.toFixed(
+                    1
+                  )} m/s (> 10 m/s). Klik for at vise/skjule på kortet.`
+                : firstHighWindHourInDataset
+                ? `Trykbølger på kortet aktiveres specifikt når vindhastigheden overstiger 10 m/s (aktuel vind: ${currentWeather.windSpeed10m.toFixed(
+                    1
+                  )} m/s). Klik for at hoppe til kl. ${
+                    firstHighWindHourInDataset.hourLabel
+                  } (${firstHighWindHourInDataset.windSpeed10m.toFixed(1)} m/s).`
+                : `Trykbølger på Ringparken-kortet aktiveres specifikt når vindhastigheden overstiger 10 m/s (aktuel vind: ${currentWeather.windSpeed10m.toFixed(
+                    1
+                  )} m/s).`
+            }
+          >
+            <Volume2 className="w-3.5 h-3.5 shrink-0" />
+            <span className="font-mono tabular-nums">
+              {isMapBlockPressureWaveActive
+                ? `Trykbølger >10 m/s: AKTIV (${currentWeather.windSpeed10m.toFixed(1)} m/s)`
+                : !isHighWindAlert && firstHighWindHourInDataset
+                ? `Trykbølger (>10 m/s · Hop kl. ${firstHighWindHourInDataset.hourLabel})`
+                : 'Trykbølger (>10 m/s: Afventer)'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="toggle-source-85db-wavefronts-btn"
+            onClick={() => setShowSource85DbWavefronts((v) => !v)}
+            className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              showSource85DbWavefronts && sourceWavefrontTargets.length > 0
+                ? 'bg-rose-500/20 text-rose-200 border border-rose-400/70 font-semibold'
+                : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+            }`}
+            title="Vis/skjul CSS-animeret akustisk trykbølge (> 85 dB) fra aktive nedrivningskilder ind mod støj-følsomme nabozoner"
+          >
+            <Waves className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+            <span className="font-mono tabular-nums">
+              Støjbølger &gt;85 dB ({sourceWavefrontTargets.length})
+            </span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="toggle-high-gust-correlation-hud-btn"
+            onClick={() => {
+              if (!isHighGustAlert && firstHighGustHourInDataset && onSelectHourFromPeak) {
+                setShowHighWindCorrelationHud(true);
+                onSelectHourFromPeak(firstHighGustHourInDataset.hourIndex);
+              } else {
+                setShowHighWindCorrelationHud((v) => !v);
+              }
+            }}
+            className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              isHighGustAlert && showHighWindCorrelationHud
+                ? 'bg-amber-500/25 text-amber-200 border border-amber-400/80 font-bold'
+                : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+            }`}
+            title="High-Wind Dispersion Correlation (> 12 m/s vindstød) med automatisk fremhævning af berørte receptorer"
+          >
+            <Wind className="w-3.5 h-3.5 shrink-0 text-amber-300" />
+            <span className="font-mono tabular-nums">
+              {isHighGustAlert
+                ? `Vindstød >12 m/s (${currentWeather.windGusts10m.toFixed(1)})`
+                : firstHighGustHourInDataset
+                ? `Vindstød >12 m/s (Hop kl. ${firstHighGustHourInDataset.hourLabel})`
+                : 'Vindstød >12 m/s'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="toggle-emergency-evac-flow-btn"
+            onClick={() => setShowEvacuationFlowAnimation((v) => !v)}
+            className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              showEvacuationFlowAnimation
+                ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/70 font-semibold'
+                : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+            }`}
+            title="Vis/skjul Emergency Evacuation Flow med dynamisk flugthastighed (m/s) beregnet ud fra terrænhældning og lokal støvfanetæthed"
+          >
+            <Navigation className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+            <span className="font-mono tabular-nums">
+              Flugtstrøm ({evacuationFlowSegments[0]?.speedMs.toFixed(2) ?? '1.20'} m/s)
+            </span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="toggle-neighbor-complaint-density-btn"
+            onClick={() => setShowComplaintDensityOverlay((v) => !v)}
+            className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              showComplaintDensityOverlay
+                ? 'bg-rose-500/20 text-rose-200 border border-rose-400/70 font-semibold'
+                : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+            }`}
+            title="Vis/skjul varmekort over tætheden af Registrerede Naboklager på tværs af Ringparkens nedrivningssektorer og kortblokke"
+          >
+            <Flame className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+            <span className="font-mono tabular-nums">
+              Naboklage-Tæthed ({complaintDensitySummary.totalFilteredComplaints})
+            </span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="toggle-2d-wind-noise-heatmap-btn"
+            onClick={() => {
+              setShowWindNoiseHeatmapLayer((prev) => {
+                const next = !prev;
+                if (next) setPreferTacticalCanvas(true);
+                return next;
+              });
+            }}
+            className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              showWindNoiseHeatmapLayer
+                ? 'bg-amber-500/25 text-amber-200 border border-amber-400/80 font-bold shadow-xs'
+                : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+            }`}
+            title="2D Taktisk Kort: Vis/skjul varmegraf over støjniveauer (dB) korreleret med vindretning, så de mest udsatte naboblokke fremhæves ved specifikke vindvinkler"
+          >
+            <Volume2 className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+            <span className="font-mono tabular-nums">
+              Vind-Støj Varmegraf ({Math.round(effectiveNoiseWindFromDeg)}°)
+            </span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="toggle-weather-correlation-heatmap-btn"
+            onClick={() => {
+              setShowWeatherCorrelationHeatmapLayer((prev) => {
+                const next = !prev;
+                if (next) setShowWeatherCorrelationHud(true);
+                return next;
+              });
+            }}
+            className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              showWeatherCorrelationHeatmapLayer
+                ? 'bg-orange-500/25 text-orange-100 border border-orange-400/80 font-bold shadow-xs'
+                : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+            }`}
+            title="Vejr-Korrelations Heatmap: Fremhæver automatisk geografiske områder hvor korrelationen mellem vindstød og støvnedfald (S-kvotient) > 0,80 over de sidste 6 timer"
+          >
+            <Wind className="w-3.5 h-3.5 shrink-0 text-orange-300" />
+            <span className="font-mono tabular-nums">
+              Vejr-Korrelations Heatmap ({weatherCorrelationHeatmapData.highlightedAreas.length} r&gt;0,8)
+            </span>
           </button>
 
           <button
@@ -3142,13 +4796,13 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     <button
                       type="button"
                       onClick={() => shiftDateByDays(-1)}
-                      className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[10px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[11px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
                       title="Forrige dato (−1 dag)"
                     >
                       −1d
                     </button>
                     <label className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/90 border border-cyan-400/60 hover:border-cyan-300 cursor-pointer">
-                      <span className="text-[11px]">📅</span>
+                      <Calendar className="w-3 h-3 text-cyan-300 shrink-0" />
                       <input
                         type="date"
                         value={activeDateIso}
@@ -3162,7 +4816,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     <button
                       type="button"
                       onClick={() => shiftDateByDays(1)}
-                      className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[10px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[11px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
                       title="Næste dato (+1 dag)"
                     >
                       +1d
@@ -3170,22 +4824,24 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     <button
                       type="button"
                       onClick={() => onChangeDateIso(new Date().toISOString().slice(0, 10))}
-                      className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-amber-400 hover:text-slate-950 text-[10px] font-bold text-amber-200 border border-amber-500/40 transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-amber-400 hover:text-slate-950 text-[11px] font-bold text-amber-200 border border-amber-500/40 transition-colors cursor-pointer"
                       title="Skift til dags dato (I dag)"
                     >
                       I dag
                     </button>
                   </div>
                 ) : (
-                  <span className="text-white font-extrabold">
-                    📅 {activeDateIso}
+                  <span className="text-white font-extrabold inline-flex items-center gap-1 tabular-nums">
+                    <Calendar className="w-3 h-3 text-cyan-300 shrink-0" />
+                    <span>{activeDateIso}</span>
                   </span>
                 )}
                 <span className="text-cyan-400">·</span>
-                <span className="text-amber-300 font-extrabold">
-                  🕒 kl. {currentWeather.hourLabel}
+                <span className="text-amber-300 font-extrabold inline-flex items-center gap-1 tabular-nums">
+                  <Clock className="w-3 h-3 shrink-0" />
+                  <span>kl. {currentWeather.hourLabel}</span>
                 </span>
-                <span className="text-slate-400 text-[10px] hidden sm:inline">
+                <span className="text-slate-400 text-[11px] hidden sm:inline">
                   ({currentWeather.temperature2m.toFixed(1)}°C · {currentWeather.windSpeed10m.toFixed(1)} m/s)
                 </span>
                 {onSelectHourFromPeak && (
@@ -3193,7 +4849,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     <button
                       type="button"
                       onClick={() => onSelectHourFromPeak((currentWeather.hourIndex + 23) % 24)}
-                      className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[10px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[11px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
                       title="Forrige time (-1t)"
                     >
                       −1t
@@ -3201,7 +4857,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     <button
                       type="button"
                       onClick={() => onSelectHourFromPeak((currentWeather.hourIndex + 1) % 24)}
-                      className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[10px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[11px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
                       title="Næste time (+1t)"
                     >
                       +1t
@@ -3259,7 +4915,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     key={catCode}
                     type="button"
                     onClick={() => onToggleCategoryFilter(catCode)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border flex items-center gap-1 transition-colors cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border flex items-center gap-1 transition-colors cursor-pointer ${
                       isVis
                         ? 'bg-slate-900 text-white border-slate-600'
                         : 'bg-slate-950/60 text-slate-500 border-slate-800 opacity-55'
@@ -3276,6 +4932,34 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             </div>
           )}
 
+          <CompactSimulerMenu
+            showWaterMainLayer={showWaterMainLayer}
+            onToggleWaterMainLayer={onToggleWaterMainLayer}
+            showLerBuffer={showLerBuffer}
+            onToggleLerBuffer={onToggleLerBuffer}
+            hasSteelRoadPlates={hasSteelRoadPlates || waterMainTelemetry?.hasSteelRoadPlates}
+            onToggleSteelRoadPlates={onToggleSteelRoadPlates}
+            simulatedPipeRuptureActive={
+              simulatedPipeRuptureActive || waterMainTelemetry?.simulatedPipeRuptureActive
+            }
+            onToggleSimulatedPipeRupture={onToggleSimulatedPipeRupture}
+            isS3ValveLockoutActive={
+              isS3ValveLockoutActive ||
+              Boolean(
+                waterMainTelemetry?.valves.some((v) => v.code === 'V-VEST' && v.status === 'closed')
+              )
+            }
+            onToggleS3ValveLockout={onToggleS3ValveLockout}
+            hasVirtualLeakPin={Boolean(effectiveVirtualLeakPinPoint)}
+            onToggleVirtualLeakPinQuick={handleToggleVirtualLeakPinQuick}
+            sources={sources}
+            onToggleSourceActive={onToggleSourceActive}
+            onIsolateNearbyMachinery={handleTriggerIsolateNearbyMachinery}
+            onRestoreAllMachinery={onRestoreAllMachinery}
+            pipePpvMmPerSec={waterMainTelemetry?.pipePpvMmPerSec}
+            align="right"
+          />
+
           {/* 'Kun Kort' Button + Top-Right 'Afslut' Button when 'Kun Kort' is active */}
           {!effectiveMapOnly ? (
             <button
@@ -3284,14 +4968,14 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               className="px-2.5 py-1.5 rounded text-xs font-mono font-extrabold flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 border shadow-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-200 cursor-pointer"
               title="Kun Kort — Vis kun kortet med filtre og skjul øvrige paneler"
             >
-              <Maximize2 className="w-3.5 h-3.5 text-slate-950" />
-              <span>🗺️ Kun Kort</span>
+              <Map className="w-3.5 h-3.5 text-slate-950" />
+              <span>Kun Kort</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={handleToggleMapOnly}
-              className="ml-auto px-3 py-1.5 rounded text-xs font-mono font-extrabold flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 border-2 shadow-xl bg-rose-600 hover:bg-rose-500 text-white border-rose-200 cursor-pointer"
+              className="ml-auto px-3 py-1.5 rounded text-xs font-mono font-extrabold flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 border shadow-sm bg-rose-600 hover:bg-rose-500 text-white border-rose-300 cursor-pointer"
               title="Afslut 'Kun Kort' visning (Esc)"
             >
               <X className="w-4 h-4 text-white" />
@@ -3313,7 +4997,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             onMouseDown={() => asbWin.isReleased && handleFocusMapWindow('asbestos_risk_heatmap')}
             className={`${
               asbWin.isReleased ? 'fixed ring-2 ring-emerald-400' : 'absolute top-20 right-3 z-20'
-            } max-w-md bg-[#0B0E17]/95 border-2 border-emerald-400/75 rounded-md p-3 shadow-2xl pointer-events-auto space-y-2 transition-opacity duration-300 ease-out`}
+            } max-w-md bg-[var(--surface-overlay)] border border-[var(--border-subtle)] border-l-4 border-l-emerald-400 rounded-md p-3 shadow-lg pointer-events-auto space-y-2 transition-opacity duration-300 ease-out`}
             style={
               asbWin.isReleased
                 ? {
@@ -3327,7 +5011,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
           >
             <MapOverlayWindowControlStrip
               windowId="asbestos_risk_heatmap"
-              title="☣ Asbest-Risikolag Heatmap (<1997 Materialealder)"
+              title="Asbest-Risikolag Heatmap (<1997 Materialealder)"
               badgeText={`Sandsynlighed: ${activeAsbZone.probabilityPct}%`}
               accentColorClass="text-emerald-300"
               state={asbWin}
@@ -3347,7 +5031,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         key={z.sourceId}
                         type="button"
                         onClick={() => onSelectSource(z.sourceId)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-colors ${
+                        className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold transition-colors ${
                           isSel
                             ? 'bg-emerald-400 text-slate-950 font-bold'
                             : 'bg-slate-900 text-slate-300 border border-slate-800 hover:border-emerald-400/50'
@@ -3375,9 +5059,9 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-slate-800/90 font-mono text-[10px]">
+                <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-slate-800/90 font-mono text-[11px]">
                   <div className="p-1.5 bg-slate-950 rounded border border-slate-800">
-                    <div className="text-[9px] text-slate-400">LUFTKONC. (2026-GV)</div>
+                    <div className="text-[11px] text-slate-400">LUFTKONC. (2026-GV)</div>
                     <div
                       className={`font-bold ${
                         activeAsbZone.exceeds2026Limit ? 'text-rose-400' : 'text-emerald-300'
@@ -3387,13 +5071,13 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     </div>
                   </div>
                   <div className="p-1.5 bg-slate-950 rounded border border-slate-800">
-                    <div className="text-[9px] text-slate-400">FIBERDEPOSITION</div>
+                    <div className="text-[11px] text-slate-400">FIBERDEPOSITION</div>
                     <div className="font-bold text-emerald-300">
                       {activeAsbZone.estimatedDepositionFibreM2.toLocaleString('da-DK')} fibre/m²
                     </div>
                   </div>
                   <div className="p-1.5 bg-slate-950 rounded border border-slate-800">
-                    <div className="text-[9px] text-slate-400">NEDVINDS RÆKKEVIDDE</div>
+                    <div className="text-[11px] text-slate-400">NEDVINDS RÆKKEVIDDE</div>
                     <div className="font-bold text-white">
                       {activeAsbZone.coreLengthM}–{activeAsbZone.haloLengthM} m ({plumeDirectionDeg}°)
                     </div>
@@ -3421,9 +5105,9 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             }
             className={`${
               leachWin.isReleased ? 'fixed ring-2 ring-amber-400' : 'absolute bottom-16 left-3 z-20'
-            } max-w-md bg-[#0B0E17]/95 border-2 rounded-md p-3 shadow-2xl pointer-events-auto space-y-2 transition-opacity duration-300 ease-out ${
+            } max-w-md bg-[var(--surface-overlay)] border border-[var(--border-subtle)] border-l-4 rounded-md p-3 shadow-lg pointer-events-auto space-y-2 transition-opacity duration-300 ease-out ${
               isCritical
-                ? 'border-amber-400/90 shadow-amber-950/50'
+                ? 'border-l-amber-400'
                 : 'border-cyan-400/80 shadow-cyan-950/40'
             }`}
             style={
@@ -3439,7 +5123,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
           >
             <MapOverlayWindowControlStrip
               windowId="groundwater_leaching_heatmap"
-              title="💧⚠ Hydrologisk Udvaskning Heatmap (MBL § 19 / § 27)"
+              title="Hydrologisk Udvaskning Heatmap (MBL § 19 / § 27)"
               badgeText={`${isCritical ? 'KRITISK' : 'HØJ RISIKO'} (${activeLeachZone.maxExceedanceRatio}× GV)`}
               accentColorClass="text-amber-300"
               state={{
@@ -3458,14 +5142,14 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
 
             {/* Hydrological Stress / Rainfall & Soil Saturation Mode Selector */}
             <div className="flex items-center justify-between gap-1 bg-slate-950/90 p-1 rounded border border-slate-800/90">
-              <span className="text-[9px] font-mono uppercase text-slate-400 pl-1">
+              <span className="text-[11px] font-mono uppercase text-slate-400 pl-1">
                 Hydrologi-Model:
               </span>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => setLeachingSimMode('live')}
-                  className={`px-1.5 py-0.5 rounded text-[9.5px] font-mono font-semibold transition-colors ${
+                  className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold transition-colors ${
                     leachingSimMode === 'live'
                       ? 'bg-cyan-500 text-slate-950 font-bold'
                       : 'bg-slate-900 text-slate-300 hover:text-white'
@@ -3476,7 +5160,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 <button
                   type="button"
                   onClick={() => setLeachingSimMode('saturated_rain')}
-                  className={`px-1.5 py-0.5 rounded text-[9.5px] font-mono font-semibold transition-colors ${
+                  className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold transition-colors ${
                     leachingSimMode === 'saturated_rain'
                       ? 'bg-amber-400 text-slate-950 font-bold'
                       : 'bg-slate-900 text-slate-300 hover:text-white'
@@ -3487,7 +5171,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 <button
                   type="button"
                   onClick={() => setLeachingSimMode('cloudburst')}
-                  className={`px-1.5 py-0.5 rounded text-[9.5px] font-mono font-semibold transition-colors ${
+                  className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold transition-colors ${
                     leachingSimMode === 'cloudburst'
                       ? 'bg-rose-500 text-white font-bold'
                       : 'bg-slate-900 text-slate-300 hover:text-white'
@@ -3509,13 +5193,18 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         key={z.sourceId}
                         type="button"
                         onClick={() => onSelectSource(z.sourceId)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-colors ${
+                        className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold transition-colors ${
                           isSel
                             ? 'bg-amber-400 text-slate-950 font-bold'
                             : 'bg-slate-900 text-slate-300 border border-slate-800 hover:border-amber-400/60'
                         }`}
                       >
-                        💧 {z.sourceCode}: Mætning {z.zoneSaturationPct}% ({z.maxExceedanceRatio}× GV)
+                        <span className="inline-flex items-center gap-1">
+                          <Droplets className="w-3 h-3 shrink-0" />
+                          <span>
+                            {z.sourceCode}: Mætning {z.zoneSaturationPct}% ({z.maxExceedanceRatio}× GV)
+                          </span>
+                        </span>
                       </button>
                     );
                   })}
@@ -3523,7 +5212,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
 
                 {/* Soil Saturation Progress Bar & Accumulated Rainfall Metrics */}
                 <div className="p-2 bg-slate-950/90 rounded border border-slate-800 space-y-1.5">
-                  <div className="flex items-center justify-between text-[10.5px] font-mono">
+                  <div className="flex items-center justify-between text-[11px] font-mono">
                     <span className="text-slate-300 font-semibold">
                       Jordens Mætningsgrad ({activeLeachZone.sourceCode}):
                     </span>
@@ -3547,21 +5236,21 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       style={{ width: `${activeLeachZone.zoneSaturationPct}%` }}
                     />
                   </div>
-                  <div className="grid grid-cols-3 gap-1.5 pt-1 font-mono text-[10px]">
+                  <div className="grid grid-cols-3 gap-1.5 pt-1 font-mono text-[11px]">
                     <div className="p-1.5 bg-slate-900/90 rounded border border-slate-800">
-                      <div className="text-[8.5px] text-slate-400">AKKUMULERET NEDBØR</div>
+                      <div className="text-[11px] text-slate-400">AKKUMULERET NEDBØR</div>
                       <div className="font-bold text-cyan-300">
                         {activeLeachZone.effectiveAccumulatedPrecipMm} mm (kl. {currentWeather.hourLabel})
                       </div>
                     </div>
                     <div className="p-1.5 bg-slate-900/90 rounded border border-slate-800">
-                      <div className="text-[8.5px] text-slate-400">PERKOLATIONS-FART</div>
+                      <div className="text-[11px] text-slate-400">PERKOLATIONS-FART</div>
                       <div className="font-bold text-amber-300">
                         {activeLeachZone.infiltrationVelocityCmDay} cm/døgn ↓
                       </div>
                     </div>
                     <div className="p-1.5 bg-slate-900/90 rounded border border-slate-800">
-                      <div className="text-[8.5px] text-slate-400">GRUNDVANDS-FANE</div>
+                      <div className="text-[11px] text-slate-400">GRUNDVANDS-FANE</div>
                       <div className="font-bold text-white">
                         {activeLeachZone.plumeLengthM} m mod SV (215°)
                       </div>
@@ -3570,9 +5259,9 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 </div>
 
                 {/* Porewater Contaminant Leaching vs. Groundwater Quality Standards */}
-                <div className="grid grid-cols-3 gap-1.5 font-mono text-[10px]">
+                <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px]">
                   <div className="p-1.5 bg-slate-950 rounded border border-slate-800">
-                    <div className="text-[8.5px] text-slate-400">BLY (Pb) PERKOLAT</div>
+                    <div className="text-[11px] text-slate-400">BLY (Pb) PERKOLAT</div>
                     <div
                       className={`font-bold ${
                         activeLeachZone.leadLeachateUgL >= 1.0 ? 'text-rose-400' : 'text-amber-300'
@@ -3582,7 +5271,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     </div>
                   </div>
                   <div className="p-1.5 bg-slate-950 rounded border border-slate-800">
-                    <div className="text-[8.5px] text-slate-400">PCB-TOTAL PERKOLAT</div>
+                    <div className="text-[11px] text-slate-400">PCB-TOTAL PERKOLAT</div>
                     <div
                       className={`font-bold ${
                         activeLeachZone.pcbLeachateUgL >= 0.01 ? 'text-rose-400' : 'text-amber-300'
@@ -3592,7 +5281,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     </div>
                   </div>
                   <div className="p-1.5 bg-slate-950 rounded border border-slate-800">
-                    <div className="text-[8.5px] text-slate-400">PAH-FORBINDELSER</div>
+                    <div className="text-[11px] text-slate-400">PAH-FORBINDELSER</div>
                     <div
                       className={`font-bold ${
                         activeLeachZone.pahLeachateUgL >= 0.2 ? 'text-rose-400' : 'text-emerald-300'
@@ -3603,7 +5292,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   </div>
                 </div>
 
-                <div className="text-[10.5px] text-slate-300 leading-snug">
+                <div className="text-[11px] text-slate-300 leading-snug">
                   <strong className="text-amber-300">Geologisk risikovurdering:</strong>{' '}
                   {activeLeachZone.geologyDescription}
                 </div>
@@ -3634,7 +5323,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             onMouseDown={() => cmpWin.isReleased && handleFocusMapWindow('heatmap_comparison')}
             className={`${
               cmpWin.isReleased ? 'fixed ring-2 ring-amber-400' : 'absolute top-20 left-3 z-20'
-            } max-w-lg bg-[#0B0E17]/95 border-2 border-amber-400/85 rounded-md p-3 shadow-2xl pointer-events-auto space-y-2.5 transition-opacity duration-300 ease-out`}
+            } max-w-lg bg-[var(--surface-overlay)] border border-[var(--border-subtle)] border-l-4 border-l-amber-400 rounded-md p-3 shadow-lg pointer-events-auto space-y-2.5 transition-opacity duration-300 ease-out`}
             style={
               cmpWin.isReleased
                 ? {
@@ -3675,10 +5364,10 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSetComparisonViewMode('difference')}
-                  className={`px-2.5 py-1 rounded text-[10.5px] font-mono font-bold transition-colors ${
+                  className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold transition-colors ${
                     isDifferenceHeatmapMode
-                      ? 'bg-gradient-to-r from-sky-600 via-slate-700 to-rose-600 text-white border border-amber-300 shadow-xs'
-                      : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
+                      ? 'bg-sky-500 text-slate-950 border border-sky-300'
+                      : 'bg-[var(--surface-card)] text-slate-400 border border-[var(--border-subtle)] hover:text-white'
                   }`}
                 >
                   Δ Differens-Heatmap (T_B − T_A)
@@ -3686,7 +5375,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSetComparisonViewMode('dual_overlay')}
-                  className={`px-2.5 py-1 rounded text-[10.5px] font-mono font-semibold transition-colors ${
+                  className={`px-2.5 py-1 rounded text-[11px] font-mono font-semibold transition-colors ${
                     !isDifferenceHeatmapMode
                       ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400/70 font-bold'
                       : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
@@ -3701,7 +5390,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   <button
                     type="button"
                     onClick={() => setDifferenceMetric('sum_quotient')}
-                    className={`px-2 py-0.5 rounded text-[9.5px] font-mono font-semibold border transition-colors ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold border transition-colors ${
                       differenceMetric === 'sum_quotient'
                         ? 'bg-amber-400/20 text-amber-200 border-amber-400/60'
                         : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
@@ -3713,7 +5402,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   <button
                     type="button"
                     onClick={() => setDifferenceMetric('dust_ug_m3')}
-                    className={`px-2 py-0.5 rounded text-[9.5px] font-mono font-semibold border transition-colors ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold border transition-colors ${
                       differenceMetric === 'dust_ug_m3'
                         ? 'bg-amber-400/20 text-amber-200 border-amber-400/60'
                         : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
@@ -3729,7 +5418,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             {/* Dual Hour Selectors (T_A and T_B) + Quick Presets */}
             <div className="grid grid-cols-11 gap-1.5 items-center font-mono text-xs">
               <div className="col-span-5 bg-cyan-950/50 border border-cyan-400/60 rounded p-1.5">
-                <div className="flex items-center justify-between text-[9px] text-cyan-300 font-bold mb-0.5">
+                <div className="flex items-center justify-between text-[11px] text-cyan-300 font-bold mb-0.5">
                   <span>● TIME A (FØR / REF)</span>
                   <span>
                     {heatmapComparison.hourA.windSpeed10m} m/s → {heatmapComparison.plumeDirectionADeg}°
@@ -3769,7 +5458,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               </div>
 
               <div className="col-span-5 bg-rose-950/50 border border-rose-400/70 rounded p-1.5">
-                <div className="flex items-center justify-between text-[9px] text-rose-300 font-bold mb-0.5">
+                <div className="flex items-center justify-between text-[11px] text-rose-300 font-bold mb-0.5">
                   <span>● TIME B (EFTER / SLIDER)</span>
                   <span>
                     {heatmapComparison.hourB.windSpeed10m} m/s → {heatmapComparison.plumeDirectionBDeg}°
@@ -3795,7 +5484,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             {!isComparisonCardCollapsed && !cmpWin.isMinimized && (
               <>
                 {/* Quick Preset Time-Pairs */}
-                <div className="flex flex-wrap items-center gap-1 text-[10px] font-mono">
+                <div className="flex flex-wrap items-center gap-1 text-[11px] font-mono">
                   <span className="text-slate-400 mr-1">Hurtigvalg:</span>
                   <button
                     type="button"
@@ -3832,9 +5521,9 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 {/* Quantitative Metrics: Direct Concentration Difference vs Footprint Area */}
                 {isDifferenceHeatmapMode ? (
                   <div className="space-y-1.5">
-                    <div className="grid grid-cols-4 gap-1.5 font-mono text-[10px]">
+                    <div className="grid grid-cols-4 gap-1.5 font-mono text-[11px]">
                       <div className="p-1.5 bg-rose-950/50 rounded border border-rose-500/60">
-                        <div className="text-[8.5px] text-rose-300 font-bold">MAKS. STIGNING (+Δ)</div>
+                        <div className="text-[11px] text-rose-300 font-bold">MAKS. STIGNING (+Δ)</div>
                         <div className="text-xs font-bold text-rose-200">
                           {differenceMetric === 'sum_quotient'
                             ? `+${heatmapComparison.maxPositiveDeltaS.toFixed(2)} S`
@@ -3842,7 +5531,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         </div>
                       </div>
                       <div className="p-1.5 bg-sky-950/50 rounded border border-sky-500/60">
-                        <div className="text-[8.5px] text-sky-300 font-bold">MAKS. FALD (−Δ)</div>
+                        <div className="text-[11px] text-sky-300 font-bold">MAKS. FALD (−Δ)</div>
                         <div className="text-xs font-bold text-sky-200">
                           {differenceMetric === 'sum_quotient'
                             ? `${heatmapComparison.maxNegativeDeltaS.toFixed(2)} S`
@@ -3850,13 +5539,13 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         </div>
                       </div>
                       <div className="p-1.5 bg-orange-950/40 rounded border border-orange-500/50">
-                        <div className="text-[8.5px] text-orange-300 font-bold">FORØGET ZONE (+Δ)</div>
+                        <div className="text-[11px] text-orange-300 font-bold">FORØGET ZONE (+Δ)</div>
                         <div className="text-xs font-bold text-orange-200">
                           {heatmapComparison.increasedZoneAreaM2.toLocaleString('da-DK')} m²
                         </div>
                       </div>
                       <div className="p-1.5 bg-cyan-950/40 rounded border border-cyan-500/50">
-                        <div className="text-[8.5px] text-cyan-300 font-bold">AFLASTET ZONE (−Δ)</div>
+                        <div className="text-[11px] text-cyan-300 font-bold">AFLASTET ZONE (−Δ)</div>
                         <div className="text-xs font-bold text-cyan-200">
                           {heatmapComparison.decreasedZoneAreaM2.toLocaleString('da-DK')} m²
                         </div>
@@ -3864,7 +5553,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     </div>
 
                     {/* Diverging Color Scale Bar (-Delta to +Delta) */}
-                    <div className="p-1.5 rounded bg-slate-950/90 border border-slate-800 space-y-1 font-mono text-[9.5px]">
+                    <div className="p-1.5 rounded bg-slate-950/90 border border-slate-800 space-y-1 font-mono text-[11px]">
                       <div className="flex items-center justify-between text-slate-300">
                         <span className="text-sky-300 font-bold">
                           ▼ Koncentrationsfald (T_B &lt; T_A)
@@ -3876,7 +5565,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       </div>
                       <div className="h-2 w-full rounded-full bg-gradient-to-r from-sky-600 via-cyan-500 via-35% to-rose-600 border border-slate-700" />
                       {inspectedCell && (
-                        <div className="flex items-center justify-between pt-0.5 text-[10px] text-slate-200 border-t border-slate-800/80">
+                        <div className="flex items-center justify-between pt-0.5 text-[11px] text-slate-200 border-t border-slate-800/80">
                           <span>
                             Valgt Δ-celle ({inspectedCell.center.lat.toFixed(4)}°N,{' '}
                             {inspectedCell.center.lng.toFixed(4)}°E):
@@ -3906,27 +5595,27 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-4 gap-1.5 font-mono text-[10px]">
+                  <div className="grid grid-cols-4 gap-1.5 font-mono text-[11px]">
                     <div className="p-1.5 bg-rose-950/40 rounded border border-rose-500/50">
-                      <div className="text-[8.5px] text-rose-300 font-bold">NYT FANE-AREAL (T_B)</div>
+                      <div className="text-[11px] text-rose-300 font-bold">NYT FANE-AREAL (T_B)</div>
                       <div className="text-xs font-bold text-rose-200">
                         +{heatmapComparison.totalNewlyExposedAreaM2.toLocaleString('da-DK')} m²
                       </div>
                     </div>
                     <div className="p-1.5 bg-fuchsia-950/40 rounded border border-fuchsia-500/50">
-                      <div className="text-[8.5px] text-fuchsia-300 font-bold">OVERLAP (T_A ∩ T_B)</div>
+                      <div className="text-[11px] text-fuchsia-300 font-bold">OVERLAP (T_A ∩ T_B)</div>
                       <div className="text-xs font-bold text-fuchsia-200">
                         {heatmapComparison.totalPersistentOverlapAreaM2.toLocaleString('da-DK')} m²
                       </div>
                     </div>
                     <div className="p-1.5 bg-cyan-950/40 rounded border border-cyan-500/50">
-                      <div className="text-[8.5px] text-cyan-300 font-bold">FRAFALDET (KUN T_A)</div>
+                      <div className="text-[11px] text-cyan-300 font-bold">FRAFALDET (KUN T_A)</div>
                       <div className="text-xs font-bold text-cyan-200">
                         -{heatmapComparison.totalRetreatedAreaM2.toLocaleString('da-DK')} m²
                       </div>
                     </div>
                     <div className="p-1.5 bg-slate-950 rounded border border-amber-500/50">
-                      <div className="text-[8.5px] text-amber-300 font-bold">FANE-FLYTNING</div>
+                      <div className="text-[11px] text-amber-300 font-bold">FANE-FLYTNING</div>
                       <div className="text-xs font-bold text-white">
                         {primaryShift
                           ? `${primaryShift.centroidShiftMeters}m (${
@@ -3944,7 +5633,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                  <span className="text-[9.5px] font-mono text-slate-400">
+                  <span className="text-[11px] font-mono text-slate-400">
                     Største receptor-differens (T_B − T_A):
                   </span>
                   {topDeltaReceptors.map((rd) => {
@@ -3954,7 +5643,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         key={`delta-rec-${rd.receptorId}`}
                         type="button"
                         onClick={() => onSelectReceptor(rd.receptorId)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold border transition-colors ${
+                        className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold border transition-colors ${
                           isInc
                             ? 'bg-rose-950/70 border-rose-500/60 text-rose-200 hover:bg-rose-900'
                             : rd.deltaS < 0
@@ -4005,7 +5694,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             mapWindowStates.high_wind_notification.isReleased
               ? 'fixed ring-2 ring-amber-300'
               : 'absolute bottom-24 right-3 z-30'
-          } max-w-md bg-rose-950/95 border-2 border-rose-400 rounded-md p-3 shadow-[0_0_28px_rgba(225,29,72,0.65)] pointer-events-auto space-y-2 transition-opacity duration-300`}
+          } max-w-md bg-[var(--surface-overlay)] border border-rose-500/70 border-l-4 border-l-rose-500 rounded-md p-3 shadow-lg pointer-events-auto space-y-2 transition-opacity duration-300`}
         >
           <MapOverlayWindowControlStrip
             windowId="high_wind_notification"
@@ -4058,7 +5747,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span
-                            className={`px-1.5 py-0.2 rounded text-[9.5px] font-extrabold ${
+                            className={`px-1.5 py-0.2 rounded text-[11px] font-extrabold ${
                               rank === 1
                                 ? 'bg-amber-400 text-slate-950'
                                 : 'bg-rose-600 text-white'
@@ -4070,7 +5759,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                             {recExp.receptorCode}: {recExp.receptorName}
                           </span>
                         </div>
-                        <div className="text-[10px] text-rose-200/90 truncate mt-0.5">
+                        <div className="text-[11px] text-rose-200/90 truncate mt-0.5">
                           {recExp.address} · {recExp.distanceFromNearestSourceMeters}m fra{' '}
                           {recExp.dominantSourceName.split(':')[0]}
                         </div>
@@ -4084,17 +5773,20 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         >
                           S = {recExp.sumQuotient.toFixed(2)}
                         </div>
-                        <div className="text-[9.5px] text-amber-200">Fokusér →</div>
+                        <div className="text-[11px] text-amber-200">Fokusér →</div>
                       </div>
                     </button>
                   );
                 })}
               </div>
 
-              <div className="p-1.5 rounded bg-slate-950/90 border border-amber-400/50 text-[10px] font-mono text-amber-200">
-                ⚡ <strong>PROAKTIV HANDLING:</strong> Aktivér højtryks-vandkanoner ved{' '}
-                {top3ReceptorExposures[0]?.dominantSourceName.split(':')[0]} og stands uafskærmet
-                nedbrydning jf. PSS Sag W22085 pkt. 7.
+              <div className="p-1.5 rounded bg-slate-950/90 border border-amber-400/50 text-[11px] font-mono text-amber-200 flex items-start gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-amber-300 shrink-0 mt-0.5" />
+                <span>
+                  <strong>PROAKTIV HANDLING:</strong> Aktivér højtryks-vandkanoner ved{' '}
+                  {top3ReceptorExposures[0]?.dominantSourceName.split(':')[0]} og stands uafskærmet
+                  nedbrydning jf. PSS Sag W22085 pkt. 7.
+                </span>
               </div>
             </>
           )}
@@ -4113,7 +5805,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             mapWindowStates.puff_24h_peak_heatmap.isReleased
               ? 'fixed ring-2 ring-amber-400'
               : 'absolute top-20 left-3 z-20'
-          } max-w-lg bg-[#0B0E17]/95 border-2 border-amber-400/80 rounded-md p-3 shadow-2xl pointer-events-auto transition-opacity duration-300 ease-out`}
+          } max-w-lg bg-[var(--surface-overlay)] border border-[var(--border-subtle)] border-l-4 border-l-amber-400 rounded-md p-3 shadow-lg pointer-events-auto transition-opacity duration-300 ease-out`}
           style={
             mapWindowStates.puff_24h_peak_heatmap.isReleased
               ? {
@@ -4127,7 +5819,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
         >
           <MapOverlayWindowControlStrip
             windowId="puff_24h_peak_heatmap"
-            title="🔥 Gaussisk Puff-Historik Heatmap (24t Akkumuleret Dosis)"
+            title="Gaussisk Puff-Historik Heatmap (24t Akkumuleret Dosis)"
             badgeText={`∑=${peakReceptor.cumulativeSumDose.toFixed(1)} S·t`}
             accentColorClass="text-amber-300"
             state={mapWindowStates.puff_24h_peak_heatmap}
@@ -4190,19 +5882,19 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
 
               <div className="mt-2 grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/90 text-xs font-mono">
                 <div>
-                  <div className="text-[10px] text-slate-400">AKKUMULERET 24T DOSIS</div>
+                  <div className="text-[11px] text-slate-400">AKKUMULERET 24T DOSIS</div>
                   <div className="text-sm font-bold text-rose-400">
                     ∑ = {peakReceptor.cumulativeSumDose.toFixed(2)} S·timer
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-slate-400">KLOKKESLÆT SPIDSBELASTNING</div>
+                  <div className="text-[11px] text-slate-400">KLOKKESLÆT SPIDSBELASTNING</div>
                   <div className="text-sm font-bold text-amber-300">
                     kl. {peakReceptor.peakHourLabel} (S={peakReceptor.peakSumQuotient.toFixed(2)})
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-slate-400">STØV &amp; TUNGMETAL-DEPONERING</div>
+                  <div className="text-[11px] text-slate-400">STØV &amp; TUNGMETAL-DEPONERING</div>
                   <div className="text-xs font-bold text-slate-100">
                     {peakReceptor.totalDepositedHeavyMetalsAndPcbUgM2} µg/m²/døgn
                   </div>
@@ -4259,11 +5951,11 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             mapWindowStates.forecast_6h_heatmap.isReleased
               ? 'fixed ring-2 ring-cyan-400'
               : 'absolute bottom-16 right-3 z-20'
-          } w-[430px] max-w-[calc(100vw-24px)] bg-[#0B0E17]/95 border-2 border-cyan-400/85 rounded-md p-3 shadow-2xl pointer-events-auto space-y-2.5 font-mono text-xs`}
+          } w-[430px] max-w-[calc(100vw-24px)] bg-[var(--surface-overlay)] border border-[var(--border-subtle)] border-l-4 border-l-sky-400 rounded-md p-3 shadow-lg pointer-events-auto space-y-2.5 font-mono text-xs`}
         >
           <MapOverlayWindowControlStrip
             windowId="forecast_6h_heatmap"
-            title="🔮 6-Timers Støv-Prognose Heatmap (+0t → +6t)"
+            title="6-Timers Støv-Prognose Heatmap (+0t → +6t)"
             badgeText={`+${sixHourDustForecastData.clampedT.toFixed(1)}t`}
             accentColorClass="text-cyan-300"
             state={{
@@ -4312,7 +6004,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     key={spd}
                     type="button"
                     onClick={() => setForecast6hSpeed(spd)}
-                    className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold ${
+                    className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
                       forecast6hSpeed === spd
                         ? 'bg-amber-400 text-slate-950'
                         : 'text-slate-400 hover:text-white'
@@ -4330,7 +6022,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 {sixHourDustForecastData.activeStep.hourLabel}
                 {sixHourDustForecastData.activeStep.isNextDay ? ' +1d' : ''})
               </div>
-              <div className="text-[9.5px] text-cyan-200">
+              <div className="text-[11px] text-cyan-200">
                 {sixHourDustForecastData.interpolatedWindSpeedMs} m/s → Fane{' '}
                 {sixHourDustForecastData.interpolatedPlumeDeg}° (
                 {sixHourDustForecastData.interpolatedPlumeCompass}) · S_max={sixHourDustForecastData.interpolatedMaxS.toFixed(2)}
@@ -4349,6 +6041,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   step={0.05}
                   value={sixHourDustForecastData.clampedT}
                   onChange={(e) => {
+                    myceliumLiveAlerts.notifyTimelineScrub();
                     setIsPlaying6hDustForecast(false);
                     setForecast6hProgress(Number(e.target.value));
                   }}
@@ -4365,6 +6058,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         key={`fc6h-btn-${st.offsetHours}`}
                         type="button"
                         onClick={() => {
+                          myceliumLiveAlerts.notifyTimelineScrub();
                           setIsPlaying6hDustForecast(false);
                           setForecast6hProgress(st.offsetHours);
                         }}
@@ -4375,12 +6069,12 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         }`}
                         title={`Kl. ${st.hourLabel} (${st.labelOffset}): Vind ${st.windSpeedMs} m/s → Fane ${st.plumeToDeg}° (${st.plumeToCompassLabel}) · Maks S=${st.maxPredictedS.toFixed(2)}`}
                       >
-                        <div className="text-[9.5px] font-extrabold text-cyan-300">
+                        <div className="text-[11px] font-extrabold text-cyan-300">
                           +{st.offsetHours}t
                         </div>
-                        <div className="text-[8.5px] text-slate-300">{st.hourLabel}</div>
+                        <div className="text-[11px] text-slate-300">{st.hourLabel}</div>
                         <div
-                          className={`text-[8.5px] font-bold ${
+                          className={`text-[11px] font-bold ${
                             st.maxPredictedS >= 1.0
                               ? 'text-rose-400'
                               : st.maxPredictedS >= 0.5
@@ -4398,7 +6092,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
 
               {/* Predicted Receptor Impact Timeline over the Next 6 Hours */}
               <div className="space-y-1 pt-1 border-t border-slate-800">
-                <div className="flex items-center justify-between text-[9.5px] text-slate-400 uppercase">
+                <div className="flex items-center justify-between text-[11px] text-slate-400 uppercase">
                   <span>Forudsagt Støv-Eksponering (Næste 6 Timer)</span>
                   <span>Kilde: {sixHourDustForecastData.originSource.code}</span>
                 </div>
@@ -4427,11 +6121,11 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           }`}
                         >
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-[10px] font-bold text-white">
+                            <span className="text-[11px] font-bold text-white">
                               {rw.receptorCode}
                             </span>
                             <span
-                              className={`text-[9.5px] font-extrabold ${
+                              className={`text-[11px] font-extrabold ${
                                 isCritical
                                   ? 'text-rose-300'
                                   : isModerate
@@ -4442,10 +6136,10 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                               Spids S={rw.peakS.toFixed(2)} (+{rw.peakOffsetHours}t)
                             </span>
                           </div>
-                          <div className="text-[9px] text-slate-300 truncate">
+                          <div className="text-[11px] text-slate-300 truncate">
                             {rw.address.split(',')[0]}
                           </div>
-                          <div className="text-[8.5px] text-cyan-300 mt-0.5">
+                          <div className="text-[11px] text-cyan-300 mt-0.5">
                             {rw.firstHitOffsetHours !== null
                               ? `⚠ Rammes om +${rw.firstHitOffsetHours}t (kl. ${rw.firstHitHourLabel})`
                               : '✓ Uden for hovedfane (0–6t)'}
@@ -4462,6 +6156,150 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
 
       {/* MAIN MAP VIEWPORT */}
       <div className="relative flex-1 w-full h-full">
+        {/* 2D Map Viewport 'Layer Control' Panel (Asbestos, Heavy Metals, PCB, Quartz Wool) */}
+        {!effectiveMapOnly && (
+          <div
+            data-testid="map-substance-layer-control"
+            className="absolute top-3 left-3 z-20 pointer-events-auto w-56 rounded-md bg-[var(--surface-panel)]/95 border border-[var(--border-subtle)] shadow-lg font-mono text-[11px]"
+          >
+            <button
+              type="button"
+              onClick={() => setIsLayerControlExpanded((v) => !v)}
+              className="w-full px-2.5 py-1.5 flex items-center justify-between gap-2 text-left hover:bg-[var(--surface-card)] rounded-t-md cursor-pointer"
+              aria-expanded={isLayerControlExpanded}
+            >
+              <span className="flex items-center gap-1.5 font-bold text-[var(--text-primary)]">
+                <Layers className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span>Layer Control ({activeSubstanceLayerCount}/5)</span>
+              </span>
+              <span className="text-[11px] text-[var(--text-secondary)]">
+                {isLayerControlExpanded ? 'Skjul' : 'Vis'}
+              </span>
+            </button>
+
+            {isLayerControlExpanded && (
+              <div className="px-2.5 pb-2.5 pt-1 border-t border-[var(--border-subtle)] space-y-1.5">
+                <div className="text-[11px] font-sans text-[var(--text-secondary)]">
+                  Tænd/sluk spredningslag individuelt:
+                </div>
+                {(
+                  [
+                    {
+                      key: 'asbestos' as const,
+                      label: 'Asbestos (Asbestfibre)',
+                      dotClass: 'bg-emerald-400',
+                    },
+                    {
+                      key: 'heavyMetals' as const,
+                      label: 'Heavy Metals (Tungmetaller)',
+                      dotClass: 'bg-amber-400',
+                    },
+                    {
+                      key: 'pcb' as const,
+                      label: 'PCB (Polyklor. Bifenyler)',
+                      dotClass: 'bg-violet-400',
+                    },
+                    {
+                      key: 'quartzWool' as const,
+                      label: 'Quartz Wool (Kvartsuld)',
+                      dotClass: 'bg-cyan-400',
+                    },
+                    {
+                      key: 'moldSewer' as const,
+                      label: 'Skimmel & Kloak (CFU/m³)',
+                      dotClass: 'bg-lime-400',
+                    },
+                  ]
+                ).map((item) => {
+                  const checked = visibleDispersionSubstances[item.key];
+                  return (
+                    <label
+                      key={item.key}
+                      data-testid={`layer-toggle-${item.key}`}
+                      className={`flex items-center justify-between gap-2 px-1.5 py-1 rounded border cursor-pointer transition-colors ${
+                        checked
+                          ? 'bg-[var(--surface-card)] border-slate-600 text-[var(--text-primary)]'
+                          : 'bg-[var(--surface-canvas)] border-[var(--border-subtle)] text-[var(--text-secondary)] opacity-75'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setVisibleDispersionSubstances((prev) => ({
+                              ...prev,
+                              [item.key]: !prev[item.key],
+                            }))
+                          }
+                          className="accent-sky-400 cursor-pointer shrink-0"
+                        />
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${item.dotClass}`} />
+                        <span className="truncate font-semibold">{item.label}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+
+                {onToggleWaterMainLayer && (
+                  <label
+                    data-testid="layer-toggle-water-main"
+                    className={`flex items-center justify-between gap-2 px-1.5 py-1 rounded border cursor-pointer transition-colors ${
+                      showWaterMainLayer
+                        ? 'bg-sky-950/70 border-sky-400/80 text-sky-100'
+                        : 'bg-[var(--surface-canvas)] border-[var(--border-subtle)] text-[var(--text-secondary)] opacity-80'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={showWaterMainLayer}
+                        onChange={onToggleWaterMainLayer}
+                        className="accent-sky-400 cursor-pointer shrink-0"
+                      />
+                      <Droplets className="w-3 h-3 text-sky-400 shrink-0" />
+                      <span className="truncate font-semibold">Drikkevands Hovedrør</span>
+                    </span>
+                  </label>
+                )}
+
+                <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-[var(--border-subtle)]">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVisibleDispersionSubstances({
+                        asbestos: true,
+                        heavyMetals: true,
+                        pcb: true,
+                        quartzWool: true,
+                        moldSewer: true,
+                      })
+                    }
+                    className="flex-1 py-1 rounded bg-[var(--surface-card)] hover:bg-[var(--surface-overlay)] border border-[var(--border-subtle)] text-[11px] font-bold text-sky-300 cursor-pointer"
+                  >
+                    Vis alle (5/5)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVisibleDispersionSubstances({
+                        asbestos: false,
+                        heavyMetals: false,
+                        pcb: false,
+                        quartzWool: false,
+                        moldSewer: false,
+                      })
+                    }
+                    className="flex-1 py-1 rounded bg-[var(--surface-card)] hover:bg-[var(--surface-overlay)] border border-[var(--border-subtle)] text-[11px] font-bold text-slate-300 cursor-pointer"
+                  >
+                    Ryd kort (0/5)
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {useGoogleMapsEngine ? (
           <APIProvider apiKey={rawApiKey} language="da" region="DK">
             <GoogleMap
@@ -4474,6 +6312,10 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
               style={{ width: '100%', height: '100%' }}
               onClick={(ev) => {
+                if (isLeakPinDropMode && ev.detail.latLng && waterMainTelemetry) {
+                  handlePlaceVirtualLeakPinAtPoint(ev.detail.latLng);
+                  return;
+                }
                 if (mapClickMode !== 'none' && ev.detail.latLng) {
                   onMapAddNode(
                     ev.detail.latLng,
@@ -4503,6 +6345,465 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   />
                 );
               })}
+
+              {/* Kierulffsvej DN200 Drinking Water Main Infrastructure Overlay on Google Maps */}
+              {showWaterMainLayer && waterMainTelemetry && (
+                <>
+                  {showLerBuffer && waterMainTelemetry.lerBufferPolygon.length >= 3 && (
+                    <Polygon
+                      paths={waterMainTelemetry.lerBufferPolygon}
+                      strokeColor={
+                        waterMainTelemetry.overallStatus === 'critical_rupture'
+                          ? '#ef4444'
+                          : '#38bdf8'
+                      }
+                      strokeOpacity={0.78}
+                      strokeWeight={1.5}
+                      fillColor={
+                        waterMainTelemetry.overallStatus === 'critical_rupture'
+                          ? '#ef4444'
+                          : '#0ea5e9'
+                      }
+                      fillOpacity={0.16}
+                      onClick={() => setShowWaterMainInspector(true)}
+                    />
+                  )}
+                  {waterMainTelemetry.serviceBranches.map((br) => (
+                    <Polyline
+                      key={`gmp-wm-branch-${br.id}`}
+                      path={[br.startOnMain, br.buildingConnection]}
+                      strokeColor={
+                        br.cappingStatus === 'uncapped_risk' ? '#ef4444' : '#38bdf8'
+                      }
+                      strokeOpacity={0.9}
+                      strokeWeight={2.6}
+                      onClick={() => setShowWaterMainInspector(true)}
+                    />
+                  ))}
+                  {waterMainTelemetry.sceneSegments.map((seg) => {
+                    const segStroke =
+                      waterMainTelemetry.overallStatus === 'critical_rupture'
+                        ? '#ef4444'
+                        : waterMainTelemetry.overallStatus === 'warning' ||
+                          waterMainTelemetry.overallStatus === 'advisory'
+                        ? '#f59e0b'
+                        : seg.material === 'PE100_SDR17_IKKE_DIFFUSIONSTAET'
+                        ? '#06b6d4'
+                        : '#0ea5e9';
+                    return (
+                      <Polyline
+                        key={`gmp-wm-seg-${seg.id}`}
+                        path={seg.waypoints.map((w) => ({ lat: w.lat, lng: w.lng }))}
+                        strokeColor={segStroke}
+                        strokeOpacity={0.96}
+                        strokeWeight={5}
+                        onClick={(ev) => {
+                          if (isLeakPinDropMode && ev?.latLng) {
+                            handlePlaceVirtualLeakPinAtPoint({
+                              lat: ev.latLng.lat(),
+                              lng: ev.latLng.lng(),
+                            });
+                            return;
+                          }
+                          setSelectedWaterMainSectionId(seg.id);
+                          setShowWaterMainInspector(true);
+                        }}
+                      />
+                    );
+                  })}
+                  {waterMainTelemetry.valves.map((valve) => (
+                    <AdvancedMarker
+                      key={`gmp-wm-valve-${valve.id}`}
+                      position={valve.coordinate}
+                      onClick={() => setShowWaterMainInspector(true)}
+                    >
+                      <div
+                        className={`px-1.5 py-0.5 rounded border text-[11px] font-mono font-bold shadow cursor-pointer ${
+                          valve.status === 'closed'
+                            ? 'bg-rose-700 text-white border-rose-200'
+                            : 'bg-sky-950/95 text-sky-200 border-sky-400'
+                        }`}
+                      >
+                        {valve.code}
+                      </div>
+                    </AdvancedMarker>
+                  ))}
+                  {waterMainTelemetry.hydrants.map((hyd) => (
+                    <AdvancedMarker
+                      key={`gmp-wm-hyd-${hyd.id}`}
+                      position={hyd.coordinate}
+                      onClick={() => setShowWaterMainInspector(true)}
+                    >
+                      <div className="px-1.5 py-0.5 rounded-full bg-rose-900/95 text-rose-100 border border-rose-300 text-[11px] font-mono font-bold shadow cursor-pointer">
+                        {hyd.code}
+                      </div>
+                    </AdvancedMarker>
+                  ))}
+
+                  {/* Virtual Leak Pin Soil Saturation Zones & Percolation Impact on Ringparken Buildings (GMP) */}
+                  {effectiveVirtualLeakImpact && (
+                    <>
+                      {[...effectiveVirtualLeakImpact.saturationZones]
+                        .reverse()
+                        .map((zone) => (
+                          <Polygon
+                            key={`gmp-leak-zone-${zone.tier}`}
+                            paths={buildGeoCirclePolygon(
+                              effectiveVirtualLeakImpact.pinPoint,
+                              zone.radiusMeters,
+                              28
+                            )}
+                            strokeColor={zone.colorHex}
+                            strokeOpacity={0.9}
+                            strokeWeight={zone.tier === 'core_saturated' ? 2.4 : 1.5}
+                            fillColor={zone.colorHex}
+                            fillOpacity={
+                              zone.tier === 'core_saturated'
+                                ? 0.34
+                                : zone.tier === 'capillary_front'
+                                ? 0.22
+                                : 0.13
+                            }
+                          />
+                        ))}
+                      {effectiveVirtualLeakImpact.impactedBuildings.map((bld) => (
+                        <React.Fragment key={`gmp-leak-bld-${bld.buildingId}`}>
+                          <Polyline
+                            path={[effectiveVirtualLeakImpact.pinPoint, bld.center]}
+                            strokeColor={
+                              bld.severity === 'critical'
+                                ? '#f43f5e'
+                                : bld.severity === 'high'
+                                ? '#f59e0b'
+                                : '#38bdf8'
+                            }
+                            strokeOpacity={0.9}
+                            strokeWeight={2.2}
+                          />
+                          <AdvancedMarker position={bld.center}>
+                            <div
+                              className={`px-1.5 py-0.5 rounded border font-mono text-[10px] font-bold shadow-md tabular-nums whitespace-nowrap ${
+                                bld.severity === 'critical'
+                                  ? 'bg-rose-950/95 border-rose-400 text-rose-100'
+                                  : bld.severity === 'high'
+                                  ? 'bg-amber-950/95 border-amber-400 text-amber-100'
+                                  : 'bg-sky-950/95 border-sky-400 text-sky-100'
+                              }`}
+                            >
+                              {bld.buildingCode} · {bld.arrivalMinutes.toFixed(0)} min ·{' '}
+                              {bld.intrusionRateLh.toFixed(0)} L/t
+                            </div>
+                          </AdvancedMarker>
+                        </React.Fragment>
+                      ))}
+                      <AdvancedMarker position={effectiveVirtualLeakImpact.pinPoint}>
+                        <div className="px-2 py-0.5 rounded bg-rose-600 text-white border-2 border-amber-200 font-mono text-[11px] font-extrabold shadow-xl flex items-center gap-1 whitespace-nowrap">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          <span>
+                            LÆKAGEPUNKT · {effectiveVirtualLeakImpact.dischargeLs.toFixed(1)} L/s
+                          </span>
+                        </div>
+                      </AdvancedMarker>
+                    </>
+                  )}
+
+                  {/* Focus Mode Items 1 & 2: Drikkevands-hovedrør Tooltip + WaterMainBek1272Badge + Structural Integrity Alert on Google Maps */}
+                  {waterMainTelemetry && (
+                    <AdvancedMarker
+                      position={waterMainTelemetry.inspectionCenter}
+                      onClick={() => setShowWaterMainInspector(true)}
+                    >
+                      <div
+                        data-testid="gmp-water-main-bek1272-indicator"
+                        className="flex flex-col items-center gap-1 cursor-pointer"
+                      >
+                        <div
+                          data-testid="gmp-water-main-tooltip-container"
+                          data-critical-pulse={isWaterMainCriticalPulse ? 'true' : 'false'}
+                          className={`px-2 py-0.5 rounded bg-[#090d16]/95 border font-mono text-[11px] font-bold shadow-md tabular-nums whitespace-nowrap ${
+                            isWaterMainCriticalPulse
+                              ? 'border-rose-500 text-rose-100 water-main-tooltip-critical-pulse'
+                              : 'border-sky-400 text-sky-200'
+                          }`}
+                        >
+                          Drikkevands-Hovedrør DN200 (-1,65m) · {waterMainTelemetry.pressureBar.toFixed(1)} bar · PPV{' '}
+                          {waterMainTelemetry.pipePpvMmPerSec.toFixed(1)} mm/s ·{' '}
+                          {waterMainTelemetry.hasSteelRoadPlates ? 'Køreplader OK' : 'Uden plader'}
+                        </div>
+                        <div className="flex flex-wrap items-center justify-center gap-1">
+                          <WaterMainBek1272Badge
+                            telemetry={waterMainTelemetry}
+                            visible={showWaterMainLayer}
+                            variant="compact"
+                            testId="gmp-water-main-bek1272-status-badge"
+                          />
+                          {isStructuralIntegrityAlert && (
+                            <span
+                              data-testid="gmp-structural-integrity-alert-badge"
+                              className="px-1.5 py-0.5 rounded bg-rose-900/95 border border-rose-400 text-rose-100 font-mono text-[10px] font-extrabold inline-flex items-center gap-1 shadow-md"
+                            >
+                              <AlertTriangle className="w-3 h-3 text-amber-300 shrink-0" />
+                              <span>
+                                Vibrationsfare (DIN 4150-3): {waterMainTelemetry.pipePpvMmPerSec.toFixed(1)}/25 mm/s ({ppvPctOf25Threshold}%)
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </AdvancedMarker>
+                  )}
+                </>
+              )}
+
+              {/* System B Simultaneous Algedonic Dispatch (S1 + S3) Layer on Google Maps */}
+              {simultaneousDispatch?.active && (
+                <>
+                  {/* System 1 P1 Danger Zone Polygon */}
+                  {simultaneousDispatch.system1State.dangerPolygon.length >= 3 && (
+                    <Polygon
+                      paths={simultaneousDispatch.system1State.dangerPolygon}
+                      strokeColor="#ef4444"
+                      strokeOpacity={simultaneousDispatch.isBlinkingP1 ? 0.98 : 0.85}
+                      strokeWeight={simultaneousDispatch.isBlinkingP1 ? 3.2 : 2.4}
+                      fillColor="#dc2626"
+                      fillOpacity={simultaneousDispatch.isBlinkingP1 ? 0.28 : 0.18}
+                    />
+                  )}
+
+                  {/* System 1 ISA-18.2 P1 Inverted-Octagon Hazard Beacon */}
+                  <AdvancedMarker
+                    position={simultaneousDispatch.system1State.epicenter}
+                    onClick={() => {
+                      if (simultaneousDispatch.isBlinkingP1 && onAcknowledgeSimultaneousP1) {
+                        onAcknowledgeSimultaneousP1();
+                      } else {
+                        onOpenSimultaneousModal?.();
+                      }
+                    }}
+                  >
+                    <div
+                      className={`px-2 py-1 rounded border-2 font-mono text-[11px] font-extrabold shadow-2xl cursor-pointer flex items-center gap-1.5 ${
+                        simultaneousDispatch.isBlinkingP1
+                          ? 'bg-rose-600 text-white border-amber-200 animate-pulse'
+                          : 'bg-rose-900 text-rose-100 border-rose-400'
+                      }`}
+                      style={{
+                        clipPath:
+                          'polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)',
+                      }}
+                    >
+                      <AlertOctagon className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        P1 FAREZONE · {simultaneousDispatch.system1State.epicenterLabelDa}
+                      </span>
+                    </div>
+                  </AdvancedMarker>
+
+                  {/* System 1 Upwind/Upslope Escape Vectors to Valbyvej & Rosenkildevej */}
+                  {simultaneousDispatch.system1State.escapeVectors.map((vec) => (
+                    <React.Fragment key={`gmp-s1-escape-${vec.id}`}>
+                      <Polyline
+                        path={[vec.origin, vec.targetMusterPoint]}
+                        strokeColor="#22c55e"
+                        strokeOpacity={0.96}
+                        strokeWeight={3.6}
+                      />
+                      <AdvancedMarker position={vec.targetMusterPoint}>
+                        <div className="px-2 py-0.5 rounded bg-emerald-950/95 border border-emerald-400 text-emerald-100 font-mono text-[11px] font-bold shadow-lg whitespace-nowrap">
+                          ▲ FLUGT MODVIND → {vec.streetName} ({vec.distanceMeters} m · {vec.bearingDeg}°)
+                        </div>
+                      </AdvancedMarker>
+                    </React.Fragment>
+                  ))}
+
+                  {/* System 1 Island Mode (Ø-DRIFT) Protective Shields on Afd. 23, 24, 26, 32, Rødtjørnevej 2 */}
+                  {buildings
+                    .filter((b) =>
+                      simultaneousDispatch.system1State.islandModeBlockIds.includes(b.id)
+                    )
+                    .map((b) => (
+                      <AdvancedMarker key={`gmp-s1-island-${b.id}`} position={b.center}>
+                        <div className="px-1.5 py-0.5 rounded bg-emerald-900/95 border border-cyan-300 text-cyan-100 font-mono text-[11px] font-bold shadow-md flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3 text-emerald-300 shrink-0" />
+                          <span>Ø-DRIFT: {b.code}</span>
+                        </div>
+                      </AdvancedMarker>
+                    ))}
+
+                  {/* System 3 Locked Water Main Valves (V-VEST & V-MIDT) */}
+                  {waterMainTelemetry?.valves
+                    .filter((v) =>
+                      simultaneousDispatch.system3State.lockedValveCodes.includes(
+                        v.code as 'V-VEST' | 'V-MIDT'
+                      )
+                    )
+                    .map((v) => (
+                      <AdvancedMarker key={`gmp-s3-valve-${v.id}`} position={v.coordinate}>
+                        <div className="px-2 py-0.5 rounded bg-rose-700 text-white border border-amber-200 font-mono text-[11px] font-extrabold shadow-xl flex items-center gap-1">
+                          <Lock className="w-3 h-3 shrink-0" />
+                          <span>{v.code} LUKKET T1</span>
+                        </div>
+                      </AdvancedMarker>
+                    ))}
+
+                  {/* System 3 Emergency Tanker Ingress Corridors (Valbyvej/Rosenkildevej OPEN, Nordre Ringgade CLOSED) */}
+                  {simultaneousDispatch.system3State.tankerIngressCorridors.map((corridor) => {
+                    const midPt =
+                      corridor.waypoints[Math.floor(corridor.waypoints.length / 2)] ||
+                      corridor.waypoints[0];
+                    const isOpen = corridor.status === 'OPEN_INGRESS';
+                    return (
+                      <React.Fragment key={`gmp-s3-corridor-${corridor.id}`}>
+                        <Polyline
+                          path={corridor.waypoints}
+                          strokeColor={isOpen ? '#10b981' : '#ef4444'}
+                          strokeOpacity={isOpen ? 0.92 : 0.85}
+                          strokeWeight={isOpen ? 4 : 3}
+                        />
+                        {midPt && (
+                          <AdvancedMarker position={midPt}>
+                            <div
+                              className={`px-2 py-0.5 rounded border font-mono text-[11px] font-bold shadow-lg whitespace-nowrap ${
+                                isOpen
+                                  ? 'bg-emerald-950/95 border-emerald-400 text-emerald-200'
+                                  : 'bg-rose-950/95 border-rose-400 text-rose-200'
+                              }`}
+                            >
+                              {isOpen
+                                ? `TANKVOGN ÅBEN: ${corridor.streetName}`
+                                : `SPÆRRET: ${corridor.streetName}`}
+                            </div>
+                          </AdvancedMarker>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Connected Autonomous Receptor Mesh Network (All Receptors Connected) on Google Maps */}
+              {showAutonomousMesh &&
+                autonomousMesh.edges.map((edge) => (
+                  <Polyline
+                    key={`gmp-mesh-${edge.edgeId}`}
+                    path={[edge.fromPos, edge.toPos]}
+                    strokeColor={
+                      edge.bothNodesAlgedonic
+                        ? '#f43f5e'
+                        : edge.eitherNodeAlgedonic
+                        ? '#f59e0b'
+                        : '#22d3ee'
+                    }
+                    strokeOpacity={
+                      edge.bothNodesAlgedonic
+                        ? 0.92
+                        : edge.eitherNodeAlgedonic
+                        ? 0.65
+                        : 0.45
+                    }
+                    strokeWeight={
+                      edge.bothNodesAlgedonic
+                        ? 2.8
+                        : edge.isSpanningBackbone
+                        ? 2.0
+                        : 1.3
+                    }
+                  />
+                ))}
+
+              {(showAutonomousMesh ||
+                showMyceliumAlertCenter ||
+                myceliumScenario !== 'live_telemetry') && (
+                <MyceliumGoogleMapsOverlayLayer
+                  state={myceliumSimState}
+                  onSelectReceptor={onSelectReceptor}
+                />
+              )}
+
+              {/* CSS Neighbor-Complaint Noise Impulse Pressure-Wave Propagation per Neighbor Block on Google Maps (Activated when v > 10 m/s) */}
+              {isMapBlockPressureWaveActive &&
+                neighborBlockPressureTargets.map((item) => (
+                  <AdvancedMarker
+                    key={`gmp-pressure-wave-${item.receptor.id}`}
+                    position={item.receptor.center}
+                  >
+                    <div
+                      className={`map-gmp-pressure-wave-wrap ${mapWaveSpeedTierClass}`}
+                      data-testid={`gmp-neighbor-pressure-wave-${item.receptor.code}`}
+                    >
+                      <span className="map-gmp-pressure-ring map-gmp-pressure-ring--1" />
+                      <span className="map-gmp-pressure-ring map-gmp-pressure-ring--2" />
+                      <span className="map-gmp-pressure-ring map-gmp-pressure-ring--3" />
+                    </div>
+                  </AdvancedMarker>
+                ))}
+
+              {/* Item 6: > 85 dB Demolition Source Acoustic Wavefront Propagation on Google Maps */}
+              {showSource85DbWavefronts &&
+                sourceWavefrontTargets.map((entry) => (
+                  <React.Fragment key={`gmp-src-wavefront-${entry.source.id}`}>
+                    <AdvancedMarker position={entry.source.position}>
+                      <div
+                        className="map-gmp-source-wavefront-wrap"
+                        data-testid={`gmp-source-85db-wavefront-${entry.source.code}`}
+                        style={
+                          {
+                            '--source-wave-dur': `${Math.max(
+                              0.85,
+                              1.75 - Math.max(0, entry.peakLafmaxDb - 85) * 0.04
+                            ).toFixed(2)}s`,
+                          } as React.CSSProperties
+                        }
+                      >
+                        <span className="map-gmp-source-wavefront-ring map-gmp-source-wavefront-ring--1" />
+                        <span className="map-gmp-source-wavefront-ring map-gmp-source-wavefront-ring--2" />
+                        <span className="map-gmp-source-wavefront-ring map-gmp-source-wavefront-ring--3" />
+                      </div>
+                    </AdvancedMarker>
+                    {entry.impactedReceptors.map((hit) => (
+                      <Polyline
+                        key={`gmp-src-wave-ray-${entry.source.id}-${hit.receptor.id}`}
+                        path={[entry.source.position, hit.receptor.center]}
+                        strokeColor="#f43f5e"
+                        strokeOpacity={0.68}
+                        strokeWeight={2}
+                      />
+                    ))}
+                  </React.Fragment>
+                ))}
+
+              {/* Item 7: High-Wind Gust (>12 m/s) Affected Receptor Highlight Markers on Google Maps */}
+              {isHighGustAlert &&
+                highGustCorrelationData.affectedReceptors.map((item) => (
+                  <AdvancedMarker
+                    key={`gmp-gust-highlight-${item.receptor.id}`}
+                    position={item.receptor.center}
+                    onClick={() => onSelectReceptor(item.receptor.id)}
+                  >
+                    <div className="px-1.5 py-0.5 rounded bg-amber-950/95 border border-amber-400 text-amber-200 font-mono text-[11px] font-bold shadow-lg whitespace-nowrap tabular-nums">
+                      STØD &gt;12m/s · {item.receptor.code} (S={item.sumQuotient.toFixed(2)})
+                    </div>
+                  </AdvancedMarker>
+                ))}
+
+              {/* Item 8: Dynamic Emergency Evacuation Flow Corridors on Google Maps */}
+              {showEvacuationFlowAnimation &&
+                evacuationFlowSegments.map((seg) => (
+                  <React.Fragment key={`gmp-evac-flow-${seg.id}`}>
+                    <Polyline
+                      path={[seg.origin, seg.target]}
+                      strokeColor="#10b981"
+                      strokeOpacity={0.9}
+                      strokeWeight={3.5}
+                    />
+                    <AdvancedMarker position={seg.target}>
+                      <div className="px-2 py-0.5 rounded bg-emerald-950/95 border border-emerald-400 text-emerald-100 font-mono text-[11px] font-bold shadow-lg tabular-nums whitespace-nowrap">
+                        ▲ FLUGT {seg.speedMs.toFixed(2)} m/s · Hældn. {seg.slopePct >= 0 ? '+' : ''}
+                        {seg.slopePct.toFixed(1)}% · S={seg.localPlumeDensityS.toFixed(2)}
+                      </div>
+                    </AdvancedMarker>
+                  </React.Fragment>
+                ))}
 
               {/* 24-Hour Gaussian Puff Advection Trajectories on Google Maps */}
               {isPuffMode &&
@@ -4542,19 +6843,31 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       />
                       {isAnimatingPlumeRoute && (
                         <AdvancedMarker position={corr.tracerPos}>
-                          <div className="w-3.5 h-3.5 rounded-full bg-cyan-300 border-2 border-white shadow-lg" />
+                          <div className="w-3.5 h-3.5 rounded-full bg-cyan-300 border border-white shadow-sm" />
                         </AdvancedMarker>
                       )}
                     </React.Fragment>
                   ))}
                   {isAnimatingPlumeRoute && (
                     <AdvancedMarker position={plumeRouteAnimationData.frontPoint}>
-                      <div className="px-2.5 py-1 rounded bg-cyan-400 text-slate-950 border-2 border-white font-mono text-[10px] font-bold shadow-2xl">
+                      <div className="px-2.5 py-1 rounded bg-cyan-400 text-slate-950 border border-white font-mono text-[11px] font-bold shadow-lg">
                         ➤ FANEVEJ-RUTE KL. {currentWeather.hourLabel} ({plumeRouteAnimationData.originSource.code} → #{1}{' '}
                         {plumeRouteAnimationData.topAffectedReceptors[0]?.receptorCode})
                       </div>
                     </AdvancedMarker>
                   )}
+                  {isAnimatingPlumeRoute &&
+                    plumeRouteAnimationData.intersectingHighDensityReceptors.map((item) => (
+                      <AdvancedMarker
+                        key={`gmp-hd-intersect-${item.receptor.id}`}
+                        position={item.receptor.center}
+                      >
+                        <div className="px-2 py-0.5 rounded bg-rose-600 text-white border border-amber-300 font-mono text-[11px] font-extrabold shadow-lg animate-pulse">
+                          ⚠ HØJTÆTHEDS-INTERSEKTION · {item.receptor.code} (~{item.residentCount}{' '}
+                          beb.)
+                        </div>
+                      </AdvancedMarker>
+                    ))}
                 </>
               )}
 
@@ -4604,8 +6917,8 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
 
                   {/* Animated Leading Dust Cloud Front Callout Marker */}
                   <AdvancedMarker position={sixHourDustForecastData.interpolatedCentroid}>
-                    <div className="px-2.5 py-1 rounded bg-cyan-950/95 border-2 border-cyan-300 text-cyan-100 font-mono text-[10px] font-bold shadow-2xl">
-                      🔮 +{sixHourDustForecastData.clampedT.toFixed(1)}t (kl.{' '}
+                    <div className="px-2.5 py-1 rounded bg-[var(--surface-overlay)] border border-sky-400 text-sky-100 font-mono text-[11px] font-bold shadow-lg">
+                      +{sixHourDustForecastData.clampedT.toFixed(1)}t (kl.{' '}
                       {sixHourDustForecastData.activeStep.hourLabel}) ·{' '}
                       {sixHourDustForecastData.interpolatedWindSpeedMs} m/s →{' '}
                       {sixHourDustForecastData.interpolatedPlumeDeg}° (S=
@@ -4650,14 +6963,17 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         onClick={() => onSelectSource(lz.sourceId)}
                       >
                         <div
-                          className={`px-2 py-1 rounded border font-mono text-[9.5px] font-bold shadow-xl ${
+                          className={`px-2 py-1 rounded border font-mono text-[11px] font-bold shadow-xl inline-flex items-center gap-1 ${
                             isCrit
                               ? 'bg-rose-950/95 text-amber-200 border-amber-400'
                               : 'bg-sky-950/95 text-cyan-200 border-cyan-400'
                           }`}
                         >
-                          💧⚠ UDVASKNING {lz.sourceCode}: Mætning {lz.zoneSaturationPct}% ·{' '}
-                          {lz.effectiveAccumulatedPrecipMm} mm → Pb {lz.leadLeachateUgL} µg/L
+                          <Droplets className="w-3 h-3 shrink-0" />
+                          <span>
+                            UDVASKNING {lz.sourceCode}: Mætning {lz.zoneSaturationPct}% ·{' '}
+                            {lz.effectiveAccumulatedPrecipMm} mm → Pb {lz.leadLeachateUgL} µg/L
+                          </span>
                         </div>
                       </AdvancedMarker>
                     </React.Fragment>
@@ -4689,9 +7005,74 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   );
                 })}
 
+              {/* Show Plume Concentration Heatmap (Google Maps Mode) */}
+              {showPlumeConcentrationHeatmapLayer && (
+                <>
+                  <Polygon
+                    paths={plumeConcentrationHeatmapData.safeZonePerimeter}
+                    strokeColor="#10b981"
+                    strokeOpacity={0.65}
+                    strokeWeight={1.5}
+                    fillColor="#10b981"
+                    fillOpacity={0.1}
+                  />
+                  {plumeConcentrationHeatmapData.classifiedZones.map(({ zone, heatmapLevel }) => {
+                    const fillHex =
+                      heatmapLevel === 'red'
+                        ? '#e11d48'
+                        : heatmapLevel === 'orange'
+                        ? '#f97316'
+                        : heatmapLevel === 'blue'
+                        ? '#6366f1'
+                        : '#facc15';
+                    const strokeHex =
+                      heatmapLevel === 'red'
+                        ? '#fda4af'
+                        : heatmapLevel === 'orange'
+                        ? '#fdba74'
+                        : heatmapLevel === 'blue'
+                        ? '#a5b4fc'
+                        : '#fef08a';
+                    const fillOp =
+                      heatmapLevel === 'red'
+                        ? 0.54
+                        : heatmapLevel === 'orange'
+                        ? 0.42
+                        : heatmapLevel === 'blue'
+                        ? 0.42
+                        : 0.28;
+                    return (
+                      <Polygon
+                        key={`gmp-conc-heat-${zone.id}`}
+                        paths={zone.polygon}
+                        strokeColor={strokeHex}
+                        strokeOpacity={0.92}
+                        strokeWeight={heatmapLevel === 'red' ? 2.4 : 1.6}
+                        fillColor={fillHex}
+                        fillOpacity={fillOp}
+                      />
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Vejr-Korrelations Heatmap (6t vindstød vs. støvnedfald r > 0.8, Google Maps Mode) */}
+              {showWeatherCorrelationHeatmapLayer &&
+                weatherCorrelationHeatmapData.highlightedAreas.map((item) => (
+                  <Polygon
+                    key={`gmp-weather-corr-${item.receptor.id}`}
+                    paths={item.receptor.polygon}
+                    strokeColor="#f97316"
+                    strokeOpacity={0.95}
+                    strokeWeight={2.6}
+                    fillColor="#ea580c"
+                    fillOpacity={0.34}
+                  />
+                ))}
+
               {/* Plume / 24h Puff Risk Zone Polygons (Hidden in pure Differens-Heatmap mode so only the direct concentration difference is shown) */}
               {!isDifferenceHeatmapMode &&
-                activePolygons.map((zone) => {
+                filteredActivePolygons.map((zone) => {
                   const style = RISK_COLORS[zone.level];
                   return (
                     <Polygon
@@ -4793,7 +7174,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   {/* Peak +Delta and -Delta Markers on Google Maps when Differens-Heatmap is active */}
                   {isDifferenceHeatmapMode && heatmapComparison.peakPositiveCell && (
                     <AdvancedMarker position={heatmapComparison.peakPositiveCell.center}>
-                      <div className="px-2 py-0.5 rounded bg-rose-950/95 border border-rose-400 text-rose-100 font-mono text-[9.5px] font-bold shadow-xl">
+                      <div className="px-2 py-0.5 rounded bg-rose-950/95 border border-rose-400 text-rose-100 font-mono text-[11px] font-bold shadow-xl">
                         ▲ Maks. +Δ:{' '}
                         {differenceMetric === 'sum_quotient'
                           ? `+${heatmapComparison.peakPositiveCell.deltaS.toFixed(2)} S`
@@ -4805,7 +7186,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     heatmapComparison.peakNegativeCell &&
                     heatmapComparison.peakNegativeCell.deltaS < -0.05 && (
                       <AdvancedMarker position={heatmapComparison.peakNegativeCell.center}>
-                        <div className="px-2 py-0.5 rounded bg-sky-950/95 border border-sky-400 text-sky-100 font-mono text-[9.5px] font-bold shadow-xl">
+                        <div className="px-2 py-0.5 rounded bg-sky-950/95 border border-sky-400 text-sky-100 font-mono text-[11px] font-bold shadow-xl">
                           ▼ Maks. −Δ:{' '}
                           {differenceMetric === 'sum_quotient'
                             ? `${heatmapComparison.peakNegativeCell.deltaS.toFixed(2)} S`
@@ -4829,18 +7210,18 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           strokeWeight={3}
                         />
                         <AdvancedMarker position={sh.centroidA}>
-                          <div className="px-2 py-0.5 rounded bg-cyan-950/95 border border-cyan-300 text-cyan-200 font-mono text-[9.5px] font-bold shadow-lg">
+                          <div className="px-2 py-0.5 rounded bg-cyan-950/95 border border-cyan-300 text-cyan-200 font-mono text-[11px] font-bold shadow-lg">
                             T_A kl. {heatmapComparison.hourA.hourLabel} ({sh.plumeDirectionADeg}°)
                           </div>
                         </AdvancedMarker>
                         <AdvancedMarker position={sh.centroidB}>
-                          <div className="px-2 py-0.5 rounded bg-rose-950/95 border border-rose-400 text-rose-200 font-mono text-[9.5px] font-bold shadow-lg">
+                          <div className="px-2 py-0.5 rounded bg-rose-950/95 border border-rose-400 text-rose-200 font-mono text-[11px] font-bold shadow-lg">
                             T_B kl. {heatmapComparison.hourB.hourLabel} ({sh.plumeDirectionBDeg}°)
                           </div>
                         </AdvancedMarker>
                         {sh.centroidShiftMeters > 5 && (
                           <AdvancedMarker position={midPt}>
-                            <div className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 border border-white font-mono text-[9.5px] font-bold shadow-xl">
+                            <div className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 border border-white font-mono text-[11px] font-bold shadow-xl">
                               ➤ {sh.sourceCode}: Flyttet {sh.centroidShiftMeters}m mod {sh.shiftCompass} (
                               {sh.rotationSignedDeg >= 0 ? `+${sh.rotationSignedDeg}°` : `${sh.rotationSignedDeg}°`})
                             </div>
@@ -4854,45 +7235,55 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
 
               {/* Pre-1997 Asbestos & Mineral Wool Fiber Deposition Risk Layer on Google Maps */}
               {showAsbestosRiskLayer &&
+                (visibleDispersionSubstances.asbestos || visibleDispersionSubstances.quartzWool) &&
                 asbestosDepositionZones.map((az) => (
                   <React.Fragment key={`gmp-asb-${az.sourceId}`}>
-                    <Polygon
-                      paths={az.haloPolygon}
-                      strokeColor="#34d399"
-                      strokeOpacity={0.75}
-                      strokeWeight={1.2}
-                      fillColor="#10b981"
-                      fillOpacity={0.14}
-                      onClick={() => onSelectSource(az.sourceId)}
-                    />
-                    <Polygon
-                      paths={az.corePolygon}
-                      strokeColor="#10b981"
-                      strokeOpacity={0.95}
-                      strokeWeight={2.2}
-                      fillColor="#059669"
-                      fillOpacity={0.28}
-                      onClick={() => onSelectSource(az.sourceId)}
-                    />
-                    <Polyline
-                      path={[az.sourcePosition, az.depositionCentroid]}
-                      strokeColor="#6ee7b7"
-                      strokeOpacity={0.9}
-                      strokeWeight={2}
-                    />
-                    <AdvancedMarker
-                      position={az.depositionCentroid}
-                      onClick={() => onSelectSource(az.sourceId)}
-                    >
-                      <div className="px-2 py-1 rounded bg-emerald-950/95 border border-emerald-400 text-emerald-200 font-mono text-[10px] shadow-xl cursor-pointer">
-                        <div className="font-bold text-emerald-300">
-                          ☣ {az.sourceCode} (&lt;1997): {az.probabilityPct}% Fiber-Risiko
-                        </div>
-                        <div className="text-[9px] text-slate-200">
-                          {az.buildingParts[0]} → {az.estimatedDepositionFibreM2.toLocaleString('da-DK')} fibre/m²
-                        </div>
-                      </div>
-                    </AdvancedMarker>
+                    {visibleDispersionSubstances.quartzWool && (
+                      <Polygon
+                        paths={az.haloPolygon}
+                        strokeColor="#34d399"
+                        strokeOpacity={0.75}
+                        strokeWeight={1.2}
+                        fillColor="#10b981"
+                        fillOpacity={0.14}
+                        onClick={() => onSelectSource(az.sourceId)}
+                      />
+                    )}
+                    {visibleDispersionSubstances.asbestos && (
+                      <>
+                        <Polygon
+                          paths={az.corePolygon}
+                          strokeColor="#10b981"
+                          strokeOpacity={0.95}
+                          strokeWeight={2.2}
+                          fillColor="#059669"
+                          fillOpacity={0.28}
+                          onClick={() => onSelectSource(az.sourceId)}
+                        />
+                        <Polyline
+                          path={[az.sourcePosition, az.depositionCentroid]}
+                          strokeColor="#6ee7b7"
+                          strokeOpacity={0.9}
+                          strokeWeight={2}
+                        />
+                        <AdvancedMarker
+                          position={az.depositionCentroid}
+                          onClick={() => onSelectSource(az.sourceId)}
+                        >
+                          <div className="px-2 py-1 rounded bg-emerald-950/95 border border-emerald-400 text-emerald-200 font-mono text-[11px] shadow-xl cursor-pointer">
+                            <div className="font-bold text-emerald-300 inline-flex items-center gap-1">
+                              <Biohazard className="w-3 h-3 shrink-0" />
+                              <span>
+                                {az.sourceCode} (&lt;1997): {az.probabilityPct}% Fiber-Risiko
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-200">
+                              {az.buildingParts[0]} → {az.estimatedDepositionFibreM2.toLocaleString('da-DK')} fibre/m²
+                            </div>
+                          </div>
+                        </AdvancedMarker>
+                      </>
+                    )}
                   </React.Fragment>
                 ))}
 
@@ -4915,9 +7306,10 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       key={`gmp-24h-acc-rec-${rs.receptorId}`}
                       position={rs.position}
                     >
-                      <div className="px-2 py-1 rounded bg-rose-950/95 border border-rose-400 text-rose-100 font-mono text-[9.5px] shadow-xl">
-                        <div className="font-bold text-rose-300">
-                          🔥 {rs.receptorCode} (24t Puff-Akkumulering)
+                      <div className="px-2 py-1 rounded bg-rose-950/95 border border-rose-400 text-rose-100 font-mono text-[11px] shadow-xl">
+                        <div className="font-bold text-rose-300 inline-flex items-center gap-1">
+                          <Flame className="w-3 h-3 shrink-0" />
+                          <span>{rs.receptorCode} (24t Puff-Akkumulering)</span>
                         </div>
                         <div>
                           Støv: {rs.totalDepositedHeavyMetalsAndPcbUgM2.toFixed(1)} µg/m² · Asbest:{' '}
@@ -4926,6 +7318,53 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       </div>
                     </AdvancedMarker>
                   ))}
+                </>
+              )}
+
+              {/* Registered Neighbor Complaints Heat-Mapped Block Density Layer on Google Maps */}
+              {showComplaintDensityOverlay && (
+                <>
+                  {complaintDensitySummary.items
+                    .filter((item) => item.normalizedDensity >= 0.08)
+                    .map((item) => {
+                      const scaleAlpha = complaintDensityOpacityPct / 100;
+                      const fillOpacity = Math.min(
+                        0.68,
+                        (0.14 + item.normalizedDensity * 0.44) * scaleAlpha
+                      );
+                      const strokeOpacity = Math.min(
+                        0.96,
+                        (0.45 + item.normalizedDensity * 0.5) * scaleAlpha
+                      );
+                      return (
+                        <Polygon
+                          key={`gmp-complaint-density-${item.id}`}
+                          paths={item.polygon}
+                          strokeColor={item.heatStrokeHex}
+                          strokeOpacity={strokeOpacity}
+                          strokeWeight={item.normalizedDensity >= 0.5 ? 2.4 : 1.5}
+                          fillColor={item.heatFillHex}
+                          fillOpacity={fillOpacity}
+                          onClick={() => handleFocusComplaintDensityItem(item)}
+                        />
+                      );
+                    })}
+                  {complaintDensitySummary.topDisputedItems
+                    .filter((item) => item.normalizedDensity >= 0.35)
+                    .slice(0, 4)
+                    .map((item, rankIdx) => (
+                      <AdvancedMarker
+                        key={`gmp-complaint-hotspot-${item.id}`}
+                        position={item.center}
+                        onClick={() => handleFocusComplaintDensityItem(item)}
+                      >
+                        <div className="px-2 py-0.5 rounded bg-slate-950/95 border border-rose-400/90 text-rose-100 font-mono tabular-nums text-[11px] font-bold shadow-xl cursor-pointer whitespace-nowrap">
+                          <span className="text-rose-300">#{rankIdx + 1}</span> {item.code} ·{' '}
+                          {Math.round(item.normalizedDensity * 100)}% tæthed (
+                          {item.directComplaintCount} kl.)
+                        </div>
+                      </AdvancedMarker>
+                    ))}
                 </>
               )}
 
@@ -4962,8 +7401,11 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   ))}
                   {dustDepositionHeatmapData.receptorNodes.map((rNode) => (
                     <AdvancedMarker key={`gmp-dust-rec-${rNode.receptorId}`} position={rNode.position}>
-                      <div className="px-2 py-0.5 rounded bg-amber-950/95 border border-amber-400 text-amber-200 font-mono text-[9.5px] font-bold shadow-xl">
-                        🌫️ {rNode.receptorCode}: {rNode.total24hUgM2.toFixed(1)} µg/m² (24t)
+                      <div className="px-2 py-0.5 rounded bg-amber-950/95 border border-amber-400 text-amber-200 font-mono text-[11px] font-bold shadow-xl inline-flex items-center gap-1">
+                        <CloudFog className="w-3 h-3 shrink-0" />
+                        <span>
+                          {rNode.receptorCode}: {rNode.total24hUgM2.toFixed(1)} µg/m² (24t)
+                        </span>
                       </div>
                     </AdvancedMarker>
                   ))}
@@ -5011,8 +7453,11 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   ))}
                   {noiseContourHeatmapData.receptorNoiseNodes.map((nNode) => (
                     <AdvancedMarker key={`gmp-noise-rec-${nNode.receptorId}`} position={nNode.position}>
-                      <div className="px-2 py-0.5 rounded bg-fuchsia-950/95 border border-fuchsia-400 text-fuchsia-200 font-mono text-[9.5px] font-bold shadow-xl">
-                        🔊 {nNode.receptorCode}: {nNode.correctedLaeqDb.toFixed(1)} dB(A) (ΔL {nNode.totalRefrDb >= 0 ? '+' : ''}{nNode.totalRefrDb.toFixed(1)} dB)
+                      <div className="px-2 py-0.5 rounded bg-fuchsia-950/95 border border-fuchsia-400 text-fuchsia-200 font-mono text-[11px] font-bold shadow-xl inline-flex items-center gap-1">
+                        <Volume2 className="w-3 h-3 shrink-0" />
+                        <span>
+                          {nNode.receptorCode}: {nNode.correctedLaeqDb.toFixed(1)} dB(A) (ΔL {nNode.totalRefrDb >= 0 ? '+' : ''}{nNode.totalRefrDb.toFixed(1)} dB)
+                        </span>
                       </div>
                     </AdvancedMarker>
                   ))}
@@ -5042,7 +7487,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               })}
 
               {/* Source Building Footprints */}
-              {sources.map((src) => (
+              {visibleSources.map((src) => (
                 <Polygon
                   key={`gmp-src-poly-${src.id}`}
                   paths={src.footprint}
@@ -5059,7 +7504,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               ))}
 
               {/* Source Advanced Markers */}
-              {sources.map((src) => (
+              {visibleSources.map((src) => (
                 <AdvancedMarker
                   key={`gmp-src-marker-${src.id}`}
                   position={src.position}
@@ -5085,6 +7530,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               {receptors.map((rec) => {
                 const exp = exposureByReceptorId[rec.id];
                 const hwRank = highWindRankByReceptorId[rec.id];
+                const meshNode = autonomousMesh.nodesByReceptorId[rec.id];
                 return (
                   <AdvancedMarker
                     key={`gmp-rec-marker-${rec.id}`}
@@ -5096,9 +7542,9 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     }}
                   >
                     <div
-                      className={`px-2 py-1 rounded border text-[11px] font-mono shadow-md cursor-pointer transition-all ${
+                      className={`px-2 py-1 rounded border text-[11px] font-mono tabular-nums shadow-md cursor-pointer transition-all ${
                         hwRank
-                          ? 'bg-rose-600 text-white border-2 border-amber-300 font-extrabold ring-4 ring-rose-500/60 scale-110'
+                          ? 'bg-rose-600 text-white border border-amber-300 font-extrabold ring-2 ring-rose-500/60 scale-105'
                           : exp?.riskLevel === 'red'
                           ? 'bg-rose-950/95 text-rose-200 border-rose-500 font-semibold'
                           : exp?.riskLevel === 'orange'
@@ -5106,8 +7552,16 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           : 'bg-slate-900/90 text-cyan-200 border-cyan-500/60'
                       }`}
                     >
-                      {hwRank ? `⚠ #${hwRank} VIND >10m/s · ` : ''}
-                      {rec.code} · S={exp?.sumQuotient.toFixed(2) ?? '0.00'}
+                      <div>
+                        {hwRank ? `#${hwRank} VIND >10m/s · ` : ''}
+                        {rec.code} · S={exp?.sumQuotient.toFixed(2) ?? '0.00'}
+                      </div>
+                      {showAutonomousMesh && meshNode && (
+                        <div className="text-[11px] text-cyan-200/95 font-normal">
+                          ZKP · Nabo {meshNode.nabotest.corroboratingNeighborCount}/
+                          {meshNode.nabotest.analyzedNearbyNodesCount}
+                        </div>
+                      )}
                     </div>
                   </AdvancedMarker>
                 );
@@ -5123,11 +7577,11 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     }
                   }}
                 >
-                  <div className="bg-amber-400 text-slate-950 border-2 border-white px-3 py-1.5 rounded-md shadow-2xl font-mono text-xs cursor-pointer ring-4 ring-amber-400/50">
+                  <div className="bg-amber-400 text-slate-950 border border-white px-3 py-1.5 rounded-md shadow-lg font-mono text-xs cursor-pointer ring-2 ring-amber-400/50">
                     <div className="font-bold">
-                      ★ HØJESTE 24T DOSIS: {peakReceptor.receptorName}
+                      HØJESTE 24T DOSIS: {peakReceptor.receptorName}
                     </div>
-                    <div className="text-[10px] font-semibold">
+                    <div className="text-[11px] font-semibold">
                       Spidsbelastning kl. {peakReceptor.peakHourLabel} (S=
                       {peakReceptor.peakSumQuotient.toFixed(2)}) · ∑=
                       {peakReceptor.cumulativeSumDose.toFixed(1)} S·t
@@ -5139,7 +7593,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               {/* Pending Observation GPS Target Crosshair on Google Maps */}
               {pendingObservationPoint && (
                 <AdvancedMarker position={pendingObservationPoint}>
-                  <div className="px-2.5 py-1 rounded bg-fuchsia-500 text-slate-950 border-2 border-white font-mono text-[11px] font-bold shadow-xl">
+                  <div className="px-2.5 py-1 rounded bg-fuchsia-500 text-slate-950 border border-white font-mono text-[11px] font-bold shadow-lg">
                     ⊕ VALGT OBSERVATIONSPUNKT ({pendingObservationPoint.lat.toFixed(4)},{' '}
                     {pendingObservationPoint.lng.toFixed(4)})
                   </div>
@@ -5157,7 +7611,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     onClick={() => onSelectObservation(obs)}
                   >
                     <div
-                      className={`px-2.5 py-1 rounded border font-mono text-[10px] shadow-xl cursor-pointer transition-transform ${
+                      className={`px-2.5 py-1 rounded border font-mono text-[11px] shadow-xl cursor-pointer transition-transform inline-flex items-center gap-1 ${
                         isSelected
                           ? 'bg-fuchsia-500 text-slate-950 border-white scale-110 font-bold'
                           : inPlume
@@ -5165,10 +7619,13 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           : 'bg-slate-900/95 text-slate-200 border-slate-500'
                       }`}
                     >
-                      ⚡ {obs.code} (kl. {obs.observedHourLabel}) ·{' '}
-                      {inPlume
-                        ? `I FANE (S=${obs.plumeCorroboration.calculatedSumQuotient.toFixed(2)})`
-                        : 'RANDZONE'}
+                      <Zap className="w-3 h-3 shrink-0" />
+                      <span>
+                        {obs.code} (kl. {obs.observedHourLabel}) ·{' '}
+                        {inPlume
+                          ? `I FANE (S=${obs.plumeCorroboration.calculatedSumQuotient.toFixed(2)})`
+                          : 'RANDZONE'}
+                      </span>
                     </div>
                   </AdvancedMarker>
                 );
@@ -5198,7 +7655,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       </div>
                       {matchedBldg && onChangeBuildingCategory && (
                         <div className="pt-1 border-t border-slate-200 space-y-1">
-                          <label className="block text-[10px] font-bold text-slate-700">
+                          <label className="block text-[11px] font-bold text-slate-700">
                             Operationel Bygningskategori (a–e):
                           </label>
                           <select
@@ -5371,6 +7828,59 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   strokeDasharray="2 2"
                 />
               </pattern>
+
+              {/* Plume Concentration Heatmap Gradients & Safe-Zone Grid */}
+              <pattern
+                id="safe-zone-emerald-grid"
+                width="18"
+                height="18"
+                patternUnits="userSpaceOnUse"
+              >
+                <rect width="18" height="18" fill="rgba(16, 185, 129, 0.08)" />
+                <path
+                  d="M 18 0 L 0 0 0 18"
+                  fill="none"
+                  stroke="rgba(52, 211, 153, 0.18)"
+                  strokeWidth="0.7"
+                />
+                <circle cx="9" cy="9" r="0.9" fill="rgba(52, 211, 153, 0.28)" />
+              </pattern>
+              <radialGradient id="plume-heatmap-critical-grad" cx="35%" cy="50%" r="75%">
+                <stop offset="0%" stopColor="#fb7185" stopOpacity="0.82" />
+                <stop offset="45%" stopColor="#e11d48" stopOpacity="0.64" />
+                <stop offset="100%" stopColor="#9f1239" stopOpacity="0.28" />
+              </radialGradient>
+              <radialGradient id="plume-heatmap-elevated-grad" cx="35%" cy="50%" r="75%">
+                <stop offset="0%" stopColor="#fb923c" stopOpacity="0.68" />
+                <stop offset="60%" stopColor="#ea580c" stopOpacity="0.46" />
+                <stop offset="100%" stopColor="#c2410c" stopOpacity="0.18" />
+              </radialGradient>
+              <radialGradient id="plume-heatmap-observation-grad" cx="35%" cy="50%" r="75%">
+                <stop offset="0%" stopColor="#facc15" stopOpacity="0.46" />
+                <stop offset="70%" stopColor="#eab308" stopOpacity="0.26" />
+                <stop offset="100%" stopColor="#ca8a04" stopOpacity="0.1" />
+              </radialGradient>
+              <linearGradient id="plume-heatmap-runoff-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#818cf8" stopOpacity="0.64" />
+                <stop offset="100%" stopColor="#4f46e5" stopOpacity="0.24" />
+              </linearGradient>
+              {/* Vejr-Korrelations Heatmap Gradient (r > 0.8 over 6 hours) */}
+              <radialGradient id="weather-corr-high-grad" cx="50%" cy="50%" r="68%">
+                <stop offset="0%" stopColor="#f97316" stopOpacity="0.58" />
+                <stop offset="55%" stopColor="#fb923c" stopOpacity="0.34" />
+                <stop offset="100%" stopColor="#ea580c" stopOpacity="0.1" />
+              </radialGradient>
+              <marker
+                id="water-main-flow-arrow"
+                viewBox="0 0 10 10"
+                refX="6"
+                refY="5"
+                markerWidth="5"
+                markerHeight="5"
+                orient="auto-start-reverse"
+              >
+                <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#e0f2fe" />
+              </marker>
             </defs>
 
             {/* Base Satellite / Hybrid Ortho Canvas */}
@@ -5391,41 +7901,647 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               strokeDasharray="4 4"
             />
 
-            {/* Street Network of Ringparken (Hybrid Road Layer) */}
-            {streetNetwork.map((st) => {
-              const pts = st.pts.map((p) => projectLatLng(p));
-              const d = pts
-                .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-                .join(' ');
-              const mid = pts[1] || pts[0];
+            {/* Street Network of Ringparken (Hybrid Road Layer - Memoized) */}
+            {memoizedSvgBaseGeometry.streets.map((st) => (
+              <g key={st.name}>
+                <path
+                  d={st.d}
+                  fill="none"
+                  stroke="#1e293b"
+                  strokeWidth={st.strokeWidth}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d={st.d}
+                  fill="none"
+                  stroke="#475569"
+                  strokeWidth={1.2}
+                  strokeDasharray="6 6"
+                />
+                <text
+                  x={st.midX}
+                  y={st.midY - 8}
+                  textAnchor="middle"
+                  className="fill-slate-400 text-[11px] font-mono pointer-events-none"
+                >
+                  {st.name}
+                </text>
+              </g>
+            ))}
+
+            {/* Kierulffsvej DN200 Drinking Water Main GIS Layer (Scene-Calibrated + LER 2.0 Buffer + Valves/Branches + Virtual Leak Zones) */}
+            {showWaterMainLayer && waterMainTelemetry && (() => {
+              const wm = waterMainTelemetry;
+              const isRupture = wm.overallStatus === 'critical_rupture';
+              const isWarn = wm.overallStatus === 'warning' || wm.overallStatus === 'advisory';
+              const mainPipeHex = isRupture ? '#ef4444' : isWarn ? '#f59e0b' : '#0ea5e9';
+              const labelPos = projectLatLng(wm.inspectionCenter);
+              const svgPxPerMeter = PX_PER_DEG_LAT / 111320;
+
               return (
-                <g key={st.name}>
-                  <path
-                    d={d}
-                    fill="none"
-                    stroke="#1e293b"
-                    strokeWidth={st.width * scaleFactor}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d={d}
-                    fill="none"
-                    stroke="#475569"
-                    strokeWidth={1.2}
-                    strokeDasharray="6 6"
-                  />
-                  <text
-                    x={mid.x}
-                    y={mid.y - 8}
-                    textAnchor="middle"
-                    className="fill-slate-400 text-[10px] font-mono pointer-events-none"
+                <g
+                  data-testid="svg-kierulffsvej-water-main-layer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isLeakPinDropMode && svgRef.current) {
+                      const rect = svgRef.current.getBoundingClientRect();
+                      const relX = ((e.clientX - rect.left) / rect.width) * VIEW_W;
+                      const relY = ((e.clientY - rect.top) / rect.height) * VIEW_H;
+                      handlePlaceVirtualLeakPinAtPoint(unprojectPx(relX, relY));
+                      return;
+                    }
+                    setShowWaterMainInspector((prev) => !prev);
+                  }}
+                  className={isLeakPinDropMode ? 'cursor-crosshair' : 'cursor-pointer'}
+                >
+                  {/* Virtual Leak Pin Soil Saturation Zones & Building Percolation Flow on Tactical SVG */}
+                  {effectiveVirtualLeakImpact && (() => {
+                    const pinPx = projectLatLng(effectiveVirtualLeakImpact.pinPoint);
+                    return (
+                      <g data-testid="svg-virtual-leak-saturation-layer">
+                        {[...effectiveVirtualLeakImpact.saturationZones]
+                          .reverse()
+                          .map((zone) => (
+                            <circle
+                              key={`svg-leak-zone-${zone.tier}`}
+                              cx={pinPx.x}
+                              cy={pinPx.y}
+                              r={Math.max(8, zone.radiusMeters * svgPxPerMeter)}
+                              fill={zone.colorHex}
+                              fillOpacity={
+                                zone.tier === 'core_saturated'
+                                  ? 0.32
+                                  : zone.tier === 'capillary_front'
+                                  ? 0.2
+                                  : 0.12
+                              }
+                              stroke={zone.colorHex}
+                              strokeWidth={zone.tier === 'core_saturated' ? 2.1 : 1.3}
+                              strokeDasharray={
+                                zone.tier === 'clay_wetting_fringe' ? '5 3' : undefined
+                              }
+                            />
+                          ))}
+                        {effectiveVirtualLeakImpact.impactedBuildings.map((bld) => {
+                          const bPx = projectLatLng(bld.center);
+                          const strokeCol =
+                            bld.severity === 'critical'
+                              ? '#f43f5e'
+                              : bld.severity === 'high'
+                              ? '#f59e0b'
+                              : '#38bdf8';
+                          return (
+                            <g key={`svg-leak-bld-${bld.buildingId}`}>
+                              <line
+                                x1={pinPx.x}
+                                y1={pinPx.y}
+                                x2={bPx.x}
+                                y2={bPx.y}
+                                stroke={strokeCol}
+                                strokeWidth={2.0}
+                                strokeDasharray="5 3"
+                              />
+                              <circle
+                                cx={bPx.x}
+                                cy={bPx.y}
+                                r={6}
+                                fill={strokeCol}
+                                fillOpacity={0.35}
+                                stroke={strokeCol}
+                                strokeWidth={1.6}
+                              />
+                              <g transform={`translate(${bPx.x}, ${bPx.y - 14})`}>
+                                <rect
+                                  x={-54}
+                                  y={-8}
+                                  width={108}
+                                  height={15}
+                                  rx={3}
+                                  fill="#090d16"
+                                  fillOpacity={0.94}
+                                  stroke={strokeCol}
+                                  strokeWidth={1.1}
+                                />
+                                <text
+                                  x={0}
+                                  y={2.5}
+                                  textAnchor="middle"
+                                  className="fill-slate-100 text-[10px] font-mono font-bold tabular-nums"
+                                >
+                                  {bld.buildingCode}: {bld.arrivalMinutes.toFixed(0)}m ·{' '}
+                                  {bld.intrusionRateLh.toFixed(0)}L/t
+                                </text>
+                              </g>
+                            </g>
+                          );
+                        })}
+                        <g transform={`translate(${pinPx.x}, ${pinPx.y})`}>
+                          <circle
+                            cx={0}
+                            cy={0}
+                            r={9}
+                            fill="#e11d48"
+                            stroke="#fef08a"
+                            strokeWidth={2}
+                          />
+                          <circle cx={0} cy={0} r={3} fill="#ffffff" />
+                          <g transform="translate(0, -18)">
+                            <rect
+                              x={-78}
+                              y={-9}
+                              width={156}
+                              height={16}
+                              rx={3}
+                              fill="#881337"
+                              fillOpacity={0.96}
+                              stroke="#fde047"
+                              strokeWidth={1.3}
+                            />
+                            <text
+                              x={0}
+                              y={2.5}
+                              textAnchor="middle"
+                              className="fill-white text-[10px] font-mono font-extrabold tabular-nums"
+                            >
+                              LÆKAGEPUNKT · {effectiveVirtualLeakImpact.dischargeLs.toFixed(1)} L/s
+                            </text>
+                          </g>
+                        </g>
+                      </g>
+                    );
+                  })()}
+
+                  {/* LER 2.0 ±2.0 m Uncertainty Buffer */}
+                  {showLerBuffer && wm.lerBufferPolygon.length >= 3 && (
+                    <polygon
+                      points={polygonToSvgPoints(wm.lerBufferPolygon)}
+                      fill={isRupture ? 'rgba(239, 68, 68, 0.16)' : 'rgba(14, 165, 233, 0.16)'}
+                      stroke={isRupture ? '#f87171' : '#38bdf8'}
+                      strokeWidth={1.3}
+                      strokeDasharray="6 4"
+                    />
+                  )}
+
+                  {/* 4 Service Branches (Stikledninger) with DS 439 / DS/EN 1717 status */}
+                  {wm.serviceBranches.map((br) => {
+                    const p1 = projectLatLng(br.startOnMain);
+                    const p2 = projectLatLng(br.buildingConnection);
+                    const uncapped = br.cappingStatus === 'uncapped_risk';
+                    return (
+                      <g key={`svg-wm-br-${br.id}`}>
+                        <line
+                          x1={p1.x}
+                          y1={p1.y}
+                          x2={p2.x}
+                          y2={p2.y}
+                          stroke={uncapped ? '#ef4444' : '#38bdf8'}
+                          strokeWidth={2.4}
+                          strokeDasharray={uncapped ? '3 2' : '5 3'}
+                        />
+                        <circle
+                          cx={p2.x}
+                          cy={p2.y}
+                          r={3.5}
+                          fill={uncapped ? '#ef4444' : '#10b981'}
+                          stroke="#0f172a"
+                          strokeWidth={1.2}
+                        />
+                      </g>
+                    );
+                  })}
+
+                  {/* Main DN200 Pipeline Segments */}
+                  {wm.sceneSegments.map((seg) => {
+                    const pts = seg.waypoints.map((w) => projectLatLng(w));
+                    if (pts.length < 2) return null;
+                    const pathD = pts
+                      .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+                      .join(' ');
+                    const segStroke =
+                      seg.material === 'PE100_SDR17_IKKE_DIFFUSIONSTAET' &&
+                      wm.overallStatus === 'nominal'
+                        ? '#06b6d4'
+                        : mainPipeHex;
+                    return (
+                      <g
+                        key={`svg-wm-seg-${seg.id}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isLeakPinDropMode && svgRef.current) {
+                            const rect = svgRef.current.getBoundingClientRect();
+                            const relX = ((e.clientX - rect.left) / rect.width) * VIEW_W;
+                            const relY = ((e.clientY - rect.top) / rect.height) * VIEW_H;
+                            handlePlaceVirtualLeakPinAtPoint(unprojectPx(relX, relY));
+                            return;
+                          }
+                          setSelectedWaterMainSectionId(seg.id);
+                        }}
+                      >
+                        <path
+                          d={pathD}
+                          fill="none"
+                          stroke="#090d16"
+                          strokeWidth={7.5}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d={pathD}
+                          fill="none"
+                          stroke={segStroke}
+                          strokeWidth={4.2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className={isRupture ? 'animate-pulse' : undefined}
+                        />
+                        <path
+                          d={pathD}
+                          fill="none"
+                          stroke="#e0f2fe"
+                          strokeWidth={1.3}
+                          strokeDasharray="8 14"
+                          markerMid="url(#water-main-flow-arrow)"
+                        />
+                      </g>
+                    );
+                  })}
+
+                  {/* 3 Section Isolation Valves (V-VEST, V-MIDT, V-ØST) */}
+                  {wm.valves.map((v) => {
+                    const vp = projectLatLng(v.coordinate);
+                    return (
+                      <g key={`svg-wm-valve-${v.id}`} transform={`translate(${vp.x}, ${vp.y})`}>
+                        <rect
+                          x={-5.5}
+                          y={-5.5}
+                          width={11}
+                          height={11}
+                          rx={2}
+                          fill={v.status === 'closed' ? '#dc2626' : '#0284c7'}
+                          stroke="#ffffff"
+                          strokeWidth={1.4}
+                        />
+                        <text
+                          x={0}
+                          y={-9}
+                          textAnchor="middle"
+                          className="fill-sky-200 text-[11px] font-mono font-bold pointer-events-none"
+                        >
+                          {v.code}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* 2 Hydrants */}
+                  {wm.hydrants.map((hyd) => {
+                    const hp = projectLatLng(hyd.coordinate);
+                    return (
+                      <circle
+                        key={`svg-wm-hyd-${hyd.id}`}
+                        cx={hp.x}
+                        cy={hp.y}
+                        r={4.2}
+                        fill="#e11d48"
+                        stroke="#ffffff"
+                        strokeWidth={1.3}
+                      />
+                    );
+                  })}
+
+                  {/* Pipe Callout Tooltip on Kierulffsvej (Focus Mode Item 8 pulsing red border on PPV > 50 mm/s or rupture) */}
+                  <g
+                    transform={`translate(${labelPos.x}, ${labelPos.y + 18})`}
+                    data-testid="svg-water-main-tooltip-container"
+                    data-critical-pulse={isWaterMainCriticalPulse ? 'true' : 'false'}
+                    className="cursor-pointer"
+                    onClick={() => setShowWaterMainInspector(true)}
                   >
-                    {st.name}
-                  </text>
+                    <rect
+                      data-testid="svg-water-main-tooltip-rect"
+                      x={-130}
+                      y={-9}
+                      width={260}
+                      height={18}
+                      rx={3}
+                      fill="#090d16"
+                      fillOpacity={0.94}
+                      stroke={isWaterMainCriticalPulse ? '#ef4444' : mainPipeHex}
+                      strokeWidth={isWaterMainCriticalPulse ? 2.0 : 1.3}
+                      className={
+                        isWaterMainCriticalPulse ? 'water-main-svg-tooltip-critical-pulse' : undefined
+                      }
+                    />
+                    <text
+                      x={0}
+                      y={3.5}
+                      textAnchor="middle"
+                      className={`${
+                        isWaterMainCriticalPulse ? 'fill-rose-200' : 'fill-sky-200'
+                      } text-[11px] font-mono font-bold tabular-nums`}
+                    >
+                      DN200 (-1,65m) · {wm.pressureBar.toFixed(1)} bar · PPV{' '}
+                      {wm.pipePpvMmPerSec.toFixed(1)} · {wm.flowLs.toFixed(1)} L/s
+                    </text>
+                  </g>
+
+                  {/* Focus Mode Item 10: Clear color-coded + icon + text BEK 1272/2025 Status Indicator right next to Kierulffsvej tooltip */}
+                  {waterMainBek1272Status && (
+                    <g
+                      transform={`translate(${labelPos.x}, ${labelPos.y + 39})`}
+                      data-testid="svg-water-main-bek1272-indicator"
+                    >
+                      <rect
+                        x={-152}
+                        y={-9}
+                        width={304}
+                        height={18}
+                        rx={3}
+                        fill={waterMainBek1272Status.fillHex}
+                        fillOpacity={0.95}
+                        stroke={waterMainBek1272Status.strokeHex}
+                        strokeWidth={1.3}
+                      />
+                      <text
+                        x={0}
+                        y={3.5}
+                        textAnchor="middle"
+                        className={`${waterMainBek1272Status.textClass} text-[11px] font-mono font-bold tabular-nums`}
+                      >
+                        {waterMainBek1272Status.symbolChar} {waterMainBek1272Status.shortBadgeDa} · Pb{' '}
+                        {waterMainBek1272Status.pbUgL.toFixed(2)} · 4-PAH{' '}
+                        {waterMainBek1272Status.pah4UgL.toFixed(3)} · PCB{' '}
+                        {waterMainBek1272Status.pcbUgL.toFixed(2)} µg/L
+                      </text>
+                    </g>
+                  )}
+
+                  {isStructuralIntegrityAlert && (
+                    <g
+                      transform={`translate(${labelPos.x}, ${labelPos.y + 60})`}
+                      data-testid="svg-structural-integrity-alert-badge"
+                    >
+                      <rect
+                        x={-152}
+                        y={-9}
+                        width={304}
+                        height={18}
+                        rx={3}
+                        fill="#4c0519"
+                        fillOpacity={0.96}
+                        stroke="#fb7185"
+                        strokeWidth={1.5}
+                      />
+                      <text
+                        x={0}
+                        y={3.5}
+                        textAnchor="middle"
+                        className="fill-rose-100 text-[10.5px] font-mono font-extrabold tabular-nums"
+                      >
+                        ▲ Vibrationsfare (DIN 4150-3) · {wm.pipePpvMmPerSec.toFixed(1)}/25 mm/s ({ppvPctOf25Threshold}%)
+                      </text>
+                    </g>
+                  )}
                 </g>
               );
-            })}
+            })()}
+
+            {/* SYSTEM B SIMULTANEOUS ALGEDONIC DISPATCH (S1 + S3) LAYER ON TACTICAL SVG */}
+            {simultaneousDispatch?.active && (
+              <g data-testid="svg-simultaneous-algedonic-layer">
+                <defs>
+                  <marker
+                    id="s1-upwind-escape-arrow"
+                    markerWidth="8"
+                    markerHeight="8"
+                    refX="6"
+                    refY="4"
+                    orient="auto"
+                  >
+                    <path d="M 0 0 L 8 4 L 0 8 z" fill="#22c55e" />
+                  </marker>
+                </defs>
+
+                {/* System 1 P1 Danger Zone Polygon */}
+                {simultaneousDispatch.system1State.dangerPolygon.length >= 3 && (
+                  <polygon
+                    points={polygonToSvgPoints(simultaneousDispatch.system1State.dangerPolygon)}
+                    fill="rgba(220, 38, 38, 0.24)"
+                    stroke="#ef4444"
+                    strokeWidth={simultaneousDispatch.isBlinkingP1 ? 2.6 : 1.8}
+                    strokeDasharray={simultaneousDispatch.isBlinkingP1 ? '7 4' : undefined}
+                    className={simultaneousDispatch.isBlinkingP1 ? 'animate-pulse pointer-events-none' : 'pointer-events-none'}
+                  />
+                )}
+
+                {/* System 3 Emergency Tanker Corridors */}
+                {simultaneousDispatch.system3State.tankerIngressCorridors.map((corridor) => {
+                  const pts = corridor.waypoints.map((w) => projectLatLng(w));
+                  if (pts.length < 2) return null;
+                  const pathD = pts
+                    .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+                    .join(' ');
+                  const mid = pts[Math.floor(pts.length / 2)];
+                  const isOpen = corridor.status === 'OPEN_INGRESS';
+                  return (
+                    <g key={`svg-s3-corridor-${corridor.id}`} className="pointer-events-none">
+                      <path
+                        d={pathD}
+                        fill="none"
+                        stroke={isOpen ? '#10b981' : '#ef4444'}
+                        strokeWidth={isOpen ? 4 : 3}
+                        strokeDasharray={isOpen ? '10 6' : '5 5'}
+                        strokeOpacity={0.92}
+                      />
+                      <g transform={`translate(${mid.x}, ${mid.y - 12})`}>
+                        <rect
+                          x={-72}
+                          y={-9}
+                          width={144}
+                          height={18}
+                          rx={3}
+                          fill={isOpen ? '#022c22' : '#450a0a'}
+                          fillOpacity={0.94}
+                          stroke={isOpen ? '#34d399' : '#f87171'}
+                          strokeWidth={1.2}
+                        />
+                        <text
+                          x={0}
+                          y={3.5}
+                          textAnchor="middle"
+                          className={`text-[11px] font-mono font-bold ${
+                            isOpen ? 'fill-emerald-200' : 'fill-rose-200'
+                          }`}
+                        >
+                          {isOpen
+                            ? `INDRYKNING: ${corridor.streetName}`
+                            : `LUKKET: ${corridor.streetName}`}
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
+
+                {/* System 1 Island Mode (Ø-DRIFT) Protective Shields */}
+                {buildings
+                  .filter((b) =>
+                    simultaneousDispatch.system1State.islandModeBlockIds.includes(b.id)
+                  )
+                  .map((b) => {
+                    const bp = projectLatLng(b.center);
+                    return (
+                      <g
+                        key={`svg-s1-island-${b.id}`}
+                        transform={`translate(${bp.x}, ${bp.y})`}
+                        className="pointer-events-none"
+                      >
+                        <circle
+                          cx={0}
+                          cy={0}
+                          r={18}
+                          fill="rgba(16, 185, 129, 0.14)"
+                          stroke="#34d399"
+                          strokeWidth={1.8}
+                          strokeDasharray="4 3"
+                        />
+                        <rect
+                          x={-36}
+                          y={-28}
+                          width={72}
+                          height={15}
+                          rx={3}
+                          fill="#022c22"
+                          fillOpacity={0.94}
+                          stroke="#22d3ee"
+                          strokeWidth={1}
+                        />
+                        <text
+                          x={0}
+                          y={-17.5}
+                          textAnchor="middle"
+                          className="fill-cyan-200 text-[11px] font-mono font-bold"
+                        >
+                          Ø-DRIFT {b.code}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                {/* System 1 Upwind/Upslope Escape Vectors */}
+                {simultaneousDispatch.system1State.escapeVectors.map((vec) => {
+                  const p1 = projectLatLng(vec.origin);
+                  const p2 = projectLatLng(vec.targetMusterPoint);
+                  return (
+                    <g key={`svg-s1-escape-${vec.id}`} className="pointer-events-none">
+                      <line
+                        x1={p1.x}
+                        y1={p1.y}
+                        x2={p2.x}
+                        y2={p2.y}
+                        stroke="#22c55e"
+                        strokeWidth={3.2}
+                        strokeDasharray="8 4"
+                        markerEnd="url(#s1-upwind-escape-arrow)"
+                      />
+                      <g transform={`translate(${p2.x}, ${p2.y - 14})`}>
+                        <rect
+                          x={-68}
+                          y={-9}
+                          width={136}
+                          height={18}
+                          rx={3}
+                          fill="#052e16"
+                          fillOpacity={0.95}
+                          stroke="#4ade80"
+                          strokeWidth={1.3}
+                        />
+                        <text
+                          x={0}
+                          y={3.5}
+                          textAnchor="middle"
+                          className="fill-emerald-200 text-[11px] font-mono font-bold"
+                        >
+                          MODVIND → {vec.streetName} ({vec.distanceMeters}m)
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
+
+                {/* System 3 Locked Valve Badges (V-VEST & V-MIDT) */}
+                {waterMainTelemetry?.valves
+                  .filter((v) =>
+                    simultaneousDispatch.system3State.lockedValveCodes.includes(
+                      v.code as 'V-VEST' | 'V-MIDT'
+                    )
+                  )
+                  .map((v) => {
+                    const vp = projectLatLng(v.coordinate);
+                    return (
+                      <g
+                        key={`svg-s3-valve-${v.id}`}
+                        transform={`translate(${vp.x}, ${vp.y})`}
+                        className="pointer-events-none"
+                      >
+                        <rect
+                          x={-34}
+                          y={9}
+                          width={68}
+                          height={15}
+                          rx={3}
+                          fill="#9f1239"
+                          stroke="#fde047"
+                          strokeWidth={1.2}
+                        />
+                        <text
+                          x={0}
+                          y={19.5}
+                          textAnchor="middle"
+                          className="fill-white text-[11px] font-mono font-extrabold"
+                        >
+                          {v.code} LUKKET T1
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                {/* System 1 ISA-18.2 Inverted-Octagon P1 Beacon at Epicenter */}
+                {(() => {
+                  const ep = projectLatLng(simultaneousDispatch.system1State.epicenter);
+                  const octPts = '8,-16 16,-8 16,8 8,16 -8,16 -16,8 -16,-8 -8,-16';
+                  return (
+                    <g
+                      transform={`translate(${ep.x}, ${ep.y})`}
+                      className="cursor-pointer"
+                      onClick={() => {
+                        if (simultaneousDispatch.isBlinkingP1 && onAcknowledgeSimultaneousP1) {
+                          onAcknowledgeSimultaneousP1();
+                        } else {
+                          onOpenSimultaneousModal?.();
+                        }
+                      }}
+                    >
+                      <polygon
+                        points={octPts}
+                        fill={simultaneousDispatch.isBlinkingP1 ? '#e11d48' : '#881337'}
+                        stroke="#fef08a"
+                        strokeWidth={2.2}
+                        className={simultaneousDispatch.isBlinkingP1 ? 'animate-pulse' : ''}
+                      />
+                      <text
+                        x={0}
+                        y={3.5}
+                        textAnchor="middle"
+                        className="fill-white text-[11px] font-mono font-extrabold pointer-events-none"
+                      >
+                        P1
+                      </text>
+                    </g>
+                  );
+                })()}
+              </g>
+            )}
 
             {/* Active 'Fit to Receptors' Bounding Box Highlight Frame on 2D Tactical Canvas */}
             {fittedReceptorBounds &&
@@ -5460,16 +8576,95 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 );
               })()}
 
-            {/* Receptor Polygons (Beboede boligblokke Afd. 23, 24, 26, 32 + Veje/Cykelsti, auto-highlighted when wind > 10 m/s) */}
+            {/* Item 8: Dynamic Emergency Evacuation Flow Animation (Slope & Local Plume Density Speed) on Tactical SVG */}
+            {showEvacuationFlowAnimation && evacuationFlowSegments.length > 0 && (
+              <g className="pointer-events-none" data-testid="svg-emergency-evac-flow-layer">
+                <defs>
+                  <marker
+                    id="evac-flow-arrow-head"
+                    markerWidth="8"
+                    markerHeight="8"
+                    refX="6"
+                    refY="4"
+                    orient="auto"
+                  >
+                    <path d="M 0 0 L 8 4 L 0 8 z" fill="#34d399" />
+                  </marker>
+                </defs>
+                {evacuationFlowSegments.map((seg) => {
+                  const p1 = projectLatLng(seg.origin);
+                  const p2 = projectLatLng(seg.target);
+                  const midX = (p1.x + p2.x) * 0.5;
+                  const midY = (p1.y + p2.y) * 0.5;
+                  return (
+                    <g key={`svg-evac-flow-${seg.id}`}>
+                      <line
+                        x1={p1.x}
+                        y1={p1.y}
+                        x2={p2.x}
+                        y2={p2.y}
+                        stroke="rgba(16, 185, 129, 0.28)"
+                        strokeWidth={7}
+                        strokeLinecap="round"
+                      />
+                      <line
+                        x1={p1.x}
+                        y1={p1.y}
+                        x2={p2.x}
+                        y2={p2.y}
+                        stroke="#34d399"
+                        strokeWidth={2.8}
+                        strokeDasharray="10 6"
+                        markerEnd="url(#evac-flow-arrow-head)"
+                        className="map-evac-flow-path"
+                        style={
+                          {
+                            '--evac-flow-dur': `${seg.cssDurationSec}s`,
+                          } as React.CSSProperties
+                        }
+                      />
+                      <g transform={`translate(${midX}, ${midY - 12})`}>
+                        <rect
+                          x={-94}
+                          y={-9}
+                          width={188}
+                          height={18}
+                          rx={3}
+                          fill="#022c22"
+                          fillOpacity={0.94}
+                          stroke="#34d399"
+                          strokeWidth={1.1}
+                        />
+                        <text
+                          x={0}
+                          y={3.5}
+                          textAnchor="middle"
+                          className="fill-emerald-200 text-[11px] font-mono font-bold tabular-nums"
+                        >
+                          FLUGT {seg.speedMs.toFixed(2)} m/s · Hældn. {seg.slopePct >= 0 ? '+' : ''}
+                          {seg.slopePct.toFixed(1)}% · S={seg.localPlumeDensityS.toFixed(2)}
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
+              </g>
+            )}
+
+            {/* Receptor Polygons (Beboede boligblokke Afd. 23, 24, 26, 32 + Veje/Cykelsti, auto-highlighted when wind > 10 m/s or gusts > 12 m/s) */}
             {receptors.map((rec) => {
               const exp = exposureByReceptorId[rec.id];
               const isSelected = selectedReceptorId === rec.id;
               const hwRank = highWindRankByReceptorId[rec.id];
+              const isHighGustHit =
+                isHighGustAlert && highGustCorrelationData.affectedReceptorIds.has(rec.id);
               const isRed = exp?.riskLevel === 'red';
               const isOrange = exp?.riskLevel === 'orange';
 
               const strokeColor = hwRank
                 ? '#fbbf24'
+                : isHighGustHit
+                ? '#f59e0b'
                 : isRed
                 ? '#f43f5e'
                 : isOrange
@@ -5477,6 +8672,8 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 : '#38bdf8';
               const fillColor = hwRank
                 ? 'rgba(225, 29, 72, 0.34)'
+                : isHighGustHit
+                ? 'rgba(245, 158, 11, 0.28)'
                 : isRed
                 ? 'rgba(244, 63, 94, 0.22)'
                 : isOrange
@@ -5493,12 +8690,12 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   className="cursor-pointer"
                 >
                   <polygon
-                    points={polygonToSvgPoints(rec.polygon)}
+                    points={memoizedSvgBaseGeometry.receptorSvgPointsById[rec.id] || ''}
                     fill={fillColor}
                     stroke={strokeColor}
-                    strokeWidth={hwRank ? 3.2 : isSelected ? 2.6 : 1.5}
+                    strokeWidth={hwRank || isHighGustHit ? 3.2 : isSelected ? 2.6 : 1.5}
                     strokeDasharray={
-                      hwRank
+                      hwRank || isHighGustHit
                         ? undefined
                         : rec.category === 'residential_block'
                         ? undefined
@@ -5508,6 +8705,274 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 </g>
               );
             })}
+
+            {/* CONNECTED AUTONOMOUS RECEPTOR MESH NETWORK (Connects ALL Receptors + Live Nabotest Consensus Links) */}
+            {showAutonomousMesh && (
+              <g
+                className="pointer-events-none"
+                data-testid="svg-autonomous-receptor-mesh-layer"
+              >
+                {autonomousMesh.edges.map((edge) => {
+                  const p1 = projectLatLng(edge.fromPos);
+                  const p2 = projectLatLng(edge.toPos);
+                  const midX = (p1.x + p2.x) * 0.5;
+                  const midY = (p1.y + p2.y) * 0.5;
+                  const edgeStroke = edge.bothNodesAlgedonic
+                    ? '#f43f5e'
+                    : edge.eitherNodeAlgedonic
+                    ? '#fbbf24'
+                    : '#22d3ee';
+                  return (
+                    <g key={`svg-mesh-${edge.edgeId}`}>
+                      <line
+                        x1={p1.x}
+                        y1={p1.y}
+                        x2={p2.x}
+                        y2={p2.y}
+                        stroke={edgeStroke}
+                        strokeWidth={
+                          edge.bothNodesAlgedonic
+                            ? 2.4
+                            : edge.isSpanningBackbone
+                            ? 1.6
+                            : 1.15
+                        }
+                        strokeOpacity={
+                          edge.bothNodesAlgedonic
+                            ? 0.9
+                            : edge.eitherNodeAlgedonic
+                            ? 0.65
+                            : 0.45
+                        }
+                        strokeDasharray={
+                          edge.bothNodesAlgedonic
+                            ? undefined
+                            : edge.isSpanningBackbone
+                            ? '6 3'
+                            : '3 4'
+                        }
+                      />
+                      {edge.bothNodesAlgedonic && (
+                        <g transform={`translate(${midX}, ${midY})`}>
+                          <rect
+                            x={-26}
+                            y={-7}
+                            width={52}
+                            height={14}
+                            rx={2}
+                            fill="#4c0519"
+                            fillOpacity={0.92}
+                            stroke="#fb7185"
+                            strokeWidth={0.9}
+                          />
+                          <text
+                            x={0}
+                            y={3}
+                            textAnchor="middle"
+                            className="fill-rose-100 text-[11px] font-mono font-bold tabular-nums"
+                          >
+                            NABO {edge.signalSimilarityPct}%
+                          </text>
+                        </g>
+                      )}
+                    </g>
+                  );
+                })}
+              </g>
+            )}
+
+            {(showAutonomousMesh ||
+              showMyceliumAlertCenter ||
+              myceliumScenario !== 'live_telemetry') && (
+              <MyceliumSvgOverlayLayer
+                state={myceliumSimState}
+                projectLatLng={projectLatLng}
+                onSelectReceptor={onSelectReceptor}
+              />
+            )}
+
+            {/* CSS PRESSURE-WAVE PROPAGATION PER NEIGHBOR BLOCK ON RINGPARKEN MAP (Activated specifically when v > 10 m/s) */}
+            {isMapBlockPressureWaveActive && (
+              <g
+                className={`pointer-events-none ${mapWaveSpeedTierClass}`}
+                data-testid="ringparken-map-neighbor-pressure-waves"
+              >
+                {neighborBlockPressureTargets.map((item) => {
+                  const pt = projectLatLng(item.receptor.center);
+                  const baseRadius = item.isCriticalImpulse ? 22 : 17;
+                  const primaryStroke = item.isCriticalImpulse ? '#f43f5e' : '#f59e0b';
+                  const secondaryStroke = item.isCriticalImpulse ? '#fbbf24' : '#38bdf8';
+                  return (
+                    <g
+                      key={`svg-block-wave-${item.receptor.id}`}
+                      transform={`translate(${pt.x}, ${pt.y})`}
+                      data-testid={`svg-neighbor-pressure-wave-${item.receptor.code}`}
+                    >
+                      {/* Directional downwind acoustic pressure cone aligned with wind vector */}
+                      <g transform={`rotate(${(currentWeather.windDirection10m + 180) % 360})`}>
+                        <path
+                          d="M 0 0 L -22 -52 Q 0 -66 22 -52 Z"
+                          fill={
+                            item.isCriticalImpulse
+                              ? 'rgba(244, 63, 94, 0.24)'
+                              : 'rgba(245, 158, 11, 0.18)'
+                          }
+                          stroke={primaryStroke}
+                          strokeWidth={1}
+                          strokeOpacity={0.65}
+                          className="map-svg-pressure-cone"
+                        />
+                      </g>
+
+                      {/* 3 Staggered Concentric CSS Pressure-Wave Shockwave Rings per Neighbor Block */}
+                      <circle
+                        cx={0}
+                        cy={0}
+                        r={baseRadius}
+                        fill="none"
+                        stroke={primaryStroke}
+                        strokeWidth={2.1}
+                        className="map-svg-pressure-ring map-svg-pressure-ring--1"
+                      />
+                      <circle
+                        cx={0}
+                        cy={0}
+                        r={baseRadius}
+                        fill="none"
+                        stroke={secondaryStroke}
+                        strokeWidth={1.6}
+                        className="map-svg-pressure-ring map-svg-pressure-ring--2"
+                      />
+                      <circle
+                        cx={0}
+                        cy={0}
+                        r={baseRadius}
+                        fill="none"
+                        stroke="#22d3ee"
+                        strokeWidth={1.2}
+                        className="map-svg-pressure-ring map-svg-pressure-ring--3"
+                      />
+
+                      {/* Acoustic Impulse Callout per Neighbor Block */}
+                      <g transform="translate(0, 36)">
+                        <rect
+                          x={-56}
+                          y={-7}
+                          width={112}
+                          height={14}
+                          rx={2}
+                          fill={item.isCriticalImpulse ? '#881337' : '#451a03'}
+                          fillOpacity={0.92}
+                          stroke={primaryStroke}
+                          strokeWidth={1}
+                        />
+                        <text
+                          x={0}
+                          y={3}
+                          textAnchor="middle"
+                          className="fill-white text-[11px] font-mono font-bold tabular-nums"
+                        >
+                          TRYKBØLGE {item.estimatedLafmaxDb.toFixed(0)} dB
+                          {item.complaintCount > 0 ? ` · ${item.complaintCount} KL.` : ''}
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
+              </g>
+            )}
+
+            {/* Item 6: CSS-Animated Acoustic Wavefront (> 85 dB) from Active Demolition Sources into 'støj-følsomme' Neighbor Zones */}
+            {showSource85DbWavefronts && sourceWavefrontTargets.length > 0 && (
+              <g
+                className="pointer-events-none"
+                data-testid="svg-source-85db-wavefront-layer"
+              >
+                {sourceWavefrontTargets.map((entry) => {
+                  const sp = projectLatLng(entry.source.position);
+                  const waveDurSec = Math.max(
+                    0.85,
+                    1.75 - Math.max(0, entry.peakLafmaxDb - 85) * 0.04
+                  ).toFixed(2);
+                  return (
+                    <g
+                      key={`svg-src-wavefront-${entry.source.id}`}
+                      style={{ '--source-wave-dur': `${waveDurSec}s` } as React.CSSProperties}
+                    >
+                      {entry.impactedReceptors.map((hit) => {
+                        const rp = projectLatLng(hit.receptor.center);
+                        const mx = (sp.x + rp.x) * 0.5;
+                        const my = (sp.y + rp.y) * 0.5;
+                        return (
+                          <g key={`svg-src-wave-link-${entry.source.id}-${hit.receptor.id}`}>
+                            <line
+                              x1={sp.x}
+                              y1={sp.y}
+                              x2={rp.x}
+                              y2={rp.y}
+                              stroke="#fb7185"
+                              strokeWidth={1.6}
+                              strokeDasharray="6 4"
+                              strokeOpacity={0.75}
+                            />
+                            <g transform={`translate(${mx}, ${my})`}>
+                              <rect
+                                x={-44}
+                                y={-7}
+                                width={88}
+                                height={14}
+                                rx={2}
+                                fill="#4c0519"
+                                fillOpacity={0.92}
+                                stroke="#f43f5e"
+                                strokeWidth={0.9}
+                              />
+                              <text
+                                x={0}
+                                y={3}
+                                textAnchor="middle"
+                                className="fill-rose-100 text-[11px] font-mono font-bold tabular-nums"
+                              >
+                                &gt;85dB: {hit.estimatedLafmaxDb.toFixed(0)}dB
+                              </text>
+                            </g>
+                          </g>
+                        );
+                      })}
+                      <g transform={`translate(${sp.x}, ${sp.y})`}>
+                        <circle
+                          cx={0}
+                          cy={0}
+                          r={24}
+                          fill="none"
+                          stroke="#f43f5e"
+                          strokeWidth={2.2}
+                          className="map-source-wavefront-ring map-source-wavefront-ring--1"
+                        />
+                        <circle
+                          cx={0}
+                          cy={0}
+                          r={24}
+                          fill="none"
+                          stroke="#fbbf24"
+                          strokeWidth={1.8}
+                          className="map-source-wavefront-ring map-source-wavefront-ring--2"
+                        />
+                        <circle
+                          cx={0}
+                          cy={0}
+                          r={24}
+                          fill="none"
+                          stroke="#f97316"
+                          strokeWidth={1.4}
+                          className="map-source-wavefront-ring map-source-wavefront-ring--3"
+                        />
+                      </g>
+                    </g>
+                  );
+                })}
+              </g>
+            )}
 
             {/* OUTGOING SNAPSHOT LAYER (FADING OUT 1 -> 0 DURING MODE OR TIME-INTERVAL CROSS-FADE) */}
             {outgoingSnapshot && crossFadeProgress < 1 && (
@@ -5578,9 +9043,233 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               </g>
             )}
 
+            {/* Plume Concentration Heatmap Layer (utilizes simulation.plumeZones vs Safe Zones S < 0.25) */}
+            {showPlumeConcentrationHeatmapLayer && (
+              <g
+                data-testid="svg-plume-concentration-heatmap-layer"
+                className="pointer-events-none"
+              >
+                {/* Safe Zone Backdrop Perimeter (S < 0,25 outside active plumeZones) */}
+                <polygon
+                  points={polygonToSvgPoints(plumeConcentrationHeatmapData.safeZonePerimeter)}
+                  fill="url(#safe-zone-emerald-grid)"
+                  stroke="#34d399"
+                  strokeWidth="1.6"
+                  strokeDasharray="7 4"
+                  strokeOpacity="0.7"
+                />
+                {(() => {
+                  const safeBadgePt = projectLatLng(
+                    plumeConcentrationHeatmapData.safeZonePerimeter[0]
+                  );
+                  return (
+                    <g transform={`translate(${safeBadgePt.x + 110}, ${safeBadgePt.y + 18})`}>
+                      <rect
+                        x={-102}
+                        y={-11}
+                        width={204}
+                        height={20}
+                        rx={4}
+                        fill="#064e3b"
+                        fillOpacity={0.92}
+                        stroke="#34d399"
+                        strokeWidth={1.2}
+                      />
+                      <text
+                        x={0}
+                        y={3}
+                        textAnchor="middle"
+                        className="fill-emerald-200 text-[11px] font-mono font-bold"
+                      >
+                        SIKKER ZONE BASELINE (S &lt; {plumeConcentrationHeatmapData.obsThreshold.toFixed(2)})
+                      </text>
+                    </g>
+                  );
+                })()}
+
+                {/* Safe Receptor Halos (Receptors outside plume threshold) */}
+                {receptors
+                  .filter((rec) => plumeConcentrationHeatmapData.safeReceptorIds.has(rec.id))
+                  .map((rec) => {
+                    const cPx = projectLatLng(rec.center);
+                    return (
+                      <g key={`safe-rec-halo-${rec.id}`} transform={`translate(${cPx.x}, ${cPx.y})`}>
+                        <circle
+                          cx={0}
+                          cy={0}
+                          r={18}
+                          fill="rgba(16, 185, 129, 0.18)"
+                          stroke="#34d399"
+                          strokeWidth={1.4}
+                          strokeDasharray="3 2"
+                        />
+                        <rect
+                          x={-28}
+                          y={16}
+                          width={56}
+                          height={13}
+                          rx={3}
+                          fill="#064e3b"
+                          fillOpacity={0.92}
+                          stroke="#34d399"
+                          strokeWidth={1}
+                        />
+                        <text
+                          x={0}
+                          y={25.5}
+                          textAnchor="middle"
+                          className="fill-emerald-200 text-[11px] font-mono font-bold"
+                        >
+                          SIKKER
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                {/* High-Concentration Plume Heatmap Layers from simulation.plumeZones */}
+                {plumeConcentrationHeatmapData.classifiedZones.map(({ zone, heatmapLevel }) => {
+                  const gradId =
+                    heatmapLevel === 'red'
+                      ? 'url(#plume-heatmap-critical-grad)'
+                      : heatmapLevel === 'orange'
+                      ? 'url(#plume-heatmap-elevated-grad)'
+                      : heatmapLevel === 'blue'
+                      ? 'url(#plume-heatmap-runoff-grad)'
+                      : 'url(#plume-heatmap-observation-grad)';
+                  const strokeCol =
+                    heatmapLevel === 'red'
+                      ? '#fda4af'
+                      : heatmapLevel === 'orange'
+                      ? '#fdba74'
+                      : heatmapLevel === 'blue'
+                      ? '#a5b4fc'
+                      : '#fde047';
+                  const glowCol =
+                    heatmapLevel === 'red'
+                      ? '#f43f5e'
+                      : heatmapLevel === 'orange'
+                      ? '#fb923c'
+                      : heatmapLevel === 'blue'
+                      ? '#6366f1'
+                      : '#eab308';
+                  const pts = polygonToSvgPoints(zone.polygon);
+                  const centroid = zone.polygon.reduce(
+                    (acc, p) => ({
+                      lat: acc.lat + p.lat / Math.max(1, zone.polygon.length),
+                      lng: acc.lng + p.lng / Math.max(1, zone.polygon.length),
+                    }),
+                    { lat: 0, lng: 0 }
+                  );
+                  const cPx = projectLatLng(centroid);
+
+                  return (
+                    <g key={`svg-conc-heat-${zone.id}`}>
+                      {/* Soft Outer Thermal Bleed */}
+                      <polygon
+                        points={pts}
+                        fill="none"
+                        stroke={glowCol}
+                        strokeWidth={heatmapLevel === 'red' ? 12 : heatmapLevel === 'orange' ? 8 : 5}
+                        strokeOpacity={heatmapLevel === 'red' ? 0.28 : 0.18}
+                        strokeLinejoin="round"
+                      />
+                      {/* Primary Thermal Concentration Gradient Fill + Iso-Contour */}
+                      <polygon
+                        points={pts}
+                        fill={gradId}
+                        stroke={strokeCol}
+                        strokeWidth={heatmapLevel === 'red' ? 2.4 : heatmapLevel === 'orange' ? 1.8 : 1.2}
+                        strokeOpacity={0.94}
+                      />
+                      {(heatmapLevel === 'red' || heatmapLevel === 'orange') && (
+                        <g transform={`translate(${cPx.x}, ${cPx.y})`}>
+                          <rect
+                            x={-54}
+                            y={-9}
+                            width={108}
+                            height={16}
+                            rx={3}
+                            fill={zone.level === 'red' ? '#881337' : '#7c2d12'}
+                            fillOpacity={0.92}
+                            stroke={strokeCol}
+                            strokeWidth={1}
+                          />
+                          <text
+                            x={0}
+                            y={2.5}
+                            textAnchor="middle"
+                            className="fill-white text-[11px] font-mono font-bold tabular-nums"
+                          >
+                            {zone.level === 'red' ? 'HØJ KONC.' : 'FORHØJET'} S=
+                            {zone.maxSumQuotient.toFixed(2)}
+                          </text>
+                        </g>
+                      )}
+                    </g>
+                  );
+                })}
+              </g>
+            )}
+
+            {/* Vejr-Korrelations Heatmap Layer (automatisk highlight af geografiske områder med r > 0.80 over seneste 6 timer) */}
+            {showWeatherCorrelationHeatmapLayer && (
+              <g
+                data-testid="svg-weather-correlation-heatmap-layer"
+                className="pointer-events-none"
+              >
+                {weatherCorrelationHeatmapData.highlightedAreas.map((item) => {
+                  const pt = projectLatLng(item.receptor.center);
+                  const strengthScale = Math.max(0.2, Math.min(1, (item.pearsonR - 0.8) / 0.2));
+                  const auraR = 34 + strengthScale * 24;
+                  return (
+                    <g key={`svg-weather-corr-${item.receptor.id}`}>
+                      <circle
+                        cx={pt.x}
+                        cy={pt.y}
+                        r={auraR}
+                        fill="url(#weather-corr-high-grad)"
+                        stroke="#fb923c"
+                        strokeOpacity={0.55}
+                        strokeWidth={1.2}
+                        strokeDasharray="4 3"
+                      />
+                      <polygon
+                        points={polygonToSvgPoints(item.receptor.polygon)}
+                        fill="url(#weather-corr-high-grad)"
+                        stroke="#f97316"
+                        strokeWidth={2.3}
+                        strokeOpacity={0.94}
+                      />
+                      <g transform={`translate(${pt.x}, ${pt.y - 24})`}>
+                        <rect
+                          x={-64}
+                          y={-12}
+                          width={128}
+                          height={16}
+                          rx={3}
+                          fill="#431407"
+                          fillOpacity={0.94}
+                          stroke="#fb923c"
+                          strokeWidth={1.2}
+                        />
+                        <text
+                          x={0}
+                          y={-1}
+                          textAnchor="middle"
+                          className="fill-orange-100 text-[10.5px] font-mono font-bold"
+                        >
+                          {item.receptor.code}: r={item.pearsonR.toFixed(2)} &gt;0,80
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
+              </g>
+            )}
+
             {/* Plume / 24h Gaussian Puff Risk Zone Polygons (Hidden in pure Differens-Heatmap mode so only the direct concentration difference is shown) */}
             {!isDifferenceHeatmapMode &&
-              activePolygons.map((zone) => {
+              filteredActivePolygons.map((zone) => {
                 const gradId =
                   zone.level === 'red'
                     ? 'url(#plume-red-grad)'
@@ -5648,7 +9337,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                             x={centerPx.x}
                             y={centerPx.y + 2.5}
                             textAnchor="middle"
-                            className="fill-white text-[7.5px] font-mono font-bold pointer-events-none select-none"
+                            className="fill-white text-[11px] font-mono font-bold pointer-events-none select-none"
                             style={{ textShadow: '0 1px 2px rgba(0,0,0,0.95)' }}
                           >
                             {formattedDelta}
@@ -5746,7 +9435,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           x={0}
                           y={-1}
                           textAnchor="middle"
-                          className="fill-rose-100 text-[8.5px] font-mono font-bold"
+                          className="fill-rose-100 text-[11px] font-mono font-bold"
                         >
                           ▲ Maks. Stigning:{' '}
                           {differenceMetric === 'sum_quotient'
@@ -5781,7 +9470,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           x={0}
                           y={-1}
                           textAnchor="middle"
-                          className="fill-sky-100 text-[8.5px] font-mono font-bold"
+                          className="fill-sky-100 text-[11px] font-mono font-bold"
                         >
                           ▼ Maks. Fald:{' '}
                           {differenceMetric === 'sum_quotient'
@@ -5868,7 +9557,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                               x={0}
                               y={-1}
                               textAnchor="middle"
-                              className="fill-cyan-200 text-[8.5px] font-mono font-bold"
+                              className="fill-cyan-200 text-[11px] font-mono font-bold"
                             >
                               T_A kl. {heatmapComparison.hourA.hourLabel} ({sh.plumeDirectionADeg}°)
                             </text>
@@ -5902,7 +9591,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                               x={0}
                               y={1}
                               textAnchor="middle"
-                              className="fill-rose-100 text-[8.5px] font-mono font-bold"
+                              className="fill-rose-100 text-[11px] font-mono font-bold"
                             >
                               T_B kl. {heatmapComparison.hourB.hourLabel} ({sh.plumeDirectionBDeg}°)
                             </text>
@@ -5927,7 +9616,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                             x={0}
                             y={2}
                             textAnchor="middle"
-                            className="fill-slate-950 text-[8.5px] font-mono font-bold"
+                            className="fill-slate-950 text-[11px] font-mono font-bold"
                           >
                             ➤ {sh.sourceCode}: {sh.centroidShiftMeters}m mod {sh.shiftCompass} (
                             {sh.rotationSignedDeg >= 0
@@ -5945,6 +9634,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
 
             {/* ASBEST-RISIKOLAG (<1997 BYGNINGSMATERIALE-ALDER & FIBERDEPOSITIONS-KORRELATION) */}
             {showAsbestosRiskLayer &&
+              (visibleDispersionSubstances.asbestos || visibleDispersionSubstances.quartzWool) &&
               asbestosDepositionZones.map((az) => {
                 const srcPx = projectLatLng(az.sourcePosition);
                 const centroidPx = projectLatLng(az.depositionCentroid);
@@ -5959,43 +9649,49 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     }}
                     className="cursor-pointer"
                   >
-                    {/* Outer <1997 Roof/Facade Fiber Settling Halo */}
-                    <polygon
-                      points={polygonToSvgPoints(az.haloPolygon)}
-                      fill="rgba(16, 185, 129, 0.08)"
-                      stroke="#34d399"
-                      strokeWidth={isSel ? 1.6 : 1}
-                      strokeDasharray="6 4"
-                      strokeOpacity={0.75}
-                    />
+                    {/* Outer <1997 Roof/Facade Mineral & Quartz Wool Fiber Settling Halo */}
+                    {visibleDispersionSubstances.quartzWool && (
+                      <polygon
+                        points={polygonToSvgPoints(az.haloPolygon)}
+                        fill="rgba(16, 185, 129, 0.08)"
+                        stroke="#34d399"
+                        strokeWidth={isSel ? 1.6 : 1}
+                        strokeDasharray="6 4"
+                        strokeOpacity={0.75}
+                      />
+                    )}
 
                     {/* Inner High-Probability (<1997) Asbestos Fiber Deposition Corridor */}
-                    <polygon
-                      points={polygonToSvgPoints(az.corePolygon)}
-                      fill="url(#asbestos-fiber-hatch)"
-                      stroke={az.exceeds2026Limit ? '#10b981' : '#6ee7b7'}
-                      strokeWidth={isSel ? 2.4 : 1.6}
-                      strokeDasharray="3 2"
-                    />
+                    {visibleDispersionSubstances.asbestos && (
+                      <>
+                        <polygon
+                          points={polygonToSvgPoints(az.corePolygon)}
+                          fill="url(#asbestos-fiber-hatch)"
+                          stroke={az.exceeds2026Limit ? '#10b981' : '#6ee7b7'}
+                          strokeWidth={isSel ? 2.4 : 1.6}
+                          strokeDasharray="3 2"
+                        />
 
-                    {/* Correlation Vector from Building Part (<1997) to Fiber Deposition Zone */}
-                    <line
-                      x1={srcPx.x}
-                      y1={srcPx.y}
-                      x2={centroidPx.x}
-                      y2={centroidPx.y}
-                      stroke="#34d399"
-                      strokeWidth={isSel ? 2.2 : 1.4}
-                      strokeDasharray="4 2"
-                    />
-                    <circle
-                      cx={centroidPx.x}
-                      cy={centroidPx.y}
-                      r={isSel ? 5 : 3.8}
-                      fill="#10b981"
-                      stroke="#ffffff"
-                      strokeWidth="1.4"
-                    />
+                        {/* Correlation Vector from Building Part (<1997) to Fiber Deposition Zone */}
+                        <line
+                          x1={srcPx.x}
+                          y1={srcPx.y}
+                          x2={centroidPx.x}
+                          y2={centroidPx.y}
+                          stroke="#34d399"
+                          strokeWidth={isSel ? 2.2 : 1.4}
+                          strokeDasharray="4 2"
+                        />
+                        <circle
+                          cx={centroidPx.x}
+                          cy={centroidPx.y}
+                          r={isSel ? 5 : 3.8}
+                          fill="#10b981"
+                          stroke="#ffffff"
+                          strokeWidth="1.4"
+                        />
+                      </>
+                    )}
 
                     {/* Direct Building-Part -> Fiber Deposition Callout Tag on Map */}
                     <g transform={`translate(${centroidPx.x}, ${centroidPx.y})`}>
@@ -6014,15 +9710,15 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         x={0}
                         y={-17}
                         textAnchor="middle"
-                        className="fill-emerald-300 text-[8.5px] font-mono font-bold"
+                        className="fill-emerald-300 text-[11px] font-mono font-bold"
                       >
-                        ☣ {az.sourceCode} (&lt;1997 · H={az.releaseHeightMeters}m): {az.probabilityPct}% Risiko
+                        ASBEST {az.sourceCode} (&lt;1997 · H={az.releaseHeightMeters}m): {az.probabilityPct}% Risiko
                       </text>
                       <text
                         x={0}
                         y={-8}
                         textAnchor="middle"
-                        className="fill-slate-100 text-[8px] font-mono"
+                        className="fill-slate-100 text-[11px] font-mono"
                       >
                         {az.buildingParts[0].slice(0, 26)} →{' '}
                         {az.estimatedDepositionFibreM2.toLocaleString('da-DK')} f/m²
@@ -6084,15 +9780,15 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           x={0}
                           y={-2}
                           textAnchor="middle"
-                          className="fill-rose-200 text-[8.5px] font-mono font-bold"
+                          className="fill-rose-200 text-[11px] font-mono font-bold"
                         >
-                          🔥 {rs.receptorCode}: {rs.totalDepositedHeavyMetalsAndPcbUgM2.toFixed(1)} µg/m²
+                          {rs.receptorCode}: {rs.totalDepositedHeavyMetalsAndPcbUgM2.toFixed(1)} µg/m²
                         </text>
                         <text
                           x={0}
                           y={7}
                           textAnchor="middle"
-                          className="fill-amber-200 text-[7.5px] font-mono"
+                          className="fill-amber-200 text-[11px] font-mono"
                         >
                           Asbest (24t): {Math.round(rs.totalDepositedAsbestosFibersM2).toLocaleString('da-DK')} fibre/m²
                         </text>
@@ -6104,7 +9800,8 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             )}
 
             {/* NEW HEATMAP LAYER: 'dust_deposition' (24-HOUR & HOURLY DUST-DEPOSITION IN µg/m²) */}
-            {activeHeatmapLayerMode === 'dust_deposition' && (
+            {activeHeatmapLayerMode === 'dust_deposition' &&
+              (visibleDispersionSubstances.heavyMetals || visibleDispersionSubstances.pcb) && (
               <g className="pointer-events-none">
                 {dustDepositionHeatmapData.sourceLobes.map((lobe) => {
                   const centroidPx = projectLatLng(lobe.centroid);
@@ -6148,9 +9845,9 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           x={0}
                           y={1}
                           textAnchor="middle"
-                          className="fill-amber-200 text-[8.5px] font-mono font-bold"
+                          className="fill-amber-200 text-[11px] font-mono font-bold"
                         >
-                          🌫️ {lobe.sourceCode} Støv-Deponeringsfane (µg/m²)
+                          {lobe.sourceCode} Støv-Deponeringsfane (µg/m²)
                         </text>
                       </g>
                     </g>
@@ -6202,7 +9899,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           x={0}
                           y={-2}
                           textAnchor="middle"
-                          className="fill-amber-300 text-[8.5px] font-mono font-extrabold"
+                          className="fill-amber-300 text-[11px] font-mono font-extrabold"
                         >
                           {rNode.receptorCode}: {rNode.total24hUgM2.toFixed(1)} µg/m² (24t)
                         </text>
@@ -6210,7 +9907,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           x={0}
                           y={7}
                           textAnchor="middle"
-                          className="fill-slate-200 text-[7.5px] font-mono"
+                          className="fill-slate-200 text-[11px] font-mono"
                         >
                           Nu: +{rNode.hourlyDustUgM2.toFixed(1)} µg/m²/t
                         </text>
@@ -6276,9 +9973,9 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           x={0}
                           y={1}
                           textAnchor="middle"
-                          className="fill-yellow-200 text-[8px] font-mono font-bold"
+                          className="fill-yellow-200 text-[11px] font-mono font-bold"
                         >
-                          🔊 {sc.sourceCode}: 55 dB(A) Kontur
+                          {sc.sourceCode}: 55 dB(A) Kontur
                         </text>
                       </g>
 
@@ -6298,9 +9995,9 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           x={0}
                           y={1}
                           textAnchor="middle"
-                          className="fill-rose-200 text-[8px] font-mono font-extrabold"
+                          className="fill-rose-200 text-[11px] font-mono font-extrabold"
                         >
-                          ⚠ {sc.sourceCode}: 70 dB(A) Kerne
+                          {sc.sourceCode}: 70 dB(A) Kerne
                         </text>
                       </g>
                     </g>
@@ -6327,15 +10024,15 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         x={0}
                         y={0}
                         textAnchor="middle"
-                        className="fill-fuchsia-200 text-[8.5px] font-mono font-extrabold"
+                        className="fill-fuchsia-200 text-[11px] font-mono font-extrabold"
                       >
-                        🔊 {nNode.receptorCode}: {nNode.correctedLaeqDb.toFixed(1)} dB(A) (L_max {nNode.impulsePeakLafmaxDb.toFixed(0)})
+                        {nNode.receptorCode}: {nNode.correctedLaeqDb.toFixed(1)} dB(A) (L_max {nNode.impulsePeakLafmaxDb.toFixed(0)})
                       </text>
                       <text
                         x={0}
                         y={9}
                         textAnchor="middle"
-                        className="fill-cyan-200 text-[7.5px] font-mono"
+                        className="fill-cyan-200 text-[11px] font-mono"
                       >
                         Refraktion ΔL: {nNode.totalRefrDb >= 0 ? '+' : ''}
                         {nNode.totalRefrDb.toFixed(1)} dB
@@ -6444,18 +10141,18 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         x={0}
                         y={-2}
                         textAnchor="middle"
-                        className={`text-[8.5px] font-mono font-bold ${
+                        className={`text-[11px] font-mono font-bold ${
                           isCrit ? 'fill-amber-300' : 'fill-cyan-200'
                         }`}
                       >
-                        💧⚠ {lz.sourceCode} UDVASKNING: MÆTNING {lz.zoneSaturationPct}% ·{' '}
+                        UDVASKNING {lz.sourceCode}: MÆTNING {lz.zoneSaturationPct}% ·{' '}
                         {lz.effectiveAccumulatedPrecipMm} mm
                       </text>
                       <text
                         x={0}
                         y={9}
                         textAnchor="middle"
-                        className="fill-white text-[8px] font-mono"
+                        className="fill-white text-[11px] font-mono"
                       >
                         Pb: {lz.leadLeachateUgL} µg/L · PCB: {lz.pcbLeachateUgL} µg/L (
                         {lz.maxExceedanceRatio}× GV mod SV)
@@ -6618,7 +10315,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                             x={0}
                             y={-7}
                             textAnchor="middle"
-                            className="fill-cyan-200 text-[8.5px] font-mono font-bold"
+                            className="fill-cyan-200 text-[11px] font-mono font-bold"
                           >
                             {traj.hourLabel}
                           </text>
@@ -6672,7 +10369,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           x={0}
                           y={12}
                           textAnchor="middle"
-                          className="fill-cyan-200 text-[9.5px] font-mono font-bold"
+                          className="fill-cyan-200 text-[11px] font-mono font-bold"
                         >
                           ➤ FANEVEJ-RUTE KL. {currentWeather.hourLabel} ({currentWeather.windSpeed10m} m/s → {plumeDirectionDeg}°)
                         </text>
@@ -6680,7 +10377,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                           x={0}
                           y={23}
                           textAnchor="middle"
-                          className="fill-amber-300 text-[8.5px] font-mono font-semibold"
+                          className="fill-amber-300 text-[11px] font-mono font-semibold"
                         >
                           {plumeRouteAnimationData.originSource.code} → #1{' '}
                           {plumeRouteAnimationData.topAffectedReceptors[0]?.receptorCode} &amp; #2{' '}
@@ -6689,6 +10386,50 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       </g>
                     )}
                   </g>
+
+                  {/* High-Density Receptor Intersection Rings During 24h Cumulative Plume-Path Sequence */}
+                  {isAnimatingPlumeRoute &&
+                    plumeRouteAnimationData.intersectingHighDensityReceptors.map((item) => {
+                      const recPx = projectLatLng(item.receptor.center);
+                      return (
+                        <g
+                          key={`svg-hd-intersect-${item.receptor.id}`}
+                          transform={`translate(${recPx.x}, ${recPx.y})`}
+                        >
+                          <circle
+                            cx={0}
+                            cy={0}
+                            r={24}
+                            fill={
+                              item.isCritical
+                                ? 'rgba(244, 63, 94, 0.22)'
+                                : 'rgba(245, 158, 11, 0.18)'
+                            }
+                            stroke={item.isCritical ? '#f43f5e' : '#f59e0b'}
+                            strokeWidth="2.2"
+                            strokeDasharray="4 3"
+                          />
+                          <rect
+                            x={-68}
+                            y={-38}
+                            width={136}
+                            height={16}
+                            rx={3}
+                            fill={item.isCritical ? '#881337' : '#78350f'}
+                            stroke={item.isCritical ? '#fda4af' : '#fcd34d'}
+                            strokeWidth="1.1"
+                          />
+                          <text
+                            x={0}
+                            y={-27}
+                            textAnchor="middle"
+                            className="fill-white text-[11px] font-mono font-bold tabular-nums"
+                          >
+                            ⚠ {item.receptor.code} ({item.residentCount} beb.)
+                          </text>
+                        </g>
+                      );
+                    })}
                 </g>
               );
             })()}
@@ -6710,8 +10451,31 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
               );
               const animatedDashOffset = -((puffWavePhase * 36) % 36);
 
+              // Smooth projected 6-hour trajectory SVG path (origin -> +0t..+6t centroids)
+              // Driven by CSS @keyframes plume6hSvgFlow so direction & flow animate even when paused
+              const trajPts = [
+                srcPx,
+                ...sixHourDustForecastData.hourlySteps.map((st) =>
+                  projectLatLng(st.plumeCentroid)
+                ),
+              ];
+              let smooth6hPathD = `M ${trajPts[0].x.toFixed(1)} ${trajPts[0].y.toFixed(1)}`;
+              for (let i = 1; i < trajPts.length; i++) {
+                const prev = trajPts[i - 1];
+                const curr = trajPts[i];
+                const midX = ((prev.x + curr.x) / 2).toFixed(1);
+                const midY = ((prev.y + curr.y) / 2).toFixed(1);
+                if (i === 1) {
+                  smooth6hPathD += ` L ${midX} ${midY}`;
+                } else {
+                  smooth6hPathD += ` Q ${prev.x.toFixed(1)} ${prev.y.toFixed(1)} ${midX} ${midY}`;
+                }
+              }
+              const lastPt = trajPts[trajPts.length - 1];
+              smooth6hPathD += ` L ${lastPt.x.toFixed(1)} ${lastPt.y.toFixed(1)}`;
+
               return (
-                <g className="pointer-events-none">
+                <g className="pointer-events-none" data-testid="map-6h-projected-plume-layer">
                   {/* 1. Ghost Hourly Plume Envelopes (+1t to +6t) showing how the dust corridor shifts */}
                   {sixHourDustForecastData.hourlySteps
                     .filter((st) => st.offsetHours > 0)
@@ -6784,7 +10548,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     );
                   })}
 
-                  {/* 5. 6-Hour Plume Centroid & Outer Tip Drift Trajectory Curves (+0t -> +6t) */}
+                  {/* 5. 6-Hour Plume Centroid & Outer Tip Drift Trajectory Curves (+0t -> +6t) + CSS-Animated Projected Path */}
                   <polyline
                     points={tipPathSvg}
                     fill="none"
@@ -6795,13 +10559,47 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   <polyline
                     points={centroidPathSvg}
                     fill="none"
-                    stroke="#fde047"
-                    strokeWidth="2.5"
+                    stroke="rgba(253, 224, 71, 0.45)"
+                    strokeWidth="1.8"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeDasharray="7 4"
-                    strokeDashoffset={animatedDashOffset}
                   />
+                  <path
+                    d={smooth6hPathD}
+                    fill="none"
+                    stroke="rgba(56, 189, 248, 0.35)"
+                    strokeWidth="6.5"
+                    strokeLinecap="round"
+                    strokeDasharray="16 16"
+                    className="map-6h-plume-glow"
+                  />
+                  <path
+                    d={smooth6hPathD}
+                    fill="none"
+                    stroke="#38bdf8"
+                    strokeWidth="2.6"
+                    strokeLinecap="round"
+                    strokeDasharray="10 6"
+                    className="map-6h-plume-flow-path"
+                  />
+
+                  {/* Directional Arrow Chevrons along Projected 6h Trajectory */}
+                  {trajPts.slice(1).map((pt, idx) => {
+                    const prev = trajPts[idx];
+                    const angleDeg = (Math.atan2(pt.y - prev.y, pt.x - prev.x) * 180) / Math.PI;
+                    const mx = (prev.x + pt.x) / 2;
+                    const my = (prev.y + pt.y) / 2;
+                    return (
+                      <polygon
+                        key={`svg-fc6h-arrow-${idx}`}
+                        points="-4,-3.5 5,0 -4,3.5"
+                        fill="#fde047"
+                        stroke="#090d16"
+                        strokeWidth="0.8"
+                        transform={`translate(${mx.toFixed(1)}, ${my.toFixed(1)}) rotate(${angleDeg.toFixed(1)})`}
+                      />
+                    );
+                  })}
 
                   {/* 6. Active Forecast Wind Vector Line from Origin Source -> Interpolated Plume Tip */}
                   <line
@@ -6855,7 +10653,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                             x={0}
                             y={-3}
                             textAnchor="middle"
-                            className="fill-cyan-200 text-[8px] font-mono font-bold"
+                            className="fill-cyan-200 text-[11px] font-mono font-bold"
                           >
                             +{st.offsetHours}t ({st.hourLabel})
                           </text>
@@ -6904,9 +10702,9 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                               x={0}
                               y={10.5}
                               textAnchor="middle"
-                              className="fill-cyan-200 text-[8px] font-mono font-bold"
+                              className="fill-cyan-200 text-[11px] font-mono font-bold"
                             >
-                              🔮 RAMMES OM +{rw.firstHitOffsetHours}t (kl. {rw.firstHitHourLabel} · S={rw.peakS.toFixed(2)})
+                              RAMMES OM +{rw.firstHitOffsetHours}t (kl. {rw.firstHitHourLabel} · S={rw.peakS.toFixed(2)})
                             </text>
                           </g>
                         </g>
@@ -6947,16 +10745,16 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                         x={0}
                         y={12}
                         textAnchor="middle"
-                        className="fill-cyan-200 text-[9.5px] font-mono font-extrabold"
+                        className="fill-cyan-200 text-[11px] font-mono font-extrabold"
                       >
-                        🔮 STØV-PROGNOSE +{sixHourDustForecastData.clampedT.toFixed(1)}t (KL.{' '}
+                        STØV-PROGNOSE +{sixHourDustForecastData.clampedT.toFixed(1)}t (KL.{' '}
                         {sixHourDustForecastData.activeStep.hourLabel})
                       </text>
                       <text
                         x={0}
                         y={24}
                         textAnchor="middle"
-                        className="fill-amber-300 text-[8.5px] font-mono font-bold"
+                        className="fill-amber-300 text-[11px] font-mono font-bold"
                       >
                         Vind {sixHourDustForecastData.interpolatedWindSpeedMs} m/s → Fane{' '}
                         {sixHourDustForecastData.interpolatedPlumeDeg}° (
@@ -6970,9 +10768,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             })()}
 
             {/* All 29 Georeferenced Building Polygons (Color-Coded by Category a-e) on 2D Tactical Map */}
-            {visibleBuildings.map((b) => {
-              const meta = BUILDING_CATEGORY_METADATA[b.category];
-              const cPx = projectLatLng(b.center);
+            {memoizedSvgBaseGeometry.buildingsProjected.map(({ building: b, meta, cPx, points }) => {
               const isSelectedBldg = selectedPopupBuildingId === b.id;
               return (
                 <g
@@ -6986,7 +10782,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                   className="cursor-pointer"
                 >
                   <polygon
-                    points={polygonToSvgPoints(b.footprint)}
+                    points={points}
                     fill={meta.colorHex}
                     fillOpacity={b.category === 'e_demolished_unsecured' ? 0.35 : 0.48}
                     stroke={isSelectedBldg ? '#ffffff' : meta.colorHex}
@@ -6997,7 +10793,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     x={cPx.x}
                     y={cPx.y + 3}
                     textAnchor="middle"
-                    className="fill-white text-[8px] font-mono font-bold pointer-events-none"
+                    className="fill-white text-[11px] font-mono font-bold pointer-events-none"
                   >
                     {b.code}
                   </text>
@@ -7006,7 +10802,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             })}
 
             {/* Demolition Source Polygons & Markers (Bygning 1, 2, 3 & Blok 1 + Custom Sources) */}
-            {sources.map((src) => {
+            {visibleSources.map((src) => {
               const centerPx = projectLatLng(src.position);
               const isSelected = selectedSourceId === src.id;
               const plumeEnd = projectLatLng({
@@ -7071,7 +10867,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       x={0}
                       y={-5}
                       textAnchor="middle"
-                      className="fill-white text-[10px] font-mono font-bold"
+                      className="fill-white text-[11px] font-mono font-bold"
                     >
                       {src.code}: {src.name.replace(/^Bygning \d: |^Blok \d: /, '')}
                     </text>
@@ -7162,7 +10958,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                             x={0}
                             y={-3}
                             textAnchor="middle"
-                            className={`text-[8.5px] font-mono font-extrabold ${
+                            className={`text-[11px] font-mono font-extrabold ${
                               hwRank === 1 ? 'fill-slate-950' : 'fill-white'
                             }`}
                           >
@@ -7182,10 +10978,10 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     />
 
                     <rect
-                      x={-68}
+                      x={-72}
                       y={8}
-                      width={136}
-                      height={21}
+                      width={144}
+                      height={showAutonomousMesh ? 31 : 21}
                       rx={3}
                       fill={badgeFill}
                       fillOpacity={0.95}
@@ -7194,12 +10990,27 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     />
                     <text
                       x={0}
-                      y={22}
+                      y={21}
                       textAnchor="middle"
-                      className="fill-slate-100 text-[10px] font-mono font-bold"
+                      className="fill-slate-100 text-[11px] font-mono font-bold tabular-nums"
                     >
                       {rec.code} · S={sVal.toFixed(2)}
                     </text>
+                    {showAutonomousMesh && (() => {
+                      const meshNode = autonomousMesh.nodesByReceptorId[rec.id];
+                      if (!meshNode) return null;
+                      return (
+                        <text
+                          x={0}
+                          y={33}
+                          textAnchor="middle"
+                          className="fill-cyan-300 text-[11px] font-mono font-semibold tabular-nums"
+                        >
+                          ⬡ ZKP · NABO {meshNode.nabotest.corroboratingNeighborCount}/
+                          {meshNode.nabotest.analyzedNearbyNodesCount}
+                        </text>
+                      );
+                    })()}
                   </g>
                 );
               })}
@@ -7283,7 +11094,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       x={0}
                       y={16}
                       textAnchor="middle"
-                      className="fill-slate-950 text-[10.5px] font-mono font-bold"
+                      className="fill-slate-950 text-[11px] font-mono font-bold"
                     >
                       ★ HØJESTE 24T DOSIS: {peakReceptor.address.split(',')[0]}
                     </text>
@@ -7291,7 +11102,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       x={0}
                       y={30}
                       textAnchor="middle"
-                      className="fill-slate-950 text-[9.5px] font-mono font-bold"
+                      className="fill-slate-950 text-[11px] font-mono font-bold"
                     >
                       Spidsbelastning kl. {peakReceptor.peakHourLabel} (S=
                       {peakReceptor.peakSumQuotient.toFixed(2)}) · ∑=
@@ -7301,7 +11112,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       x={0}
                       y={40}
                       textAnchor="middle"
-                      className="fill-slate-900 text-[8.5px] font-mono font-semibold"
+                      className="fill-slate-900 text-[11px] font-mono font-semibold"
                     >
                       Deponering: {peakReceptor.totalDepositedHeavyMetalsAndPcbUgM2} µg/m² tungmetal ·{' '}
                       {peakReceptor.totalDepositedAsbestosFibersM2.toLocaleString('da-DK')} fibre/m²
@@ -7343,7 +11154,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       x={0}
                       y={-2}
                       textAnchor="middle"
-                      className="fill-white text-[9.5px] font-mono font-bold"
+                      className="fill-white text-[11px] font-mono font-bold"
                     >
                       ⊕ NY OBSERVATION ({pendingObservationPoint.lat.toFixed(4)},{' '}
                       {pendingObservationPoint.lng.toFixed(4)})
@@ -7352,6 +11163,107 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 </g>
               );
             })()}
+
+            {/* 2D Taktisk Kort: Varmegraf over støjniveauer korreleret med vindretning pr. naboblok */}
+            {showWindNoiseHeatmapLayer && (
+              <WindDirectionalNoiseSvgLayer
+                cells={windDirectionalNoiseCells}
+                sources={sources}
+                effectiveWindFromDeg={effectiveNoiseWindFromDeg}
+                projectLatLng={projectLatLng}
+                onSelectReceptor={onSelectReceptor}
+              />
+            )}
+
+            {/* Registered Neighbor Complaints Heat-Mapped Block Density Layer on Tactical GIS Canvas */}
+            {showComplaintDensityOverlay && (
+              <g data-testid="svg-neighbor-complaint-density-layer">
+                {complaintDensitySummary.items
+                  .filter((item) => item.normalizedDensity >= 0.08)
+                  .map((item) => {
+                    const pt = projectLatLng(item.center);
+                    const scaleAlpha = complaintDensityOpacityPct / 100;
+                    const auraRadius =
+                      (item.kind === 'demolition_sector' ? 42 : 30) +
+                      item.normalizedDensity * 36;
+                    const auraOpacity = Math.min(
+                      0.45,
+                      (0.08 + item.normalizedDensity * 0.28) * scaleAlpha
+                    );
+                    const polyOpacity = Math.min(
+                      0.65,
+                      (0.16 + item.normalizedDensity * 0.42) * scaleAlpha
+                    );
+                    return (
+                      <g
+                        key={`svg-complaint-density-${item.id}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleFocusComplaintDensityItem(item);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r={auraRadius}
+                          fill={item.heatFillHex}
+                          fillOpacity={auraOpacity}
+                        />
+                        <polygon
+                          points={polygonToSvgPoints(item.polygon)}
+                          fill={item.heatFillHex}
+                          fillOpacity={polyOpacity}
+                          stroke={item.heatStrokeHex}
+                          strokeOpacity={Math.min(0.95, 0.5 + item.normalizedDensity * 0.45)}
+                          strokeWidth={item.normalizedDensity >= 0.5 ? 2.2 : 1.3}
+                        />
+                      </g>
+                    );
+                  })}
+                {complaintDensitySummary.topDisputedItems
+                  .filter((item) => item.normalizedDensity >= 0.35)
+                  .slice(0, 4)
+                  .map((item, rankIdx) => {
+                    const pt = projectLatLng(item.center);
+                    const badgeText = `#${rankIdx + 1} ${item.code}: ${Math.round(
+                      item.normalizedDensity * 100
+                    )}% klagetæthed (${item.directComplaintCount} kl.)`;
+                    const badgeW = Math.max(158, badgeText.length * 5.4);
+                    return (
+                      <g
+                        key={`svg-complaint-hotspot-${item.id}`}
+                        transform={`translate(${pt.x}, ${pt.y - 24})`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleFocusComplaintDensityItem(item);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <rect
+                          x={-badgeW / 2}
+                          y={-18}
+                          width={badgeW}
+                          height={17}
+                          rx={3}
+                          fill="#090d16"
+                          fillOpacity={0.92}
+                          stroke={item.heatStrokeHex}
+                          strokeWidth={1.3}
+                        />
+                        <text
+                          x={0}
+                          y={-6.5}
+                          textAnchor="middle"
+                          className="fill-rose-100 text-[11px] font-mono font-bold"
+                        >
+                          {badgeText}
+                        </text>
+                      </g>
+                    );
+                  })}
+              </g>
+            )}
 
             {/* Registered Physical Observations / Algedonic Signals on Tactical GIS Canvas */}
             {observations.map((obs) => {
@@ -7399,15 +11311,15 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       x={0}
                       y={10}
                       textAnchor="middle"
-                      className="fill-fuchsia-100 text-[9px] font-mono font-bold"
+                      className="fill-fuchsia-100 text-[11px] font-mono font-bold"
                     >
-                      ⚡ {obs.code} · kl. {obs.observedHourLabel} ({obs.reporterRole.split(' ')[0]})
+                      {obs.code} · kl. {obs.observedHourLabel} ({obs.reporterRole.split(' ')[0]})
                     </text>
                     <text
                       x={0}
                       y={19}
                       textAnchor="middle"
-                      className="fill-amber-300 text-[8.5px] font-mono font-semibold"
+                      className="fill-amber-300 text-[11px] font-mono font-semibold"
                     >
                       {inPlume
                         ? `✓ I SPREDNINGSFANE (S=${obs.plumeCorroboration.calculatedSumQuotient.toFixed(
@@ -7444,13 +11356,13 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
           >
             {transitionBadgeLabel && (
               <div
-                className="px-3 py-1 rounded-full bg-slate-950/90 border border-cyan-400/60 text-cyan-200 font-mono text-[10.5px] font-semibold shadow-lg flex items-center gap-1.5"
+                className="px-3 py-1 rounded-full bg-slate-950/90 border border-cyan-400/60 text-cyan-200 font-mono text-[11px] font-semibold shadow-lg flex items-center gap-1.5"
                 style={{
                   opacity: Math.sin(crossFadeProgress * Math.PI),
                   transform: `translateY(${((1 - crossFadeProgress) * 4).toFixed(1)}px)`,
                 }}
               >
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                <span className="w-2 h-2 rounded-full bg-cyan-400" />
                 <span>{transitionBadgeLabel}</span>
               </div>
             )}
@@ -7493,7 +11405,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
           />
           {!mapWindowStates.map_legend_heatmap_key.isMinimized && (
             <>
-              <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400 flex items-center justify-between gap-4">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400 flex items-center justify-between gap-4">
                 <span>
                   {showHeatmapComparison && heatmapComparison
                     ? isDifferenceHeatmapMode
@@ -7510,7 +11422,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
 
               {showHeatmapComparison && heatmapComparison && (
                 isDifferenceHeatmapMode ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[10.5px] font-mono pb-1 border-b border-slate-800/80">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] font-mono pb-1 border-b border-slate-800/80">
                     <div className="flex items-center gap-1.5">
                       <span className="w-3 h-3 rounded-xs bg-red-600/85 border border-red-300 shrink-0" />
                       <span className="text-rose-200 font-semibold truncate">
@@ -7543,7 +11455,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10.5px] font-mono pb-1 border-b border-slate-800/80">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono pb-1 border-b border-slate-800/80">
                     <div className="flex items-center gap-1.5">
                       <span className="w-3 h-3 rounded-xs bg-cyan-500/50 border border-cyan-300 border-dashed shrink-0" />
                       <span className="text-cyan-200 font-semibold truncate">
@@ -7593,14 +11505,16 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-xs bg-emerald-500/40 border border-emerald-400 shrink-0" />
-                  <span className="text-emerald-300 font-semibold truncate">
-                    ☣ &lt;1997 Asbest-Lag
+                  <span className="text-emerald-300 font-semibold truncate inline-flex items-center gap-1">
+                    <Biohazard className="w-3 h-3 shrink-0" />
+                    <span>&lt;1997 Asbest-Lag</span>
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-xs bg-sky-500/40 border border-amber-400 shrink-0" />
-                  <span className="text-amber-300 font-semibold truncate">
-                    💧⚠ Jord-Udvaskning ({groundwaterLeachingData.globalSoilSaturationPct}%)
+                  <span className="text-amber-300 font-semibold truncate inline-flex items-center gap-1">
+                    <Droplets className="w-3 h-3 shrink-0" />
+                    <span>Jord-Udvaskning ({groundwaterLeachingData.globalSoilSaturationPct}%)</span>
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -7617,20 +11531,20 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
 
         {/* Forensic 'Snapshot Map' Confirmation Toast Overlay */}
         {mapSnapshotSavedJustNow && lastMapSnapshotSummary && (
-          <div className="absolute bottom-14 right-3 z-30 max-w-md rounded-md bg-slate-950/95 border-2 border-emerald-400 p-2.5 shadow-2xl font-mono text-[10.5px] text-slate-100 space-y-1 pointer-events-auto">
+          <div className="absolute bottom-14 right-3 z-30 max-w-md rounded-md bg-[var(--surface-overlay)] border border-emerald-400 border-l-4 border-l-emerald-400 p-2.5 shadow-lg font-mono text-[11px] text-slate-100 space-y-1 pointer-events-auto">
             <div className="flex items-center justify-between gap-2 text-emerald-300 font-extrabold">
               <span className="flex items-center gap-1.5">
                 <Camera className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>SNAPSHOT MAP REGISTRERET SOM BEVIS (SHA-256)</span>
               </span>
-              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/50 text-[9.5px]">
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/50 text-[11px]">
                 Z:{lastMapSnapshotSummary.zoom.toFixed(1)}
               </span>
             </div>
-            <div className="text-[10px] text-amber-200">
+            <div className="text-[11px] text-amber-200">
               Bounds: {lastMapSnapshotSummary.boundsText}
             </div>
-            <div className="text-[9.5px] text-cyan-200 truncate">
+            <div className="text-[11px] text-cyan-200 truncate">
               Aktive lag: {lastMapSnapshotSummary.layersText}
             </div>
           </div>
@@ -7747,7 +11661,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
           if (!b) return null;
           const meta = BUILDING_CATEGORY_METADATA[b.category];
           return (
-            <div className="absolute bottom-14 left-3 z-30 w-80 bg-slate-950/95 border-2 border-cyan-400/80 rounded-md p-3 shadow-2xl font-mono text-xs space-y-2 pointer-events-auto">
+            <div className="absolute bottom-14 left-3 z-30 w-80 bg-[var(--surface-overlay)] border border-[var(--border-subtle)] border-l-4 border-l-sky-400 rounded-md p-3 shadow-lg font-mono text-xs space-y-2 pointer-events-auto">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="flex items-center gap-1.5">
@@ -7759,7 +11673,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                       {b.code}: {b.name}
                     </span>
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
+                  <div className="text-[11px] text-slate-400 mt-0.5">
                     {b.address} · {b.department}
                   </div>
                 </div>
@@ -7773,7 +11687,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
                 </button>
               </div>
 
-              <div className="text-[10px] text-slate-300 flex items-center justify-between border-t border-slate-800 pt-1.5">
+              <div className="text-[11px] text-slate-300 flex items-center justify-between border-t border-slate-800 pt-1.5">
                 <span>
                   {b.dwellingsCount > 0 ? `${b.dwellingsCount} bol. · ` : ''}
                   {b.floors} etg. ({b.constructionYear})
@@ -7786,7 +11700,7 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
 
               {onChangeBuildingCategory && (
                 <div className="space-y-1 pt-1 border-t border-slate-800">
-                  <label className="block text-[10px] uppercase tracking-wider text-cyan-300 font-bold">
+                  <label className="block text-[11px] uppercase tracking-wider text-cyan-300 font-bold">
                     Skift Operationel Kategori (a–e):
                   </label>
                   <select
@@ -7814,7 +11728,1244 @@ export const DispersionMap: React.FC<DispersionMapProps> = ({
             </div>
           );
         })()}
+
+        {/* Map-Overlaying Heat-Mapped Density Card for 'Registered Neighbor Complaints' */}
+        {showComplaintDensityOverlay && (
+          <div className="absolute bottom-14 right-3 z-20 pointer-events-auto max-w-[calc(100%-24px)]">
+            <NeighborComplaintDensityOverlay
+              summary={complaintDensitySummary}
+              filterMode={complaintDensityFilterMode}
+              onChangeFilterMode={setComplaintDensityFilterMode}
+              opacityPct={complaintDensityOpacityPct}
+              onChangeOpacityPct={setComplaintDensityOpacityPct}
+              onFocusItem={handleFocusComplaintDensityItem}
+              onCloseOverlay={() => setShowComplaintDensityOverlay(false)}
+            />
+          </div>
+        )}
+
+        {/* 2D Taktisk Kort HUD-kort for Vind-Støj Varmegraf & Vindvinkel-Simulator */}
+        {showWindNoiseHeatmapLayer && !useGoogleMapsEngine && (
+          <div className="absolute bottom-14 left-3 z-20 pointer-events-auto max-w-[calc(100%-24px)]">
+            <WindDirectionalNoiseHudCard
+              cells={windDirectionalNoiseCells}
+              currentWeather={currentWeather}
+              overrideWindFromDeg={overrideNoiseWindFromDeg}
+              onChangeOverrideWindFromDeg={setOverrideNoiseWindFromDeg}
+              onSelectReceptor={onSelectReceptor}
+              onClose={() => setShowWindNoiseHeatmapLayer(false)}
+            />
+          </div>
+        )}
+
+        {/* Plume Concentration Heatmap Legend HUD (Høj-Koncentration vs. Sikker Zone fra simulation.plumeZones) */}
+        {showPlumeConcentrationHeatmapLayer && (
+          <div
+            data-testid="plume-concentration-heatmap-hud"
+            className="absolute bottom-14 right-3 z-20 pointer-events-auto w-[340px] max-w-[calc(100%-24px)] bg-[#0F1623]/95 border border-rose-500/65 rounded-md p-2.5 shadow-2xl font-mono text-[11px] tabular-nums space-y-2"
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-rose-200 uppercase">
+                <Flame className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                <span>Plume Koncentrations-Heatmap</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPlumeConcentrationHeatmapLayer(false)}
+                className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer"
+                aria-label="Luk koncentrations-heatmap"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="p-1.5 rounded bg-rose-950/50 border border-rose-500/50 space-y-1">
+                <div className="flex items-center gap-1.5 text-rose-200 font-bold">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 border border-rose-300 shrink-0" />
+                  <span>Høj-Konc. Faner</span>
+                </div>
+                <div className="text-slate-300">
+                  Kritisk (S≥{plumeConcentrationHeatmapData.criticalThreshold.toFixed(2)}):{' '}
+                  <strong className="text-rose-300">{plumeConcentrationHeatmapData.criticalCount}</strong>
+                </div>
+                <div className="text-slate-300">
+                  Forhøjet ({plumeConcentrationHeatmapData.elevatedThreshold.toFixed(2)}–
+                  {plumeConcentrationHeatmapData.criticalThreshold.toFixed(2)}):{' '}
+                  <strong className="text-amber-300">{plumeConcentrationHeatmapData.elevatedCount}</strong>
+                </div>
+                <div className="text-slate-300">
+                  Obs. ({plumeConcentrationHeatmapData.obsThreshold.toFixed(2)}–
+                  {plumeConcentrationHeatmapData.elevatedThreshold.toFixed(2)}):{' '}
+                  <strong className="text-yellow-300">{plumeConcentrationHeatmapData.observationCount}</strong>
+                </div>
+              </div>
+
+              <div className="p-1.5 rounded bg-emerald-950/45 border border-emerald-500/50 space-y-1">
+                <div className="flex items-center gap-1.5 text-emerald-200 font-bold">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>Sikre Zoner (Kl. {currentWeather.pasquillClass})</span>
+                </div>
+                <div className="text-slate-300">
+                  Grænse:{' '}
+                  <strong className="text-emerald-300">
+                    S &lt; {plumeConcentrationHeatmapData.obsThreshold.toFixed(2)}
+                  </strong>
+                </div>
+                <div className="text-slate-300">
+                  Sikre receptorer:{' '}
+                  <strong className="text-emerald-300">
+                    {plumeConcentrationHeatmapData.safeReceptorsCount}/{receptors.length}
+                  </strong>
+                </div>
+                <div className="text-slate-300">
+                  Max S-top: <strong className="text-rose-200">{plumeConcentrationHeatmapData.maxZoneQuotient.toFixed(2)}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dedicated Real-Time Kierulffsvej Drikkevands-Hovedrør Tooltip / Infobox + BEK 1272/2025 Badge */}
+        {!showWaterMainInspector && showWaterMainLayer && waterMainTelemetry && (
+          <div
+            data-testid="water-main-live-telemetry-infobox"
+            data-critical-pulse={isWaterMainCriticalPulse ? 'true' : 'false'}
+            className={`absolute bottom-14 left-3 z-30 pointer-events-auto w-[372px] max-w-[calc(100%-24px)] rounded-md p-2.5 shadow-2xl font-mono text-[11px] tabular-nums border space-y-2 ${
+              isWaterMainCriticalPulse
+                ? 'bg-rose-950/95 border-rose-500 text-rose-50 water-main-tooltip-critical-pulse'
+                : waterMainTelemetry.overallStatus === 'warning' ||
+                  waterMainTelemetry.overallStatus === 'advisory'
+                ? 'bg-[#1a150b]/95 border-amber-400/90 text-amber-50'
+                : 'bg-[#0F1623]/95 border-sky-400/80 text-slate-100'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2 border-b border-white/15 pb-1.5">
+              <div className="space-y-0.5 min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5 font-bold text-sky-300 uppercase">
+                  <Droplets className="w-3.5 h-3.5 shrink-0" />
+                  <span>Drikkevands-Hovedrør (Kierulffsvej)</span>
+                </div>
+                <div className="text-[11px] text-slate-300 truncate">
+                  {waterMainTelemetry.ownerName} · DN200 (-1,65 m)
+                </div>
+              </div>
+              <span
+                className={`px-1.5 py-0.5 rounded border text-[11px] font-bold shrink-0 ${
+                  isWaterMainCriticalPulse
+                    ? 'bg-rose-900 border-rose-400 text-rose-100'
+                    : 'bg-sky-950 border-sky-500/50 text-sky-200'
+                }`}
+              >
+                {isWaterMainCriticalPulse ? 'BRUD / >50 mm/s' : 'LIVE TELEMETRI'}
+              </span>
+            </div>
+
+            <WaterMainBek1272Badge
+              telemetry={waterMainTelemetry}
+              visible={showWaterMainLayer}
+              variant="detailed"
+              testId="infobox-bek1272-status-badge"
+            />
+
+            {/* Focus Mode Item 1: Vibrationsfare (DIN 4150-3) dynamic PPV vs. 25 mm/s alert overlay + Maskin-Stop (pulsing E-Stop activation) */}
+            {(isStructuralIntegrityAlert || isolatedMachineryJustNow) && (
+              <div
+                role="alert"
+                data-testid="water-main-structural-integrity-alert"
+                className={`p-2 rounded border space-y-1.5 ${
+                  isolatedMachineryJustNow
+                    ? 'bg-emerald-950/95 border-emerald-400/90 text-emerald-100'
+                    : 'bg-rose-950/95 border-rose-400/90 text-rose-100'
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {isolatedMachineryJustNow ? (
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-extrabold text-[11px] tracking-tight">
+                        {isolatedMachineryJustNow
+                          ? 'E-Stop Aktiv · Nærmeste maskiner frakoblet'
+                          : `Vibrationsfare (DIN 4150-3) · ${
+                              isDin4150ThresholdExceeded ? 'OVERSKREDET' : '≥90% GRÆNSE'
+                            }`}
+                      </div>
+                      <div className="text-[10.5px] opacity-90 tabular-nums">
+                        PPV {ppvValMmPerSec.toFixed(1)} / 25,0 mm/s ({ppvPctOf25Threshold}% ·{' '}
+                        {ppvDeltaFrom25MmPerSec >= 0 ? '+' : ''}
+                        {ppvDeltaFrom25MmPerSec.toFixed(1)} mm/s)
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="water-main-isolate-machinery-btn"
+                    onClick={handleTriggerIsolateNearbyMachinery}
+                    title="Hurtig deaktivering af de nærmeste entreprenørmaskiner (≤65 m fra DN200 hovedrør)"
+                    className={`px-2.5 py-1 rounded font-bold border text-[10.5px] whitespace-nowrap shrink-0 cursor-pointer transition-colors ${
+                      isolatedMachineryJustNow
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-200 ring-2 ring-emerald-300/80 machine-estop-btn-pulse animate-pulse'
+                        : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-200'
+                    }`}
+                  >
+                    {isolatedMachineryJustNow ? '✓ E-Stop Aktiv' : 'Maskin-Stop'}
+                  </button>
+                </div>
+                <div className="w-full h-1.5 rounded bg-black/50 overflow-hidden border border-rose-400/40">
+                  <div
+                    className={
+                      isolatedMachineryJustNow
+                        ? 'h-full bg-emerald-400'
+                        : isDin4150ThresholdExceeded
+                        ? 'h-full bg-rose-500'
+                        : 'h-full bg-amber-400'
+                    }
+                    style={{ width: `${ppvGaugeWidthPct}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="p-1.5 rounded bg-black/30 border border-white/10">
+                <div className="text-slate-400">Tryk &amp; Flow</div>
+                <div className="font-bold text-cyan-300">
+                  {waterMainTelemetry.pressureBar.toFixed(2)} bar · {waterMainTelemetry.flowLs.toFixed(1)} L/s
+                </div>
+              </div>
+              <div className="p-1.5 rounded bg-black/30 border border-white/10">
+                <div className="text-slate-400">PPV-Vibration (DIN 4150-3)</div>
+                <div
+                  className={`font-bold ${
+                    waterMainTelemetry.pipePpvMmPerSec > 50
+                      ? 'text-rose-300'
+                      : waterMainTelemetry.pipePpvMmPerSec >= 25
+                      ? 'text-amber-300'
+                      : 'text-emerald-300'
+                  }`}
+                >
+                  {waterMainTelemetry.pipePpvMmPerSec.toFixed(1)} mm/s (stik {waterMainTelemetry.nearestBranchPpvMmPerSec.toFixed(1)})
+                </div>
+              </div>
+              <div className="p-1.5 rounded bg-black/30 border border-white/10">
+                <div className="text-slate-400">Køreplade-status</div>
+                <div
+                  className={`font-bold ${
+                    waterMainTelemetry.hasSteelRoadPlates ? 'text-emerald-300' : 'text-amber-300'
+                  }`}
+                >
+                  {waterMainTelemetry.hasSteelRoadPlates ? 'Wissenberg PSS Aktiv' : 'Uden køreplader'} (
+                  {waterMainTelemetry.crownStressKpa.toFixed(1)} kPa)
+                </div>
+              </div>
+              <div className="p-1.5 rounded bg-black/30 border border-white/10">
+                <div className="text-slate-400">BEK 1272/2025 (Pb/PAH/PCB)</div>
+                <div className="font-semibold text-slate-200 truncate">
+                  Pb {waterMainTelemetry.estimatedLeadIntrusionUgL.toFixed(1)} · PAH{' '}
+                  {waterMainTelemetry.estimatedPah4SumUgL.toFixed(2)} · PCB{' '}
+                  {(waterMainTelemetry.estimatedPcbIntrusionUgL ?? 0.08).toFixed(2)}
+                </div>
+              </div>
+            </div>
+
+            {/* Focus Mode: Last 6 hours pipe vibration trend sparkline */}
+            <WaterMainVibrationSparkline
+              points={waterMainLast6HoursPoints}
+              currentPpvMmPerSec={waterMainTelemetry.pipePpvMmPerSec}
+            />
+
+            {/* Focus Mode Item 2: Simulér Lækagepunkt (pin-drop) + Soil Saturation & Building Foundation Percolation Impact */}
+            <div className="p-1.5 rounded bg-black/35 border border-sky-500/30 space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                <button
+                  type="button"
+                  data-testid="water-main-simulate-leak-pin-btn"
+                  onClick={() => setIsLeakPinDropMode((v) => !v)}
+                  className={`px-2 py-1 rounded border font-bold text-[10.5px] inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer transition-colors ${
+                    isLeakPinDropMode
+                      ? 'bg-amber-400 text-slate-950 border-amber-200'
+                      : effectiveVirtualLeakImpact
+                      ? 'bg-rose-600/30 border-rose-400 text-rose-100'
+                      : 'bg-sky-500/20 hover:bg-sky-500/35 border-sky-400/60 text-sky-200'
+                  }`}
+                >
+                  <MapPin className="w-3 h-3 shrink-0" />
+                  <span>
+                    {isLeakPinDropMode ? 'Klik på røret på kortet...' : 'Simulér Lækagepunkt'}
+                  </span>
+                </button>
+                <div className="flex items-center gap-1">
+                  {!effectiveVirtualLeakImpact && (
+                    <button
+                      type="button"
+                      data-testid="water-main-quick-leak-pin-btn"
+                      onClick={handleToggleVirtualLeakPinQuick}
+                      className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-[10px] font-bold cursor-pointer"
+                    >
+                      Placér nu
+                    </button>
+                  )}
+                  {effectiveVirtualLeakImpact && (
+                    <button
+                      type="button"
+                      data-testid="water-main-clear-leak-pin-btn"
+                      onClick={() => {
+                        setVirtualLeakPin(null);
+                        setIsLeakPinDropMode(false);
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-rose-950 hover:bg-rose-900 border border-rose-500/60 text-rose-200 text-[10px] font-bold cursor-pointer"
+                    >
+                      Fjern pin
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {effectiveVirtualLeakImpact && (
+                <div
+                  data-testid="water-main-virtual-leak-impact-panel"
+                  className="space-y-1 text-[10.5px] border-t border-white/10 pt-1"
+                >
+                  <div className="flex items-center justify-between text-amber-200 font-bold">
+                    <span>
+                      Udslip: {effectiveVirtualLeakImpact.dischargeLs.toFixed(1)} L/s · Trykfald −
+                      {effectiveVirtualLeakImpact.pressureDropBar.toFixed(2)} bar
+                    </span>
+                    <span className="text-sky-300">
+                      Mætning op til {effectiveVirtualLeakImpact.saturationZones[2]?.radiusMeters} m (dybde{' '}
+                      {effectiveVirtualLeakImpact.immediatePercolationDepthM.toFixed(1)} m)
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 text-[10px] text-slate-300">
+                    {effectiveVirtualLeakImpact.saturationZones.map((z) => (
+                      <span key={`inf-sat-${z.tier}`}>
+                        {z.saturationPct}% ({z.radiusMeters}m)
+                      </span>
+                    ))}
+                  </div>
+                  <div className="max-h-24 overflow-y-auto space-y-0.5">
+                    {effectiveVirtualLeakImpact.impactedBuildings.slice(0, 4).map((b) => (
+                      <div
+                        key={`inf-leak-${b.buildingId}`}
+                        className="flex items-center justify-between gap-1 text-slate-200"
+                      >
+                        <span className="truncate">
+                          {b.buildingCode} ({b.distanceMeters.toFixed(0)}m · fund. −{b.foundationDepthExposureM.toFixed(2)}m)
+                        </span>
+                        <span
+                          className={`font-bold shrink-0 ${
+                            b.severity === 'critical'
+                              ? 'text-rose-300'
+                              : b.severity === 'high'
+                              ? 'text-amber-300'
+                              : 'text-sky-300'
+                          }`}
+                        >
+                          {b.arrivalMinutes.toFixed(0)} min · {b.intrusionRateLh.toFixed(0)} L/t
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Selected pipe section + BEK 1272/2025 CSV export & details */}
+            <div className="flex flex-wrap items-center justify-between gap-1.5 pt-0.5">
+              {availableWaterMainSections.length > 0 ? (
+                <select
+                  data-testid="water-main-section-select"
+                  aria-label="Vælg rørstrækning for BEK 1272/2025 CSV-eksport"
+                  value={effectiveWaterMainSectionId}
+                  onChange={(e) => setSelectedWaterMainSectionId(e.target.value)}
+                  className="flex-1 min-w-[140px] max-w-[180px] px-1.5 py-0.5 rounded bg-[#090d16] border border-slate-700 text-slate-200 text-[11px] font-mono truncate cursor-pointer"
+                >
+                  {availableWaterMainSections.map((seg) => (
+                    <option key={seg.id} value={seg.id}>
+                      {seg.name}
+                    </option>
+                  ))}
+                  <option value="all">Alle strækninger</option>
+                </select>
+              ) : (
+                <span className="text-slate-400 truncate">Kierulffsvej DN200</span>
+              )}
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  data-testid="water-main-export-bek1272-csv-btn"
+                  onClick={handleExportWaterMainBek1272Csv}
+                  className={`px-2 py-0.5 rounded border font-bold cursor-pointer inline-flex items-center gap-1 transition-colors ${
+                    waterMainCsvExportedJustNow
+                      ? 'bg-emerald-500/25 border-emerald-400 text-emerald-200'
+                      : 'bg-cyan-500/20 hover:bg-cyan-500/35 border-cyan-400/60 text-cyan-200'
+                  }`}
+                  title="Download CSV med seneste BEK 1272/2025 compliance-telemetri (Bly, PAH, PCB, tryk, PPV) for den valgte rørstrækning"
+                >
+                  <Download className="w-3 h-3 shrink-0" />
+                  <span>{waterMainCsvExportedJustNow ? '✓ CSV gemt' : 'BEK 1272 CSV'}</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="water-main-open-full-inspector-btn"
+                  onClick={() => setShowWaterMainInspector(true)}
+                  className="px-2 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500/35 border border-sky-400/60 text-sky-200 font-bold cursor-pointer shrink-0"
+                >
+                  Detaljer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Kierulffsvej DN200 Drinking Water Main Forensic Inspection HUD Card */}
+        {showWaterMainInspector && showWaterMainLayer && waterMainTelemetry && (
+          <div
+            data-testid="water-main-forensic-inspector-card"
+            data-critical-pulse={isWaterMainCriticalPulse ? 'true' : 'false'}
+            className={`absolute bottom-14 left-3 z-30 pointer-events-auto w-[420px] max-w-[calc(100%-24px)] rounded-md p-3 shadow-2xl font-mono text-[11px] tabular-nums border space-y-2 ${
+              isWaterMainCriticalPulse
+                ? 'bg-rose-950/95 border-rose-500 text-rose-50 water-main-tooltip-critical-pulse'
+                : waterMainTelemetry.overallStatus === 'warning' ||
+                  waterMainTelemetry.overallStatus === 'advisory'
+                ? 'bg-[#1a150b]/95 border-amber-400 text-amber-50'
+                : 'bg-[#0F1623]/95 border-sky-400/75 text-slate-100'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2 border-b border-white/15 pb-1.5">
+              <div className="space-y-1.5 min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-1.5 font-bold text-sky-300 uppercase">
+                  <Droplets className="w-3.5 h-3.5 shrink-0" />
+                  <span>Kierulffsvej Drikkevandshovedrør (DN200)</span>
+                </div>
+                <div className="text-[11px] text-slate-300">
+                  {waterMainTelemetry.ownerName} · {waterMainTelemetry.waterHardnessDh.toFixed(2)} °dH
+                </div>
+                <WaterMainBek1272Badge
+                  telemetry={waterMainTelemetry}
+                  visible={showWaterMainLayer}
+                  variant="detailed"
+                  testId="inspector-bek1272-status-badge"
+                />
+                {(isStructuralIntegrityAlert || isolatedMachineryJustNow) && (
+                  <div
+                    role="alert"
+                    data-testid="inspector-structural-integrity-alert"
+                    className={`p-2 rounded border space-y-1 ${
+                      isolatedMachineryJustNow
+                        ? 'bg-emerald-950/95 border-emerald-400/90 text-emerald-100'
+                        : 'bg-rose-950/95 border-rose-400/90 text-rose-100'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1 font-extrabold text-[11px]">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                        <span>
+                          Vibrationsfare (DIN 4150-3): {ppvValMmPerSec.toFixed(1)}/25 mm/s ({ppvPctOf25Threshold}%)
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="inspector-isolate-machinery-btn"
+                        onClick={handleTriggerIsolateNearbyMachinery}
+                        className={`px-2 py-0.5 rounded font-bold border text-[10.5px] whitespace-nowrap shrink-0 cursor-pointer ${
+                          isolatedMachineryJustNow
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-200 ring-2 ring-emerald-300/80 machine-estop-btn-pulse animate-pulse'
+                            : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-200'
+                        }`}
+                      >
+                        {isolatedMachineryJustNow ? '✓ E-Stop Aktiv' : 'Maskin-Stop'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowWaterMainInspector(false)}
+                className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer shrink-0"
+                aria-label="Luk rør-inspektør"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="p-1.5 rounded bg-black/30 border border-white/10">
+                <div className="text-slate-400">Dybde &amp; Materiale</div>
+                <div className="font-bold text-white">
+                  ~{waterMainTelemetry.burialDepthMeters.toFixed(2)} m (1,45–1,80 m · LIGE UNDER ~
+                  {waterMainTelemetry.districtHeatingDepthMeters.toFixed(2)} m fjernv.)
+                </div>
+                <div className="text-slate-300">
+                  DN200 ældre asbestcement (1964) + PE100 delstræk · LER ±{waterMainTelemetry.lerUncertaintyMeters.toFixed(1)} m
+                </div>
+              </div>
+              <div className="p-1.5 rounded bg-black/30 border border-white/10">
+                <div className="text-slate-400">Hydraulik (CiK 2.0)</div>
+                <div className="font-bold text-cyan-300">
+                  {waterMainTelemetry.pressureBar.toFixed(2)} bar · {waterMainTelemetry.flowLs.toFixed(1)} L/s
+                </div>
+                <div className="text-slate-300">
+                  Effekt: {waterMainTelemetry.hydraulicPowerWatts.toFixed(0)} W ({waterMainTelemetry.hydraulicEnergyPerHourKj.toFixed(0)} kJ/t)
+                </div>
+              </div>
+              <div className="p-1.5 rounded bg-black/30 border border-white/10">
+                <div className="text-slate-400">DIN 4150-3 Tabel 3</div>
+                <div
+                  className={`font-bold ${
+                    waterMainTelemetry.pipePpvMmPerSec >= 50
+                      ? 'text-rose-300'
+                      : waterMainTelemetry.pipePpvMmPerSec >= 25
+                      ? 'text-amber-300'
+                      : 'text-emerald-300'
+                  }`}
+                >
+                  Rør: {waterMainTelemetry.pipePpvMmPerSec.toFixed(1)} mm/s (Eternit &ge;25 · Plast 50 · Metal 80)
+                </div>
+                <div className="text-slate-300">
+                  Stikledning: {waterMainTelemetry.nearestBranchPpvMmPerSec.toFixed(1)} mm/s (5–20)
+                </div>
+              </div>
+              <div className="p-1.5 rounded bg-black/30 border border-white/10">
+                <div className="text-slate-400">BEK 1272/2025 &amp; Boussinesq</div>
+                <div className="font-bold text-white">
+                  {waterMainTelemetry.crownStressKpa.toFixed(1)} kPa (
+                  {waterMainTelemetry.hasSteelRoadPlates ? 'm/ køreplader' : 'uden plader'})
+                </div>
+                <div className="text-slate-300">
+                  GW: -{waterMainTelemetry.effectiveGroundwaterDepthMeters.toFixed(2)} m · Bly{' '}
+                  {waterMainTelemetry.estimatedLeadIntrusionUgL.toFixed(2)} (&le;5,0) · 4-PAH{' '}
+                  {waterMainTelemetry.estimatedPah4SumUgL.toFixed(3)} (&le;0,10) · PCB{' '}
+                  {(waterMainTelemetry.estimatedPcbIntrusionUgL ?? 0.08).toFixed(2)} (&le;0,50) µg/L
+                </div>
+              </div>
+            </div>
+
+            {waterMainTelemetry.legalAlerts.length > 0 && (
+              <div className="p-1.5 rounded bg-rose-950/60 border border-rose-500/50 space-y-0.5 max-h-24 overflow-y-auto">
+                {waterMainTelemetry.legalAlerts.map((al) => (
+                  <div key={al.code} className="text-[11px] leading-tight text-rose-100">
+                    <strong className="text-amber-300">{al.statute}:</strong> {al.title} (
+                    {al.measuredText})
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="p-1.5 rounded bg-black/30 border border-white/10 space-y-1">
+              <div className="flex items-center justify-between gap-2 text-[11px] text-slate-300">
+                <span>
+                  Binding:{' '}
+                  <strong className="text-sky-200">{waterMainTelemetry.coordinateMode}</strong>
+                </span>
+                <span className="text-amber-200 truncate">
+                  7. juni 2018 brud: 60 m rende / ~180 m³ vandtab
+                </span>
+              </div>
+              <div className="max-h-20 overflow-y-auto space-y-0.5 text-[11px] leading-tight text-slate-300">
+                {(waterMainTelemetry.coordinateMode === 'dar_verified_wgs84'
+                  ? KIERULFFSVEJ_DAR_CONTROL_POINTS
+                  : KIERULFFSVEJ_SCENE_CONTROL_POINTS
+                ).map((cp) => (
+                  <div
+                    key={cp.code}
+                    className="flex items-center justify-between gap-1.5 border-t border-white/5 pt-0.5"
+                  >
+                    <span className="text-slate-200 truncate">
+                      {cp.label}
+                      {cp.noteDa ? ` (${cp.noteDa})` : ''}
+                    </span>
+                    <span className="text-cyan-300 shrink-0">
+                      {cp.lat.toFixed(
+                        waterMainTelemetry.coordinateMode === 'dar_verified_wgs84' ? 6 : 5
+                      )}
+                      ,{' '}
+                      {cp.lng.toFixed(
+                        waterMainTelemetry.coordinateMode === 'dar_verified_wgs84' ? 6 : 5
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <WaterMainVibrationSparkline
+              points={waterMainLast6HoursPoints}
+              currentPpvMmPerSec={waterMainTelemetry.pipePpvMmPerSec}
+            />
+
+            {/* Simulér Lækagepunkt (pin-drop) in full inspector */}
+            <div className="p-1.5 rounded bg-black/35 border border-sky-500/30 space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                <button
+                  type="button"
+                  data-testid="inspector-simulate-leak-pin-btn"
+                  onClick={() => setIsLeakPinDropMode((v) => !v)}
+                  className={`px-2 py-1 rounded border font-bold text-[10.5px] inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer ${
+                    isLeakPinDropMode
+                      ? 'bg-amber-400 text-slate-950 border-amber-200'
+                      : effectiveVirtualLeakImpact
+                      ? 'bg-rose-600/30 border-rose-400 text-rose-100'
+                      : 'bg-sky-500/20 hover:bg-sky-500/35 border-sky-400/60 text-sky-200'
+                  }`}
+                >
+                  <MapPin className="w-3 h-3 shrink-0" />
+                  <span>
+                    {isLeakPinDropMode ? 'Klik på røret på kortet...' : 'Simulér Lækagepunkt'}
+                  </span>
+                </button>
+                <div className="flex items-center gap-1">
+                  {!effectiveVirtualLeakImpact ? (
+                    <button
+                      type="button"
+                      onClick={handleToggleVirtualLeakPinQuick}
+                      className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-[10px] font-bold cursor-pointer"
+                    >
+                      Placér ved Kilde
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVirtualLeakPin(null);
+                        setIsLeakPinDropMode(false);
+                      }}
+                      className="px-2 py-0.5 rounded bg-rose-950 hover:bg-rose-900 border border-rose-500/60 text-rose-200 text-[10px] font-bold cursor-pointer"
+                    >
+                      Fjern lækagepunkt
+                    </button>
+                  )}
+                </div>
+              </div>
+              {effectiveVirtualLeakImpact && (
+                <div className="space-y-1 text-[10.5px] border-t border-white/10 pt-1">
+                  <div className="flex flex-wrap items-center justify-between gap-1 text-amber-200 font-bold">
+                    <span>
+                      Udslip {effectiveVirtualLeakImpact.dischargeLs.toFixed(1)} L/s · ΔP −
+                      {effectiveVirtualLeakImpact.pressureDropBar.toFixed(2)} bar
+                    </span>
+                    <span className="text-sky-300">
+                      Kerne {effectiveVirtualLeakImpact.saturationZones[0]?.radiusMeters}m / Rand{' '}
+                      {effectiveVirtualLeakImpact.saturationZones[2]?.radiusMeters}m
+                    </span>
+                  </div>
+                  <div className="max-h-20 overflow-y-auto space-y-0.5">
+                    {effectiveVirtualLeakImpact.impactedBuildings.map((b) => (
+                      <div
+                        key={`full-leak-${b.buildingId}`}
+                        className="flex items-center justify-between gap-1 text-slate-200"
+                      >
+                        <span className="truncate">
+                          {b.buildingCode} ({b.address}) · {b.distanceMeters.toFixed(0)}m · fund. −{b.foundationDepthExposureM.toFixed(2)}m
+                        </span>
+                        <span
+                          className={`font-bold shrink-0 ${
+                            b.severity === 'critical'
+                              ? 'text-rose-300'
+                              : b.severity === 'high'
+                              ? 'text-amber-300'
+                              : 'text-sky-300'
+                          }`}
+                        >
+                          {b.arrivalMinutes.toFixed(0)} min · {b.intrusionRateLh.toFixed(0)} L/t
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {availableWaterMainSections.length > 0 && (
+                <select
+                  data-testid="inspector-water-main-section-select"
+                  aria-label="Vælg rørstrækning for BEK 1272/2025 CSV-eksport"
+                  value={effectiveWaterMainSectionId}
+                  onChange={(e) => setSelectedWaterMainSectionId(e.target.value)}
+                  className="px-1.5 py-1.5 rounded bg-[#090d16] border border-slate-700 text-slate-200 text-[11px] font-mono max-w-[155px] truncate cursor-pointer"
+                >
+                  {availableWaterMainSections.map((seg) => (
+                    <option key={seg.id} value={seg.id}>
+                      {seg.name}
+                    </option>
+                  ))}
+                  <option value="all">Alle strækninger</option>
+                </select>
+              )}
+
+              <button
+                type="button"
+                data-testid="inspector-water-main-export-bek1272-csv-btn"
+                onClick={handleExportWaterMainBek1272Csv}
+                className={`px-2 py-1.5 rounded font-bold border transition-colors cursor-pointer shrink-0 flex items-center gap-1 ${
+                  waterMainCsvExportedJustNow
+                    ? 'bg-emerald-500/25 border-emerald-400 text-emerald-200'
+                    : 'bg-cyan-500/20 hover:bg-cyan-500/35 border-cyan-400/60 text-cyan-200'
+                }`}
+                title="Download CSV med BEK 1272/2025 telemetri for valgt rørstrækning"
+              >
+                <Download className="w-3.5 h-3.5 shrink-0" />
+                <span>{waterMainCsvExportedJustNow ? '✓ CSV gemt' : 'BEK 1272 CSV'}</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="water-main-toggle-sankey-btn"
+                onClick={() => setShowWaterMainSankeyInInspector((v) => !v)}
+                className={`px-2 py-1.5 rounded font-bold border transition-colors cursor-pointer shrink-0 flex items-center gap-1 ${
+                  showWaterMainSankeyInInspector
+                    ? 'bg-cyan-500/25 text-cyan-100 border-cyan-400'
+                    : 'bg-slate-900 hover:bg-slate-800 text-cyan-200 border-slate-700'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5 shrink-0" />
+                <span>{showWaterMainSankeyInInspector ? 'Skjul Sankey' : 'Vibrations-Sankey'}</span>
+              </button>
+
+              {onLogWaterMainObservation && (
+                <button
+                  type="button"
+                  data-testid="water-main-log-sha256-btn"
+                  onClick={() => {
+                    onLogWaterMainObservation(
+                      waterMainTelemetry,
+                      `Kierulffsvej DN200 Rør-Inspektion (${waterMainTelemetry.statusLabelDa})`
+                    );
+                    setWaterMainLoggedJustNow(true);
+                    window.setTimeout(() => setWaterMainLoggedJustNow(false), 3200);
+                  }}
+                  className={`flex-1 px-2.5 py-1.5 rounded font-bold border transition-colors cursor-pointer ${
+                    waterMainLoggedJustNow
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-200'
+                      : 'bg-sky-500 hover:bg-sky-400 text-slate-950 border-sky-200'
+                  }`}
+                >
+                  {waterMainLoggedJustNow
+                    ? '✓ Rør-observation SHA-256 signeret & logget'
+                    : 'Log rør-observation til Beviser (SHA-256)'}
+                </button>
+              )}
+            </div>
+
+            {showWaterMainSankeyInInspector && (
+              <div className="pt-1 border-t border-white/10">
+                <WaterMainVibrationSankeyWidget
+                  waterMainTelemetry={waterMainTelemetry}
+                  sources={sources}
+                  manualMachineNoiseOutputDb={machineNoiseOutputDb}
+                  compact
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Item 2: E-Stop Confirmation Toast when nearby construction machinery is disconnected */}
+        {eStopToastData && (
+          <div
+            role="status"
+            data-testid="e-stop-confirmation-toast"
+            className="absolute top-14 left-1/2 -translate-x-1/2 z-40 pointer-events-auto w-[440px] max-w-[calc(100%-24px)] rounded-md bg-emerald-950/95 border border-emerald-400 p-2.5 shadow-2xl font-mono text-[11px] tabular-nums text-emerald-50 space-y-1.5"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-extrabold text-emerald-200 uppercase">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>E-Stop Bekræftet · Maskin-Stop Aktiveret</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEStopToastData(null)}
+                aria-label="Luk E-Stop bekræftelse"
+                className="p-0.5 rounded text-emerald-300 hover:text-white cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="text-emerald-100">
+              Frakoblede {eStopToastData.totalStoppedCount} nærliggende maskinkilder (
+              <strong className="text-white">{eStopToastData.isolatedCodes.join(', ')}</strong>) kl.{' '}
+              {eStopToastData.triggeredAtLabel} ved PPV{' '}
+              <strong className="text-amber-300">{eStopToastData.ppvBeforeMmPerSec.toFixed(1)} mm/s</strong>.
+            </div>
+            {onRestoreAllMachinery && (
+              <div className="flex items-center justify-end gap-2 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onRestoreAllMachinery();
+                    setEStopToastData(null);
+                  }}
+                  className="px-2 py-0.5 rounded bg-emerald-900 hover:bg-emerald-800 border border-emerald-400/60 text-emerald-100 text-[10.5px] font-semibold cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  Gendan maskiner
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Item 3: Vejr-Korrelations Heatmap HUD Legend (6h gusts vs S-quotient r > 0.80) */}
+        {!effectiveMapOnly &&
+          showWeatherCorrelationHeatmapLayer &&
+          showWeatherCorrelationHud && (
+            <div
+              data-testid="weather-correlation-heatmap-hud"
+              className="absolute top-14 left-3 z-25 pointer-events-auto w-[332px] max-w-[calc(100%-24px)] bg-[#0F1623]/95 border border-orange-400/75 rounded-md p-2.5 shadow-xl font-mono text-[11px] tabular-nums space-y-1.5"
+            >
+              <div className="flex items-center justify-between gap-2 border-b border-orange-500/30 pb-1">
+                <div className="flex items-center gap-1.5 font-bold text-orange-200 uppercase truncate">
+                  <Wind className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                  <span className="truncate">Vejr-Korrelations Heatmap (r &gt; 0,80)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWeatherCorrelationHud(false)}
+                  className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer"
+                  aria-label="Minimer Vejr-Korrelations Heatmap HUD"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="text-[10.5px] text-slate-300 flex items-center justify-between">
+                <span>
+                  Vindue: {weatherCorrelationHeatmapData.windowStartLabel}–{weatherCorrelationHeatmapData.windowEndLabel} (6t)
+                </span>
+                <span className="text-orange-300 font-bold">
+                  Max stød: {weatherCorrelationHeatmapData.maxGust6h.toFixed(1)} m/s
+                </span>
+              </div>
+              {weatherCorrelationHeatmapData.highlightedAreas.length === 0 ? (
+                <div className="text-[10.5px] text-slate-400 py-0.5">
+                  Ingen geografiske områder har Pearson r &gt; 0,80 mellem vindstød og S-kvotient i de seneste 6 timer.
+                </div>
+              ) : (
+                <div className="space-y-1 max-h-28 overflow-y-auto pr-0.5">
+                  {weatherCorrelationHeatmapData.highlightedAreas.slice(0, 4).map((item) => (
+                    <button
+                      key={`hud-wcorr-${item.receptor.id}`}
+                      type="button"
+                      onClick={() => onSelectReceptor(item.receptor.id)}
+                      className={`w-full flex items-center justify-between gap-2 px-2 py-1 rounded border text-left cursor-pointer transition-colors ${
+                        selectedReceptorId === item.receptor.id
+                          ? 'bg-orange-900/70 border-orange-300 text-white'
+                          : 'bg-slate-950/80 hover:bg-slate-900 border-slate-800 text-slate-200'
+                      }`}
+                    >
+                      <span className="truncate font-semibold">
+                        {item.receptor.code} · {item.receptor.name}
+                      </span>
+                      <span className="shrink-0 text-orange-300 font-bold">
+                        r={item.pearsonR.toFixed(2)} · S={item.maxS6h.toFixed(2)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+        {/* Item 7: High-Wind Dispersion Correlation HUD Widget (Triggered automatically when windGusts10m > 12 m/s) */}
+        {!effectiveMapOnly && isHighGustAlert && showHighWindCorrelationHud && (
+          <div
+            data-testid="high-wind-dispersion-correlation-widget"
+            className="absolute top-28 right-3 z-30 pointer-events-auto w-[348px] max-w-[calc(100%-24px)] bg-[#0F1623]/95 border border-amber-400/75 rounded-md p-2.5 shadow-2xl font-mono text-[11px] tabular-nums space-y-2"
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-amber-500/30 pb-1">
+              <div className="flex items-center gap-1.5 text-amber-200 font-bold uppercase truncate">
+                <Wind className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <span className="truncate">High-Wind Dispersion Correlation</span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="px-1.5 py-0.5 rounded bg-amber-950 border border-amber-400/60 text-amber-200 font-bold">
+                  {highGustCorrelationData.maxGustMs.toFixed(1)} m/s &gt;12
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowHighWindCorrelationHud(false)}
+                  className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer"
+                  aria-label="Minimer High-Wind Dispersion Correlation HUD"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="p-1.5 rounded bg-black/35 border border-slate-800">
+                <div className="text-slate-400">Pearson r (Stød vs. S)</div>
+                <div className="text-sm font-bold text-cyan-300">
+                  r = {highGustCorrelationData.pearsonR.toFixed(3)}
+                </div>
+              </div>
+              <div className="p-1.5 rounded bg-black/35 border border-slate-800">
+                <div className="text-slate-400">Fremhævede Receptorer</div>
+                <div className="text-sm font-bold text-amber-300">
+                  {highGustCorrelationData.affectedReceptors.length} zoner i nedvind
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              {highGustCorrelationData.affectedReceptors.map((item) => (
+                <button
+                  key={`gust-hud-rec-${item.receptor.id}`}
+                  type="button"
+                  onClick={() => onSelectReceptor(item.receptor.id)}
+                  className={`w-full flex items-center justify-between gap-2 px-2 py-1 rounded border text-left cursor-pointer transition-colors ${
+                    selectedReceptorId === item.receptor.id
+                      ? 'bg-amber-900/70 border-amber-300 text-white'
+                      : 'bg-slate-950/80 hover:bg-slate-900 border-slate-800 text-slate-200'
+                  }`}
+                >
+                  <span className="truncate font-semibold">
+                    {item.receptor.code} · {item.receptor.name}
+                  </span>
+                  <span className="shrink-0 text-amber-300 font-bold">
+                    {item.downwindAlignmentPct}% · S={item.sumQuotient.toFixed(2)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Automated 24h Cumulative Plume-Path Sequence & High-Density Receptor Intersection Alert Overlay */}
+        {isAnimatingPlumeRoute &&
+          isPuffMode &&
+          (() => {
+            const intersected = plumeRouteAnimationData.intersectingHighDensityReceptors;
+            const hasIntersection = intersected.length > 0;
+            const totalResidentsImpacted = intersected.reduce(
+              (acc, item) => acc + item.residentCount,
+              0
+            );
+            const pctComplete = Math.round(
+              (Math.max(0, Math.min(23.99, plumeRouteProgress)) / 24) * 100
+            );
+
+            return (
+              <div
+                role={hasIntersection ? 'alert' : 'status'}
+                data-testid="plume-path-intersection-alert-overlay"
+                data-intersection-active={hasIntersection ? 'true' : 'false'}
+                className={`absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto w-[460px] max-w-[calc(100%-24px)] rounded-md p-2.5 shadow-2xl font-mono text-[11px] tabular-nums border transition-colors ${
+                  hasIntersection
+                    ? 'bg-rose-950/95 border-rose-400 text-rose-50 ring-2 ring-amber-400/70'
+                    : 'bg-[#0F1623]/95 border-cyan-500/75 text-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-white/15">
+                  <div className="flex items-center gap-1.5 font-bold uppercase min-w-0">
+                    {hasIntersection ? (
+                      <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0 animate-pulse" />
+                    ) : (
+                      <Wind className="w-4 h-4 text-cyan-400 shrink-0" />
+                    )}
+                    <span className="truncate">
+                      {hasIntersection
+                        ? `INTERSEKTIONSALARM: 24T PLUME-PATH (${intersected.length} HØJTÆTHEDSZONER)`
+                        : `24T KUMULATIV PLUME-PATH SEKVENS · KL. ${currentWeather.hourLabel}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="px-1.5 py-0.5 rounded bg-black/40 border border-white/20 text-[11px] font-bold">
+                      {currentWeather.hourLabel} ({Math.round(currentWeather.windDirection10m)}° →{' '}
+                      {plumeDirectionDeg}°)
+                    </span>
+                    {onToggleAnimatePlumeRoute && (
+                      <button
+                        type="button"
+                        onClick={onToggleAnimatePlumeRoute}
+                        className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 border border-white/25 text-white font-bold cursor-pointer flex items-center gap-1"
+                        aria-label="Stop 24t Plume-Path animation"
+                      >
+                        <Pause className="w-3 h-3" />
+                        <span>Stop</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 24-Hour Wind Vector History Progress Strip */}
+                <div className="mt-1.5 space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-slate-300">
+                    <span>
+                      Kilde: <strong className="text-cyan-300">{plumeRouteAnimationData.originSource.code}</strong>{' '}
+                      · Vind {currentWeather.windSpeed10m.toFixed(1)} m/s (stød{' '}
+                      {currentWeather.windGusts10m.toFixed(1)} m/s) · Kl.{' '}
+                      {currentWeather.pasquillClass}
+                    </span>
+                    <span className="font-bold text-cyan-200">{pctComplete}% / 24t</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-900/90 overflow-hidden border border-white/15">
+                    <div
+                      className={`h-full transition-all duration-75 ${
+                        hasIntersection
+                          ? 'bg-gradient-to-r from-amber-400 to-rose-500'
+                          : 'bg-gradient-to-r from-cyan-400 to-sky-500'
+                      }`}
+                      style={{ width: `${Math.max(4, pctComplete)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {hasIntersection ? (
+                  <div className="mt-2 pt-1.5 border-t border-rose-400/35 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 text-amber-200 font-bold">
+                      <span>
+                        Vindfanen krydser {intersected.length} tætbefolkede bolig-/institutionszoner
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded bg-rose-900 border border-rose-400/70 text-white">
+                        ~{totalResidentsImpacted} beboere
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {intersected.slice(0, 4).map((item) => (
+                        <button
+                          key={`overlay-hit-${item.receptor.id}`}
+                          type="button"
+                          onClick={() => onSelectReceptor(item.receptor.id)}
+                          className={`px-2 py-0.5 rounded border text-left cursor-pointer transition-colors ${
+                            item.isCritical
+                              ? 'bg-rose-900/80 hover:bg-rose-800 border-rose-300 text-white font-bold'
+                              : 'bg-amber-950/80 hover:bg-amber-900 border-amber-400 text-amber-100 font-semibold'
+                          }`}
+                        >
+                          {item.receptor.code} · {item.distToPathMeters}m · S=
+                          {item.sumQuotient.toFixed(2)} ({item.residentCount} beb.)
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 text-cyan-200/90">
+                    Ingen akut direkte skæring med højtætheds-receptorzone på kl.{' '}
+                    {currentWeather.hourLabel} — overvåger løbende gennem 24t vindvektor-historik.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+        {/* Frigørbart & Minimerbart 'mycelium_alert_center' Vindue (System B Simuler, Live Varsling & CiK 2.0 Sankey) */}
+        {showMyceliumAlertCenter && (() => {
+          const mycWin = mapWindowStates.mycelium_alert_center;
+          const targetReceptorId = selectedReceptorId ?? receptors[0]?.id ?? '';
+          return (
+            <div
+              data-map-window="mycelium_alert_center"
+              onMouseDown={() => mycWin.isReleased && handleFocusMapWindow('mycelium_alert_center')}
+              className={`${
+                mycWin.isReleased
+                  ? 'fixed ring-2 ring-cyan-400/85'
+                  : 'absolute top-20 left-3 z-30'
+              } w-[488px] max-w-[calc(100%-24px)] bg-[#0B0E17]/95 border border-cyan-500/65 rounded-md p-3 shadow-2xl pointer-events-auto space-y-2`}
+              style={
+                mycWin.isReleased
+                  ? {
+                      left: `${mycWin.x}px`,
+                      top: `${mycWin.y}px`,
+                      zIndex: mycWin.zIndex,
+                    }
+                  : undefined
+              }
+            >
+              <MapOverlayWindowControlStrip
+                windowId="mycelium_alert_center"
+                title="System B Mycelienetværk · Simuler, BFT & CiK 2.0"
+                badgeText={`A_i=${myceliumSimState.kpis.autonomyIndexAi.toFixed(2)} · EU868 ${myceliumSimState.kpis.eu868DutyCyclePct.toFixed(2)}%`}
+                accentColorClass="text-cyan-300"
+                state={mycWin}
+                onToggleMinimize={handleToggleMapWindowMinimize}
+                onToggleRelease={handleToggleMapWindowRelease}
+                onMove={handleMoveMapWindow}
+                onFocus={handleFocusMapWindow}
+                onClose={() => setShowMyceliumAlertCenter(false)}
+              />
+              {!mycWin.isMinimized && (
+                <MyceliumControlAndSankeyPanel
+                  state={myceliumSimState}
+                  observations={observations}
+                  scenario={myceliumScenario}
+                  onChangeScenario={setMyceliumScenario}
+                  realitySummitOverride={realitySummitOverride}
+                  onToggleRealitySummit={() => setRealitySummitOverride((v) => !v)}
+                  selectedReceptorId={targetReceptorId}
+                  manualCraterNodeIds={manualCraterNodeIds}
+                  manualSpoofNodeIds={manualSpoofNodeIds}
+                  onToggleSelectedCrater={() => {
+                    if (!targetReceptorId) return;
+                    setManualCraterNodeIds((prev) =>
+                      prev.includes(targetReceptorId)
+                        ? prev.filter((id) => id !== targetReceptorId)
+                        : [...prev, targetReceptorId]
+                    );
+                  }}
+                  onToggleSelectedSpoof={() => {
+                    if (!targetReceptorId) return;
+                    setManualSpoofNodeIds((prev) =>
+                      prev.includes(targetReceptorId)
+                        ? prev.filter((id) => id !== targetReceptorId)
+                        : [...prev, targetReceptorId]
+                    );
+                  }}
+                  onResetManualOverrides={() => {
+                    setManualCraterNodeIds([]);
+                    setManualSpoofNodeIds([]);
+                  }}
+                  isLiveEnabled={myceliumLiveAlerts.isLiveEnabled}
+                  onToggleLiveEnabled={myceliumLiveAlerts.toggleLiveEnabled}
+                  alertProfile={myceliumLiveAlerts.alertProfile}
+                  onChangeAlertProfile={myceliumLiveAlerts.setAlertProfile}
+                  isAudioChimeEnabled={myceliumLiveAlerts.isAudioChimeEnabled}
+                  onToggleAudioChime={myceliumLiveAlerts.toggleAudioMuted}
+                  onTriggerTestAlert={myceliumLiveAlerts.triggerTestAlert}
+                  onEnableOsNotification={() => {
+                    void myceliumLiveAlerts.enableOsBrowserNotification();
+                  }}
+                  channelBadgeLabelDa={myceliumLiveAlerts.channelBadgeLabelDa}
+                  suppressedStats={myceliumLiveAlerts.suppressedStats}
+                  eventLog={myceliumLiveAlerts.eventLog}
+                  onFocusReceptor={handleFocusMyceliumNode}
+                  onOpenFormulaSimulator={() => setIsFormulaSimulatorOpen(true)}
+                />
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Modul IV: Biokybernetisk Formelsamling & Dekonstruktion af System A */}
+        <SystemBFormulaSimulatorModal
+          isOpen={isFormulaSimulatorOpen}
+          onClose={() => setIsFormulaSimulatorOpen(false)}
+          liveTrMs={myceliumSimState.activeSelfHealingRoute?.reactionTimeTrMs ?? 179}
+          liveAi={myceliumSimState.kpis.autonomyIndexAi}
+          liveGamma={myceliumSimState.kpis.coercionIndexGamma}
+        />
+
+        {/* Ikke-blokerende Mycelium Live Toast Overlay (Respekterer Normal, Fuld Skærm & Kun Kort) */}
+        <MyceliumToastOverlay
+          visibleToasts={myceliumLiveAlerts.visibleToasts}
+          isLiveEnabled={myceliumLiveAlerts.isLiveEnabled}
+          channelBadgeLabelDa={myceliumLiveAlerts.channelBadgeLabelDa}
+          isFullscreen={isFullscreen}
+          isMapOnly={effectiveMapOnly}
+          onFocusReceptor={handleFocusMyceliumNode}
+          onDismissToast={myceliumLiveAlerts.dismissToast}
+          onHoverToastChange={myceliumLiveAlerts.setHoveredToastId}
+        />
       </div>
     </div>
   );
 };
+
+function areDispersionMapPropsEqual(
+  prev: DispersionMapProps,
+  next: DispersionMapProps
+): boolean {
+  if (
+    prev.sources !== next.sources ||
+    prev.receptors !== next.receptors ||
+    prev.plumeZones !== next.plumeZones ||
+    prev.receptorExposures !== next.receptorExposures ||
+    prev.currentWeather !== next.currentWeather ||
+    prev.isPuffMode !== next.isPuffMode ||
+    prev.puff24h !== next.puff24h ||
+    prev.observations !== next.observations ||
+    prev.selectedObservationId !== next.selectedObservationId ||
+    prev.pendingObservationPoint !== next.pendingObservationPoint ||
+    prev.selectedSourceId !== next.selectedSourceId ||
+    prev.selectedReceptorId !== next.selectedReceptorId ||
+    prev.mapClickMode !== next.mapClickMode ||
+    prev.isAnimatingPlumeRoute !== next.isAnimatingPlumeRoute ||
+    prev.showHeatmapComparison !== next.showHeatmapComparison ||
+    prev.heatmapComparison !== next.heatmapComparison ||
+    prev.heatmapComparisonViewMode !== next.heatmapComparisonViewMode ||
+    prev.weatherHours !== next.weatherHours ||
+    prev.comparisonHourAIndex !== next.comparisonHourAIndex ||
+    prev.comparisonHourBIndex !== next.comparisonHourBIndex ||
+    prev.isFullscreen !== next.isFullscreen ||
+    prev.fullscreenLabel !== next.fullscreenLabel ||
+    prev.buildings !== next.buildings ||
+    prev.activeCategoryFilters !== next.activeCategoryFilters ||
+    prev.isMapOnly !== next.isMapOnly ||
+    prev.selectedDateIso !== next.selectedDateIso ||
+    prev.myceliumSnapshot !== next.myceliumSnapshot ||
+    prev.hiddenSourceIds !== next.hiddenSourceIds ||
+    prev.visibleSubstances !== next.visibleSubstances ||
+    prev.showWindNoiseHeatmap !== next.showWindNoiseHeatmap ||
+    prev.showPlumeConcentrationHeatmap !== next.showPlumeConcentrationHeatmap ||
+    prev.plumeHeatmapPasquillThreshold !== next.plumeHeatmapPasquillThreshold ||
+    prev.showWeatherCorrelationHeatmap !== next.showWeatherCorrelationHeatmap ||
+    prev.waterMainTelemetry !== next.waterMainTelemetry ||
+    prev.showWaterMainLayer !== next.showWaterMainLayer ||
+    prev.showLerBuffer !== next.showLerBuffer ||
+    prev.hasSteelRoadPlates !== next.hasSteelRoadPlates ||
+    prev.simulatedPipeRuptureActive !== next.simulatedPipeRuptureActive ||
+    prev.isS3ValveLockoutActive !== next.isS3ValveLockoutActive ||
+    prev.virtualLeakPinPoint !== next.virtualLeakPinPoint ||
+    prev.virtualLeakImpact !== next.virtualLeakImpact ||
+    prev.simultaneousDispatch !== next.simultaneousDispatch ||
+    prev.machineNoiseOutputDb !== next.machineNoiseOutputDb
+  ) {
+    return false;
+  }
+
+  // Only re-render for fractional plumeRouteProgress changes when the 24h plume route animation is active
+  if (
+    next.isAnimatingPlumeRoute &&
+    prev.plumeRouteProgress !== next.plumeRouteProgress
+  ) {
+    return false;
+  }
+
+  if (
+    prev.onSelectObservation !== next.onSelectObservation ||
+    prev.onSelectSource !== next.onSelectSource ||
+    prev.onSelectReceptor !== next.onSelectReceptor ||
+    prev.onSetMapClickMode !== next.onSetMapClickMode ||
+    prev.onMapAddNode !== next.onMapAddNode ||
+    prev.onSelectHourFromPeak !== next.onSelectHourFromPeak ||
+    prev.onToggleAnimatePlumeRoute !== next.onToggleAnimatePlumeRoute ||
+    prev.onToggleHeatmapComparison !== next.onToggleHeatmapComparison ||
+    prev.onChangeHeatmapComparisonViewMode !== next.onChangeHeatmapComparisonViewMode ||
+    prev.onChangeComparisonHourA !== next.onChangeComparisonHourA ||
+    prev.onChangeComparisonHourB !== next.onChangeComparisonHourB ||
+    prev.onToggleFullscreen !== next.onToggleFullscreen ||
+    prev.onSaveMapSnapshotObservation !== next.onSaveMapSnapshotObservation ||
+    prev.onToggleCategoryFilter !== next.onToggleCategoryFilter ||
+    prev.onChangeBuildingCategory !== next.onChangeBuildingCategory ||
+    prev.onToggleMapOnly !== next.onToggleMapOnly ||
+    prev.onChangeDateIso !== next.onChangeDateIso ||
+    prev.onChangeVisibleSubstances !== next.onChangeVisibleSubstances ||
+    prev.onToggleWindNoiseHeatmap !== next.onToggleWindNoiseHeatmap ||
+    prev.onTogglePlumeConcentrationHeatmap !== next.onTogglePlumeConcentrationHeatmap ||
+    prev.onToggleWeatherCorrelationHeatmap !== next.onToggleWeatherCorrelationHeatmap ||
+    prev.onToggleWaterMainLayer !== next.onToggleWaterMainLayer ||
+    prev.onToggleLerBuffer !== next.onToggleLerBuffer ||
+    prev.onToggleSteelRoadPlates !== next.onToggleSteelRoadPlates ||
+    prev.onToggleSimulatedPipeRupture !== next.onToggleSimulatedPipeRupture ||
+    prev.onToggleS3ValveLockout !== next.onToggleS3ValveLockout ||
+    prev.onToggleSourceActive !== next.onToggleSourceActive ||
+    prev.onIsolateNearbyMachinery !== next.onIsolateNearbyMachinery ||
+    prev.onRestoreAllMachinery !== next.onRestoreAllMachinery ||
+    prev.onChangeVirtualLeakPinPoint !== next.onChangeVirtualLeakPinPoint ||
+    prev.onLogWaterMainObservation !== next.onLogWaterMainObservation ||
+    prev.onAcknowledgeSimultaneousP1 !== next.onAcknowledgeSimultaneousP1 ||
+    prev.onOpenSimultaneousModal !== next.onOpenSimultaneousModal
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+export const DispersionMap = memo(DispersionMapComponent, areDispersionMapPropsEqual);
+DispersionMap.displayName = 'DispersionMap';

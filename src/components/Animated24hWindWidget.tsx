@@ -122,10 +122,10 @@ export const Animated24hWindWidget: React.FC<Animated24hWindWidgetProps> = ({
       <div className="flex items-center justify-between gap-2 border-b border-slate-800/90 pb-1.5 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <Wind className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <span className="text-[10.5px] font-extrabold uppercase tracking-wider text-cyan-200 truncate">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-cyan-200 truncate">
             24t Vindstyrke &amp; Retning (Animation)
           </span>
-          <span className="px-1.5 py-0.2 rounded bg-slate-900 border border-cyan-500/40 text-[10px] font-bold text-amber-300 shrink-0">
+          <span className="px-1.5 py-0.2 rounded bg-slate-900 border border-cyan-500/40 text-[11px] font-bold text-amber-300 shrink-0">
             kl. {interpolated.hourLabel}
           </span>
         </div>
@@ -134,7 +134,7 @@ export const Animated24hWindWidget: React.FC<Animated24hWindWidgetProps> = ({
           <button
             type="button"
             onClick={() => setIsAnimating24h((v) => !v)}
-            className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 border transition-colors cursor-pointer ${
+            className={`px-2 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 border transition-colors cursor-pointer ${
               isAnimating24h
                 ? 'bg-amber-400 text-slate-950 border-amber-200'
                 : 'bg-slate-900 text-cyan-200 border-cyan-500/50 hover:bg-slate-800'
@@ -161,7 +161,7 @@ export const Animated24hWindWidget: React.FC<Animated24hWindWidgetProps> = ({
           <button
             type="button"
             onClick={() => setSpeedMultiplier((s) => (s === 1 ? 2 : 1))}
-            className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[9.5px] text-slate-300 cursor-pointer"
+            className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] text-slate-300 cursor-pointer"
             title="Skift animationshastighed (1x / 2x)"
           >
             {speedMultiplier}x
@@ -171,7 +171,7 @@ export const Animated24hWindWidget: React.FC<Animated24hWindWidgetProps> = ({
             <button
               type="button"
               onClick={onExportWeatherJson}
-              className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 border transition-colors cursor-pointer ${
+              className={`px-2 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 border transition-colors cursor-pointer ${
                 jsonExportedJustNow
                   ? 'bg-emerald-400 text-slate-950 border-white'
                   : 'bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-200 border-emerald-400/60'
@@ -259,16 +259,16 @@ export const Animated24hWindWidget: React.FC<Animated24hWindWidgetProps> = ({
               );
             })()}
             <circle cx="32" cy="32" r="2.2" fill="#e2e8f0" />
-            <text x="32" y="8" textAnchor="middle" fill="#94a3b8" fontSize="6.5" fontWeight="bold">
+            <text x="32" y="8" textAnchor="middle" fill="#94a3b8" fontSize="9.5" fontWeight="bold">
               N
             </text>
-            <text x="32" y="61" textAnchor="middle" fill="#64748b" fontSize="6">
+            <text x="32" y="61" textAnchor="middle" fill="#64748b" fontSize="9.5">
               S
             </text>
-            <text x="58" y="34" textAnchor="middle" fill="#64748b" fontSize="6">
+            <text x="58" y="34" textAnchor="middle" fill="#64748b" fontSize="9.5">
               Ø
             </text>
-            <text x="6" y="34" textAnchor="middle" fill="#64748b" fontSize="6">
+            <text x="6" y="34" textAnchor="middle" fill="#64748b" fontSize="9.5">
               V
             </text>
           </svg>
@@ -281,7 +281,7 @@ export const Animated24hWindWidget: React.FC<Animated24hWindWidgetProps> = ({
               <span className={`font-extrabold ${isHighWind ? 'text-rose-300' : 'text-white'}`}>
                 {interpolated.speed.toFixed(1)} m/s
               </span>
-              <span className="text-amber-300 text-[10px]">
+              <span className="text-amber-300 text-[11px]">
                 (stød {interpolated.gust.toFixed(1)})
               </span>
               <span className="text-slate-500">·</span>
@@ -294,7 +294,7 @@ export const Animated24hWindWidget: React.FC<Animated24hWindWidgetProps> = ({
               <button
                 type="button"
                 onClick={onOpenStackEffectVisualization}
-                className="px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/60 text-amber-200 text-[9.5px] font-bold flex items-center gap-1 cursor-pointer"
+                className="px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/60 text-amber-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                 title="Åbn visualisering af Skorstenseffekten (Termisk Opdrift ΔP_s & Neutraltryksplan z_NPL)"
               >
                 <Flame className="w-2.5 h-2.5 text-amber-400" />
@@ -324,8 +324,8 @@ export const Animated24hWindWidget: React.FC<Animated24hWindWidgetProps> = ({
                   className="h-full flex flex-col items-center justify-end group cursor-pointer focus:outline-none"
                 >
                   <span
-                    className={`text-[7px] leading-none mb-0.5 transition-transform ${
-                      isCurr ? 'text-amber-300 font-bold scale-125' : 'text-slate-500'
+                    className={`text-[11px] leading-none mb-0.5 transition-transform ${
+                      isCurr ? 'text-amber-300 font-bold scale-125' : 'text-slate-400'
                     }`}
                     style={{ transform: `rotate(${plumeDeg}deg)` }}
                   >
@@ -335,7 +335,7 @@ export const Animated24hWindWidget: React.FC<Animated24hWindWidgetProps> = ({
                     style={{ height: `${heightPct}%` }}
                     className={`w-full rounded-t transition-all ${
                       isCurr
-                        ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.9)]'
+                        ? 'bg-amber-400 ring-1 ring-amber-200'
                         : h.windSpeed10m > 10
                         ? 'bg-rose-500/85 group-hover:bg-rose-400'
                         : 'bg-cyan-500/60 group-hover:bg-cyan-400'
@@ -346,7 +346,7 @@ export const Animated24hWindWidget: React.FC<Animated24hWindWidgetProps> = ({
             })}
           </div>
 
-          <div className="flex items-center justify-between text-[9px] text-slate-400">
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
             <span>00:00</span>
             <span className="text-cyan-300/90 flex items-center gap-1">
               <Clock className="w-2.5 h-2.5" />

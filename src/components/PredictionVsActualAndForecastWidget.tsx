@@ -15,9 +15,11 @@ import {
   RefreshCw,
   RotateCcw,
   Scale,
+  Search,
   ShieldAlert,
   Sparkles,
   Square,
+  Sun,
   TrendingUp,
   Wind,
 } from 'lucide-react';
@@ -370,7 +372,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
       {/* Header & Status Banner */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
         <div className="space-y-0.5">
-          <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold">
+          <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-cyan-400 font-bold">
             <Scale className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span>
               PRÆDIKTION VS. VIRKELIGT VEJRHÆNDELSESFORLØB · NÆSTE UGES VEJRUDSIGT · TIDSREJSE (KL. 00:00 DATO-SKIFT)
@@ -381,7 +383,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
           </h3>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10.5px]">
+        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
           <span className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 font-bold flex items-center gap-1">
             <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
             <span>Sidste Uges Test Kørt fra Start (kl. {testRunTimestamp})</span>
@@ -439,7 +441,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
       {activeSubTab === 'last_week_comparison' && activeTestDay && (
         <div className="space-y-3">
           {/* Top Action & Explanation Banner */}
-          <div className="p-2.5 rounded bg-gradient-to-r from-amber-950/50 via-slate-950 to-rose-950/40 border border-amber-500/40 flex flex-wrap items-center justify-between gap-2">
+          <div className="p-2.5 rounded bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-amber-400 flex flex-wrap items-center justify-between gap-2">
             <div className="space-y-0.5 max-w-2xl">
               <div className="text-[11px] font-mono font-bold text-amber-300 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 shrink-0" />
@@ -492,7 +494,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
           {/* 4 KPI Summary Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 font-mono">
             <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-              <div className="text-[10px] text-slate-400 uppercase">
+              <div className="text-[11px] text-slate-400 uppercase">
                 7-Dages Kumulativ Dosis (ΣS·t)
               </div>
               <div className="text-sm font-extrabold text-white flex items-baseline gap-1.5">
@@ -500,28 +502,28 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                 <span className="text-slate-500 text-xs">vs.</span>
                 <span className="text-rose-400">{lastWeekComparisonData.totalActualDose7d}</span>
               </div>
-              <div className="text-[10px] text-amber-300 font-semibold">
+              <div className="text-[11px] text-amber-300 font-semibold">
                 Virkelig effekt: {lastWeekComparisonData.totalDoseDiffPct >= 0 ? '+' : ''}
                 {lastWeekComparisonData.totalDoseDiffPct}% ift. prædiktion
               </div>
             </div>
 
             <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-              <div className="text-[10px] text-slate-400 uppercase">
+              <div className="text-[11px] text-slate-400 uppercase">
                 Timer m. Grænseoverskridelse (S ≥ 1,0)
               </div>
               <div className="text-sm font-extrabold text-white">
                 Præd: <span className="text-cyan-300">{lastWeekComparisonData.totalPredViolationHrs}t</span> · Virkelig:{' '}
                 <span className="text-rose-400">{lastWeekComparisonData.totalActualViolationHrs}t</span>
               </div>
-              <div className="text-[10px] text-rose-300">
+              <div className="text-[11px] text-rose-300">
                 +{lastWeekComparisonData.totalActualViolationHrs - lastWeekComparisonData.totalPredViolationHrs} uvarslede
                 ulovlige eksponeringstimer
               </div>
             </div>
 
             <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-              <div className="text-[10px] text-slate-400 uppercase">
+              <div className="text-[11px] text-slate-400 uppercase">
                 Største Hændelses-Afvigelse (ΔS_max)
               </div>
               <div className="text-sm font-extrabold text-rose-400">
@@ -529,19 +531,19 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                 {lastWeekComparisonData.maxAnomalyDay?.deltaPeakS.toFixed(2)} S (
                 {lastWeekComparisonData.maxAnomalyDay?.dayLabelShort})
               </div>
-              <div className="text-[10px] text-slate-300 truncate">
+              <div className="text-[11px] text-slate-300 truncate">
                 Vind {lastWeekComparisonData.maxAnomalyDay?.actualMaxWind} m/s mod Rødtjørnevej 2
               </div>
             </div>
 
             <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-              <div className="text-[10px] text-slate-400 uppercase">
+              <div className="text-[11px] text-slate-400 uppercase">
                 Spredningsmodel RMSE (168 Timer)
               </div>
               <div className="text-sm font-extrabold text-emerald-300">
                 RMSE = ±{lastWeekComparisonData.rmseS} S
               </div>
-              <div className="text-[10px] text-slate-400">
+              <div className="text-[11px] text-slate-400">
                 Retsmedicinsk korrigeret med faktisk Slagelse-vejr
               </div>
             </div>
@@ -558,7 +560,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                 </span>
               </div>
 
-              <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded p-0.5 font-mono text-[10.5px]">
+              <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded p-0.5 font-mono text-[11px]">
                 <button
                   type="button"
                   onClick={() => setChartGranularity('7days')}
@@ -739,9 +741,12 @@ export const PredictionVsActualAndForecastWidget: React.FC<
           {/* Selected Day Forensic Cause & Dispersion Effect Card */}
           <div className="p-2.5 rounded bg-slate-950 border border-amber-500/40 space-y-1.5">
             <div className="flex flex-wrap items-center justify-between gap-2 font-mono">
-              <span className="text-xs font-bold text-amber-300">
-                🔍 Fokus-Analyse ({activeTestDay.weekdayNameDa} {activeTestDay.dateIso}):{' '}
-                {activeTestDay.eventAnomalyHeadline}
+              <span className="text-xs font-bold text-amber-300 inline-flex items-center gap-1.5">
+                <Search className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  Fokus-Analyse ({activeTestDay.weekdayNameDa} {activeTestDay.dateIso}):{' '}
+                  {activeTestDay.eventAnomalyHeadline}
+                </span>
               </span>
               <div className="flex items-center gap-1.5">
                 <button
@@ -753,7 +758,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                       activeTestDay.predictedDataset
                     )
                   }
-                  className="px-2 py-0.5 rounded bg-cyan-950 hover:bg-cyan-900 text-cyan-200 border border-cyan-500/50 text-[10px] font-mono font-semibold"
+                  className="px-2 py-0.5 rounded bg-cyan-950 hover:bg-cyan-900 text-cyan-200 border border-cyan-500/50 text-[11px] font-mono font-semibold"
                 >
                   Vis Prædiktion på Kort
                 </button>
@@ -766,7 +771,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                       activeTestDay.actualDataset
                     )
                   }
-                  className="px-2 py-0.5 rounded bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-500/50 text-[10px] font-mono font-semibold"
+                  className="px-2 py-0.5 rounded bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-500/50 text-[11px] font-mono font-semibold"
                 >
                   Vis Virkeligt Forløb på Kort
                 </button>
@@ -775,7 +780,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
             <p className="text-[11px] text-slate-300 leading-relaxed">
               {activeTestDay.meteorologicalCauseDa}
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[10.5px]">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
               <div className="p-1.5 rounded bg-slate-900/90 border border-slate-800">
                 <span className="text-slate-400">Vind (Præd. vs. Virkelig):</span>{' '}
                 <strong className="text-cyan-300">{activeTestDay.predMeanWind} m/s</strong> →{' '}
@@ -805,7 +810,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
 
           {/* 7-Day Table for Last Week's Test */}
           <div className="overflow-x-auto rounded border border-slate-800">
-            <table className="w-full text-left border-collapse font-mono text-[10.5px]">
+            <table className="w-full text-left border-collapse font-mono text-[11px]">
               <thead>
                 <tr className="bg-slate-950 text-slate-400 border-b border-slate-800">
                   <th className="py-1.5 px-2">Dato (Sidste Uge)</th>
@@ -883,7 +888,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
           ===================================================================== */}
       {activeSubTab === 'next_week_forecast' && (
         <div className="space-y-3">
-          <div className="p-2.5 rounded bg-gradient-to-r from-cyan-950/60 via-slate-950 to-indigo-950/50 border border-cyan-500/40 flex flex-wrap items-center justify-between gap-2">
+          <div className="p-2.5 rounded bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-sky-400 flex flex-wrap items-center justify-between gap-2">
             <div className="space-y-0.5 max-w-2xl">
               <div className="text-[11px] font-mono font-bold text-cyan-300 flex items-center gap-1.5">
                 <Compass className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
@@ -936,22 +941,22 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                 >
                   <div>
                     <div className="flex items-center justify-between gap-1">
-                      <span className="text-[10px] font-bold text-cyan-300">
+                      <span className="text-[11px] font-bold text-cyan-300">
                         {fDay.weekdayNameDa.slice(0, 3)}
                       </span>
-                      <span className="text-[10px] text-slate-400">{fDay.dayLabelShort}</span>
+                      <span className="text-[11px] text-slate-400">{fDay.dayLabelShort}</span>
                     </div>
                     <div className="text-xs font-extrabold text-white mt-0.5">
                       {fDay.maxWindSpeedMs} m/s
                     </div>
-                    <div className="text-[9.5px] text-slate-400">
+                    <div className="text-[11px] text-slate-400">
                       Fane → {fDay.dominantPlumeSector} ({fDay.dominantPlumeToDeg}°)
                     </div>
                   </div>
 
                   <div className="pt-1 border-t border-slate-800/80 space-y-0.5">
                     <div
-                      className={`text-[10.5px] font-extrabold ${
+                      className={`text-[11px] font-extrabold ${
                         fDay.peakSumQuotient >= 1.0
                           ? 'text-rose-400'
                           : fDay.peakSumQuotient >= 0.5
@@ -961,10 +966,18 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                     >
                       S_max = {fDay.peakSumQuotient.toFixed(2)}
                     </div>
-                    <div className="text-[9px] text-slate-400 truncate">
-                      {fDay.totalPrecipitationMm > 0
-                        ? `🌧 ${fDay.totalPrecipitationMm} mm`
-                        : `☀ ${fDay.maxTempC}°C`}
+                    <div className="text-[11px] text-slate-400 truncate flex items-center gap-1">
+                      {fDay.totalPrecipitationMm > 0 ? (
+                        <>
+                          <CloudRain className="w-3 h-3 text-sky-400 shrink-0" />
+                          <span>{fDay.totalPrecipitationMm} mm</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sun className="w-3 h-3 text-amber-300 shrink-0" />
+                          <span>{fDay.maxTempC}°C</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </button>
@@ -978,7 +991,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
               <span className="font-bold text-white">
                 7-Dages Prognose: Prædikteret Spids-Sumkvotient S_max, Vindhastighed (m/s) &amp; Nedbør (mm)
               </span>
-              <span className="text-cyan-300 text-[10px]">
+              <span className="text-cyan-300 text-[11px]">
                 Klik på en dag for at simulere spredningsfanen på 3D/2D-kortet
               </span>
             </div>
@@ -1104,8 +1117,8 @@ export const PredictionVsActualAndForecastWidget: React.FC<
           <div
             className={`p-3 rounded border space-y-2 ${
               isPlaying && isContinuousRecordingToToday
-                ? 'bg-fuchsia-950/40 border-fuchsia-400 shadow-[0_0_20px_rgba(217,70,239,0.25)]'
-                : 'bg-slate-950/90 border-slate-800'
+                ? 'bg-[var(--surface-card)] border-[var(--border-subtle)] border-l-4 border-l-fuchsia-400'
+                : 'bg-[var(--surface-panel)] border-[var(--border-subtle)]'
             }`}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1139,8 +1152,8 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                   >
                     <span>
                       {autoSaveEvidenceOnTimeTravel
-                        ? `⚡ Auto gem beviser: TIL (${autoSavedEvidenceCount})`
-                        : '⚡ Auto gem beviser: FRA'}
+                        ? `Auto gem beviser: TIL (${autoSavedEvidenceCount})`
+                        : 'Auto gem beviser: FRA'}
                     </span>
                   </button>
                 )}
@@ -1148,10 +1161,10 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                   <button
                     type="button"
                     onClick={onStopTimeTravelRecording}
-                    className="px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md animate-pulse"
+                    className="px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5"
                   >
                     <Square className="w-3.5 h-3.5 fill-current" />
-                    <span>⏹ Afbryd Registrering &amp; Afspilning</span>
+                    <span>Afbryd Registrering &amp; Afspilning</span>
                   </button>
                 ) : (
                   <>
@@ -1190,25 +1203,25 @@ export const PredictionVsActualAndForecastWidget: React.FC<
             {/* Live Status Strip */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono text-[11px]">
               <div className="p-2 rounded bg-slate-900 border border-slate-800">
-                <div className="text-[9.5px] text-slate-400">AKTUEL AFSPILNINGS-DATO &amp; TID</div>
+                <div className="text-[11px] text-slate-400">AKTUEL AFSPILNINGS-DATO &amp; TID</div>
                 <div className="text-xs font-extrabold text-white">
                   {selectedDateIso} kl. {String(selectedHourIndex).padStart(2, '0')}:00
                 </div>
               </div>
               <div className="p-2 rounded bg-slate-900 border border-slate-800">
-                <div className="text-[9.5px] text-slate-400">MÅL-DATO FOR REGISTRERING</div>
+                <div className="text-[11px] text-slate-400">MÅL-DATO FOR REGISTRERING</div>
                 <div className="text-xs font-extrabold text-cyan-300">
                   {playbackTargetEndDateIso} (Dags Dato: {todayIso})
                 </div>
               </div>
               <div className="p-2 rounded bg-slate-900 border border-slate-800">
-                <div className="text-[9.5px] text-slate-400">DATO-SKIFT VED KL. 00:00</div>
+                <div className="text-[11px] text-slate-400">DATO-SKIFT VED KL. 00:00</div>
                 <div className="text-xs font-extrabold text-amber-300">
                   {midnightRolloverCount} midnats-skift gennemført
                 </div>
               </div>
               <div className="p-2 rounded bg-slate-900 border border-slate-800">
-                <div className="text-[9.5px] text-slate-400">REGISTREREDE HÆNDELSER</div>
+                <div className="text-[11px] text-slate-400">REGISTREREDE HÆNDELSER</div>
                 <div className="text-xs font-extrabold text-fuchsia-300">
                   {recordedTimelineEvents.length} tidsrejse-logposter
                 </div>
@@ -1226,7 +1239,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                 <button
                   type="button"
                   onClick={onClearRecordedEvents}
-                  className="text-[10.5px] text-slate-400 hover:text-rose-300 flex items-center gap-1"
+                  className="text-[11px] text-slate-400 hover:text-rose-300 flex items-center gap-1"
                 >
                   <RotateCcw className="w-3 h-3" />
                   <span>Nulstil log</span>
@@ -1245,7 +1258,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                   <div
                     key={ev.id}
                     onClick={() => onSelectDateAndHour(ev.simulatedDateIso, ev.simulatedHourIndex)}
-                    className={`p-2 rounded border font-mono text-[10.5px] cursor-pointer transition-colors flex flex-wrap items-center justify-between gap-2 ${
+                    className={`p-2 rounded border font-mono text-[11px] cursor-pointer transition-colors flex flex-wrap items-center justify-between gap-2 ${
                       ev.isMidnightDateRollover
                         ? 'bg-fuchsia-950/45 border-fuchsia-400/80 text-fuchsia-100'
                         : ev.maxSumQuotient >= 1.0
@@ -1256,8 +1269,11 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                     <div className="space-y-0.5 min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {ev.isMidnightDateRollover && (
-                          <span className="px-1.5 py-0.2 rounded bg-fuchsia-400 text-slate-950 font-extrabold text-[9.5px]">
-                            🕛 KL. 00:00 DATO-SKIFT ({ev.previousDateIso} → {ev.simulatedDateIso})
+                          <span className="px-1.5 py-0.2 rounded bg-fuchsia-400 text-slate-950 font-extrabold text-[11px] inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3 shrink-0" />
+                            <span>
+                              KL. 00:00 DATO-SKIFT ({ev.previousDateIso} → {ev.simulatedDateIso})
+                            </span>
                           </span>
                         )}
                         <span className="font-bold text-white">
@@ -1269,7 +1285,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                           {ev.plumeDirectionDeg}° ({degreesToCompass(ev.plumeDirectionDeg)})
                         </span>
                       </div>
-                      <div className="text-[10px] text-slate-300 truncate">{ev.noteDa}</div>
+                      <div className="text-[11px] text-slate-300 truncate">{ev.noteDa}</div>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
@@ -1289,7 +1305,7 @@ export const PredictionVsActualAndForecastWidget: React.FC<
                             e.stopPropagation();
                             onLogRecordedEventAsAlgedonic(ev);
                           }}
-                          className="px-2 py-0.5 rounded bg-fuchsia-500/20 hover:bg-fuchsia-500/35 text-fuchsia-200 border border-fuchsia-400/50 text-[9.5px] font-semibold"
+                          className="px-2 py-0.5 rounded bg-fuchsia-500/20 hover:bg-fuchsia-500/35 text-fuchsia-200 border border-fuchsia-400/50 text-[11px] font-semibold"
                           title="Overfør denne tidsrejse-hændelse direkte til Algedonisk Bevis-Registrering med den skiftede dato"
                         >
                           + Bevis-Log

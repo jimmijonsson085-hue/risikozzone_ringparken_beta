@@ -3,21 +3,28 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import {
-  AlertTriangle,
+  Biohazard,
   Box,
+  Building2,
+  Calendar,
   Camera,
-  ChevronDown,
   ChevronUp,
+  Clock,
   CloudRain,
-  Compass,
   Droplets,
   ExternalLink,
-  Eye,
+  Flame,
+  Globe,
   GripHorizontal,
+  Hammer,
+  Hourglass,
   Layers,
+  Link,
+  Map as MapIcon,
   Maximize2,
   Minimize2,
   Minus,
+  Navigation,
   Pause,
   Pin,
   Play,
@@ -26,9 +33,13 @@ import {
   ShieldAlert,
   Sliders,
   Sparkles,
+  Target,
+  Thermometer,
+  Undo2,
   Volume2,
   Wind,
   X,
+  Zap,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -42,6 +53,10 @@ import {
   ReceptorExposureResult,
   ReceptorZone,
   RingparkenBuildingUnit,
+  SimultaneousAlgedonicDispatch,
+  SubstanceKey,
+  VirtualLeakPinImpact,
+  WaterMainLiveTelemetry,
 } from '../types/dispersion';
 import {
   BUILDING_CATEGORY_METADATA,
@@ -49,6 +64,11 @@ import {
 } from '../data/ringparkenData';
 import { degreesToCompass } from '../services/weatherService';
 import { computeHydrogeologicalPercolation } from './UndergroundPercolation2D';
+import {
+  BornehaveSpatialPlumeAlertStatus,
+  evaluateBornehaveDaycare3DPlumeAlert,
+} from '../services/bornehaveSpatialAlertService';
+import { CompactSimulerMenu } from './CompactSimulerMenu';
 
 // Center of Ringparken / Schackenborgvænget site in Slagelse
 const SITE_ORIGIN: LatLngPoint = { lat: 55.41275, lng: 11.3532 };
@@ -82,10 +102,13 @@ const _scratchVecB = new THREE.Vector3();
 const _scratchVecC = new THREE.Vector3();
 const _scratchTargetPos = new THREE.Vector3();
 const _scratchTargetLook = new THREE.Vector3();
+const _scratchAxisZ = new THREE.Vector3(0, 0, 1);
+const _scratchQuat = new THREE.Quaternion();
 
 export type CameraPresetKey =
   | 'overview'
   | 'underground_aquifer'
+  | 'blok1_blok2_percolation'
   | 'downwind_corridor'
   | 'source_blok1'
   | 'receptor_roedtjoornevej'
@@ -142,6 +165,28 @@ export interface Ringparken3DSceneProps {
   selectedDateIso?: string;
   onChangeDateIso?: (nextDateIso: string) => void;
   onStepHour?: (deltaHours: number) => void;
+  focusBlok12PercolationTrigger?: number;
+  simulationSpeedMultiplier?: 1 | 2 | 3 | 5 | 10;
+  hiddenSourceIds?: string[];
+  visibleSubstances?: Record<SubstanceKey, boolean>;
+  onBornehavePlumeAlertUpdate?: (status: BornehaveSpatialPlumeAlertStatus) => void;
+  waterMainTelemetry?: WaterMainLiveTelemetry;
+  showWaterMainLayer?: boolean;
+  onToggleWaterMainLayer?: () => void;
+  showLerBuffer?: boolean;
+  onToggleLerBuffer?: () => void;
+  hasSteelRoadPlates?: boolean;
+  onToggleSteelRoadPlates?: () => void;
+  simulatedPipeRuptureActive?: boolean;
+  onToggleSimulatedPipeRupture?: () => void;
+  isS3ValveLockoutActive?: boolean;
+  onToggleS3ValveLockout?: () => void;
+  onIsolateNearbyMachinery?: () => void;
+  onRestoreAllMachinery?: () => void;
+  virtualLeakPinPoint?: LatLngPoint | null;
+  virtualLeakImpact?: VirtualLeakPinImpact | null;
+  onToggleVirtualLeakPinQuick?: () => void;
+  simultaneousDispatch?: SimultaneousAlgedonicDispatch | null;
 }
 
 export interface WeatherCorrelationPoint3D {
@@ -186,7 +231,8 @@ export interface AsbestosHeatmapMetrics {
   dominantSourceLabel: string;
   dominantReleaseHeightM: number;
   dominantFiberReleasePct: number;
-  // 24-hour Temporal Accumulation Metrics (Døgn-Risiko for Naboer)
+  // 24-hour Temporal Accumulation Metrics (Døgn-Risiko & 3D-Volumen-Opbygning for Naboer)
+  accumulatedHoursCount: number;
   peak24hCumulativeDoseFibersCm3H: number;
   dailyDoseLimitFibersCm3H: number;
   peak24hDailyRiskQuotient: number;
@@ -194,6 +240,16 @@ export interface AsbestosHeatmapMetrics {
   mostExposedNeighborDoseFibersCm3H: number;
   mostExposedNeighborHoursAboveGv: number;
   mostExposedNeighborPeakHourLabel: string;
+  volumetricGrid22x22: Float32Array;
+  receptorCumulativeDoses: Array<{
+    id: string;
+    code: string;
+    worldX: number;
+    worldZ: number;
+    doseFibersCm3H: number;
+    dailyQuotient: number;
+    hoursAboveGv: number;
+  }>;
   // Leeward Building Wake ('Læ-Effekt' / Vindstille Støv-Akkumulering) Metrics
   leewardWakeActive: boolean;
   leewardCalmWindSpeedMs: number;
@@ -201,6 +257,9 @@ export interface AsbestosHeatmapMetrics {
   peakLeewardAccumulationFactor: number;
   criticalLeewardBuildingLabel: string;
 }
+
+const ASBESTOS_VOLUME_GRID_DIM = 22;
+const ASBESTOS_VOLUME_CELL_COUNT = ASBESTOS_VOLUME_GRID_DIM * ASBESTOS_VOLUME_GRID_DIM; // 484 3D volume cells
 
 const ASBESTOS_GV_2026 = 0.003; // fibre/cm³ (BEK nr. 613/2026)
 const ASBESTOS_ACTION_VALUE = 0.0003; // fibre/cm³ (10% GV)
@@ -326,14 +385,18 @@ function renderAsbestosHeatmapCanvasAndRelief(
   waterSuppressionActive: boolean,
   weatherHours?: HourlyWeatherPoint[],
   temporal24hMode: boolean = false,
-  showLeewardWakeEffect: boolean = true
+  showLeewardWakeEffect: boolean = true,
+  temporalAccumulationHoursLimit: number = 24
 ): AsbestosHeatmapMetrics {
   const W = canvas.width;
   const H = canvas.height;
   const ctx = canvas.getContext('2d');
 
+  const clampedHoursCap = Math.max(1, Math.min(24, Math.round(temporalAccumulationHoursLimit)));
   const hoursList =
-    temporal24hMode && weatherHours && weatherHours.length > 0 ? weatherHours : [weather];
+    temporal24hMode && weatherHours && weatherHours.length > 0
+      ? weatherHours.slice(0, clampedHoursCap)
+      : [weather];
 
   // Pre-filter active asbestos sources and pre-compute per-source & per-hour kernels for fast 24h evaluation
   const activeAsbestosSources = sources
@@ -853,12 +916,36 @@ function renderAsbestosHeatmapCanvasAndRelief(
 
       // Subtle 3D elevation dome proportional to asbestos fiber concentration / 24h accumulated dose
       const heightDisplacement =
-        q > 0.05 ? Math.min(4.8, Math.pow(q, 0.82) * (temporal24hMode ? 1.65 : 1.35)) : 0;
+        q > 0.05 ? Math.min(6.4, Math.pow(q, 0.82) * (temporal24hMode ? 2.25 : 1.35)) : 0;
       posAttr.setZ(i, heightDisplacement);
     }
     posAttr.needsUpdate = true;
     reliefGeometry.computeVertexNormals();
   }
+
+  // Populate 22x22 3D Volumetric Accumulation Grid (covering worldXZ in [-121..+121]) for 3D neighbor volume build-up
+  const volumetricGrid22x22 = new Float32Array(ASBESTOS_VOLUME_CELL_COUNT);
+  for (let gz = 0; gz < ASBESTOS_VOLUME_GRID_DIM; gz++) {
+    const cellWorldZ = ((gz + 0.5) / ASBESTOS_VOLUME_GRID_DIM - 0.5) * 242;
+    const uV = Math.min(H - 1, Math.max(0, Math.round((cellWorldZ / 280 + 0.5) * (H - 1))));
+    for (let gx = 0; gx < ASBESTOS_VOLUME_GRID_DIM; gx++) {
+      const cellWorldX = ((gx + 0.5) / ASBESTOS_VOLUME_GRID_DIM - 0.5) * 242;
+      const uU = Math.min(W - 1, Math.max(0, Math.round((cellWorldX / 280 + 0.5) * (W - 1))));
+      volumetricGrid22x22[gz * ASBESTOS_VOLUME_GRID_DIM + gx] = quotientGrid[uV * W + uU];
+    }
+  }
+
+  const receptorCumulativeDoses = receptor24hSummaries.map(
+    ({ rec, rxz, recSumDose, recHoursAboveGv }) => ({
+      id: rec.id,
+      code: rec.code,
+      worldX: rxz.x,
+      worldZ: rxz.z,
+      doseFibersCm3H: Number(recSumDose.toFixed(4)),
+      dailyQuotient: Number((recSumDose / ASBESTOS_DAILY_DOSE_LIMIT_24H).toFixed(2)),
+      hoursAboveGv: recHoursAboveGv,
+    })
+  );
 
   // Evaluate which building's leeward pocket traps the highest dust/asbestos concentration
   const plumeRadNow = (((weather.windDirection10m + 180) % 360) * Math.PI) / 180;
@@ -904,6 +991,7 @@ function renderAsbestosHeatmapCanvasAndRelief(
     dominantFiberReleasePct: domSrc
       ? Math.round((domSrc.fiberReleaseIndex ?? 0.75) * 100)
       : 92,
+    accumulatedHoursCount: hoursList.length,
     peak24hCumulativeDoseFibersCm3H: Number(peak24hDoseFibersCm3H.toFixed(4)),
     dailyDoseLimitFibersCm3H: ASBESTOS_DAILY_DOSE_LIMIT_24H,
     peak24hDailyRiskQuotient: Number(
@@ -913,6 +1001,8 @@ function renderAsbestosHeatmapCanvasAndRelief(
     mostExposedNeighborDoseFibersCm3H: Number(mostExposedNeighborDoseFibersCm3H.toFixed(4)),
     mostExposedNeighborHoursAboveGv,
     mostExposedNeighborPeakHourLabel,
+    volumetricGrid22x22,
+    receptorCumulativeDoses,
     leewardWakeActive: showLeewardWakeEffect,
     leewardCalmWindSpeedMs: calmWindSpeedMs,
     leewardWindReductionPct: windReductionPct,
@@ -4286,6 +4376,28 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
   selectedDateIso,
   onChangeDateIso,
   onStepHour,
+  focusBlok12PercolationTrigger,
+  simulationSpeedMultiplier = 1,
+  hiddenSourceIds = [],
+  visibleSubstances,
+  onBornehavePlumeAlertUpdate,
+  waterMainTelemetry,
+  showWaterMainLayer,
+  onToggleWaterMainLayer,
+  showLerBuffer = true,
+  onToggleLerBuffer,
+  hasSteelRoadPlates = false,
+  onToggleSteelRoadPlates,
+  simulatedPipeRuptureActive = false,
+  onToggleSimulatedPipeRupture,
+  isS3ValveLockoutActive = false,
+  onToggleS3ValveLockout,
+  onIsolateNearbyMachinery,
+  onRestoreAllMachinery,
+  virtualLeakPinPoint = null,
+  virtualLeakImpact = null,
+  onToggleVirtualLeakPinQuick,
+  simultaneousDispatch,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [internalMapOnly, setInternalMapOnly] = useState<boolean>(false);
@@ -4312,12 +4424,19 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
   // Local 3D interactive simulation controls
   const [waterSuppressionActive, setWaterSuppressionActive] = useState<boolean>(false);
   const [showPlumeVolumes, setShowPlumeVolumes] = useState<boolean>(true);
+  const [showPlumePathAnimation3D, setShowPlumePathAnimation3D] = useState<boolean>(true);
   const [showWindStreamlines, setShowWindStreamlines] = useState<boolean>(true);
   const [localShowLeewardWake, setLocalShowLeewardWake] = useState<boolean>(true);
   const [localShowWeatherCorrelation, setLocalShowWeatherCorrelation] = useState<boolean>(false);
   const [selectedCorrelationPointId, setSelectedCorrelationPointId] = useState<string | null>(null);
   const [localAsbestosHeatmapActive, setLocalAsbestosHeatmapActive] = useState<boolean>(true);
   const [localTemporal24hAccumulation, setLocalTemporal24hAccumulation] =
+    useState<boolean>(false);
+  // 24-Hour 3D Volumetric Asbestos Accumulation Build-Up Controls (1t -> 24t)
+  const [temporalVolumeHoursCap, setTemporalVolumeHoursCap] = useState<number>(24);
+  const [syncTemporalVolumeToTimeline, setSyncTemporalVolumeToTimeline] =
+    useState<boolean>(false);
+  const [isPlayingTemporalVolume24h, setIsPlayingTemporalVolume24h] =
     useState<boolean>(false);
   const [localAsbestosSourceScope, setLocalAsbestosSourceScope] = useState<
     'all_active' | 'selected_source'
@@ -4562,6 +4681,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     dominantSourceLabel: 'K1 (Blok 1)',
     dominantReleaseHeightM: 14,
     dominantFiberReleasePct: 92,
+    accumulatedHoursCount: 24,
     peak24hCumulativeDoseFibersCm3H: 0.048,
     dailyDoseLimitFibersCm3H: ASBESTOS_DAILY_DOSE_LIMIT_24H,
     peak24hDailyRiskQuotient: 2.0,
@@ -4569,12 +4689,39 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     mostExposedNeighborDoseFibersCm3H: 0.036,
     mostExposedNeighborHoursAboveGv: 6,
     mostExposedNeighborPeakHourLabel: '14:00',
+    volumetricGrid22x22: new Float32Array(ASBESTOS_VOLUME_CELL_COUNT),
+    receptorCumulativeDoses: [],
     leewardWakeActive: true,
     leewardCalmWindSpeedMs: 1.4,
     leewardWindReductionPct: 82,
     peakLeewardAccumulationFactor: 2.25,
     criticalLeewardBuildingLabel: 'R1: Rødtjørnevej 2',
   });
+
+  const effectiveTemporalAccumulationHours = syncTemporalVolumeToTimeline
+    ? Math.max(
+        1,
+        Math.min(
+          24,
+          Math.round(
+            typeof timelineSliderProgress === 'number'
+              ? timelineSliderProgress + 1
+              : currentWeather.hourIndex + 1
+          )
+        )
+      )
+    : temporalVolumeHoursCap;
+
+  // Animate 24-hour 3D Volumetric Asbestos Build-Up when user plays the 24t volume build-up loop
+  useEffect(() => {
+    if (!isPlayingTemporalVolume24h || !isTemporal24hAsbestosActive) return;
+    const intervalMs = Math.max(45, Math.round(460 / simulationSpeedMultiplier));
+    const timer = window.setInterval(() => {
+      setSyncTemporalVolumeToTimeline(false);
+      setTemporalVolumeHoursCap((prev) => (prev >= 24 ? 1 : prev + 1));
+    }, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [isPlayingTemporalVolume24h, isTemporal24hAsbestosActive, simulationSpeedMultiplier]);
 
   const isUndergroundActive =
     externalUndergroundMode !== undefined ? externalUndergroundMode : localUndergroundMode;
@@ -4641,6 +4788,17 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     setZoom3DLevelPct(pct);
   }, []);
 
+  const handleFocusBlok12Percolation3D = useCallback(() => {
+    if (onToggleUndergroundMode) {
+      onToggleUndergroundMode(true);
+    } else {
+      setLocalUndergroundMode(true);
+    }
+    setCameraPreset('blok1_blok2_percolation');
+    cameraTransitionActiveRef.current = true;
+    setZoom3DLevelPct(135);
+  }, [onToggleUndergroundMode]);
+
   const handleToggleUnderground3D = useCallback(
     (nextVal?: boolean) => {
       const targetVal = nextVal !== undefined ? nextVal : !isUndergroundActive;
@@ -4650,7 +4808,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
         setLocalUndergroundMode(targetVal);
       }
       if (targetVal) {
-        setCameraPreset('underground_aquifer');
+        setCameraPreset('blok1_blok2_percolation');
         cameraTransitionActiveRef.current = true;
       } else {
         setCameraPreset('overview');
@@ -4660,22 +4818,74 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     [isUndergroundActive, onToggleUndergroundMode]
   );
 
-  // Automatically glide to underground_aquifer camera preset when externalUndergroundMode turns true
+  // Automatically glide to Blok 1 & 2 percolation focus when externalUndergroundMode turns true or focusBlok12PercolationTrigger increments
   useEffect(() => {
     if (externalUndergroundMode) {
-      setCameraPreset('underground_aquifer');
+      setCameraPreset('blok1_blok2_percolation');
       cameraTransitionActiveRef.current = true;
     }
   }, [externalUndergroundMode]);
 
+  useEffect(() => {
+    if (focusBlok12PercolationTrigger && focusBlok12PercolationTrigger > 0) {
+      handleFocusBlok12Percolation3D();
+    }
+  }, [focusBlok12PercolationTrigger, handleFocusBlok12Percolation3D]);
+
   const activeSourceCount = sources.filter((s) => s.active).length;
+  const unsecuredDemolishedCount = buildings.filter(
+    (b) => b.category === 'e_demolished_unsecured'
+  ).length;
 
   const hydroSim = computeHydrogeologicalPercolation(
     effectivePrecipMm,
     currentWeather.soilMoisture0To7cm,
     currentWeather.hadRecentFreezeThaw,
-    activeSourceCount
+    activeSourceCount,
+    unsecuredDemolishedCount
   );
+
+  const blok12PercolationMetrics = React.useMemo(() => {
+    const b1 = buildings.find((b) => b.id === 'BLOK-1');
+    const b2 = buildings.find((b) => b.id === 'BLOK-2');
+    const crawlspaceFactor =
+      b1?.category === 'e_demolished_unsecured' || b2?.category === 'e_demolished_unsecured'
+        ? 2.15
+        : b1?.category === 'd_under_demolition' || b2?.category === 'd_under_demolition'
+        ? 1.55
+        : 1.25;
+    const flowDriver = Math.max(
+      0.06,
+      hydroSim.infiltrationRateMmH * 0.85 + effectivePrecipMm * 0.22
+    );
+    const pbLeachingRateMgM2H = Number(
+      (
+        (0.12 +
+          flowDriver * 1.38 * (0.7 + hydroSim.saturationRatio * 0.65) +
+          hydroSim.leadConcentrationSecondaryUgL * 0.14) *
+        crawlspaceFactor
+      ).toFixed(3)
+    );
+    const pahLeachingRateUgM2H = Number(
+      (
+        (0.45 +
+          flowDriver * 4.65 * (0.75 + hydroSim.saturationRatio * 0.7) +
+          hydroSim.pahConcentrationSecondaryUgL * 8.5) *
+        crawlspaceFactor
+      ).toFixed(3)
+    );
+    const verticalVelocityCmH = Number(
+      ((hydroSim.macroporeVelocityMetersPerDay * 100) / 24).toFixed(1)
+    );
+    return {
+      pbLeachingRateMgM2H,
+      pahLeachingRateUgM2H,
+      verticalVelocityCmH,
+      pbSecondaryUgL: hydroSim.leadConcentrationSecondaryUgL,
+      pahSecondaryUgL: hydroSim.pahConcentrationSecondaryUgL,
+      infiltrationMmH: hydroSim.infiltrationRateMmH,
+    };
+  }, [buildings, effectivePrecipMm, hydroSim]);
 
   const weatherCorrelationSummary = React.useMemo(
     () =>
@@ -4796,7 +5006,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     let rafId = 0;
     let lastTs = performance.now();
     const speedMult =
-      dustDepositionSpeed === '0.5x' ? 0.5 : dustDepositionSpeed === '2x' ? 2.0 : 1.0;
+      (dustDepositionSpeed === '0.5x' ? 0.5 : dustDepositionSpeed === '2x' ? 2.0 : 1.0) *
+      simulationSpeedMultiplier;
 
     const stepLoop = (now: number) => {
       const dtSec = Math.min((now - lastTs) / 1000, 0.1);
@@ -4810,7 +5021,12 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     };
     rafId = requestAnimationFrame(stepLoop);
     return () => cancelAnimationFrame(rafId);
-  }, [showDustDeposition3D, isPlayingDustDeposition, dustDepositionSpeed]);
+  }, [
+    showDustDeposition3D,
+    isPlayingDustDeposition,
+    dustDepositionSpeed,
+    simulationSpeedMultiplier,
+  ]);
 
   // Mutable ref synchronized with latest React props so tick() never triggers canvas re-mounts
   const simStateRef = useRef({
@@ -4823,6 +5039,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     selectedReceptorId,
     waterSuppressionActive,
     showPlumeVolumes,
+    showPlumePathAnimation3D,
     showWindStreamlines,
     showLeewardWake,
     showWeatherCorrelation,
@@ -4851,6 +5068,9 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     machineryDustEmitterSummary,
     showAsbestosHeatmap,
     isTemporal24hAsbestosActive,
+    effectiveTemporalAccumulationHours,
+    asbestosMetrics,
+    simulationSpeedMultiplier,
     weatherHours,
     asbestosSourceScope,
     asbestosEvalHeightMeters,
@@ -4862,6 +5082,14 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     activeCategoryFilters,
     show3DNeutralPressurePlane,
     neutralPressurePlaneHeightMeters,
+    hiddenSourceIds,
+    visibleSubstances,
+    waterMainTelemetry,
+    showWaterMainLayer,
+    showLerBuffer,
+    virtualLeakPinPoint,
+    virtualLeakImpact,
+    simultaneousDispatch,
   });
 
   useEffect(() => {
@@ -4875,6 +5103,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       selectedReceptorId,
       waterSuppressionActive,
       showPlumeVolumes,
+      showPlumePathAnimation3D,
       showWindStreamlines,
       showLeewardWake,
       showWeatherCorrelation,
@@ -4903,6 +5132,9 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       machineryDustEmitterSummary,
       showAsbestosHeatmap,
       isTemporal24hAsbestosActive,
+      effectiveTemporalAccumulationHours,
+      asbestosMetrics,
+      simulationSpeedMultiplier,
       weatherHours,
       asbestosSourceScope,
       asbestosEvalHeightMeters,
@@ -4914,6 +5146,14 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       activeCategoryFilters,
       show3DNeutralPressurePlane,
       neutralPressurePlaneHeightMeters,
+      hiddenSourceIds,
+      visibleSubstances,
+      waterMainTelemetry,
+      showWaterMainLayer,
+      showLerBuffer,
+      virtualLeakPinPoint,
+      virtualLeakImpact,
+      simultaneousDispatch,
     };
   }, [
     sources,
@@ -4925,6 +5165,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     selectedReceptorId,
     waterSuppressionActive,
     showPlumeVolumes,
+    showPlumePathAnimation3D,
     showWindStreamlines,
     showLeewardWake,
     showWeatherCorrelation,
@@ -4953,6 +5194,9 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     machineryDustEmitterSummary,
     showAsbestosHeatmap,
     isTemporal24hAsbestosActive,
+    effectiveTemporalAccumulationHours,
+    asbestosMetrics,
+    simulationSpeedMultiplier,
     weatherHours,
     asbestosSourceScope,
     asbestosEvalHeightMeters,
@@ -4964,9 +5208,17 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     activeCategoryFilters,
     show3DNeutralPressurePlane,
     neutralPressurePlaneHeightMeters,
+    hiddenSourceIds,
+    visibleSubstances,
+    waterMainTelemetry,
+    showWaterMainLayer,
+    showLerBuffer,
+    virtualLeakPinPoint,
+    virtualLeakImpact,
+    simultaneousDispatch,
   ]);
 
-  // Real-time recomputation of the 3D Asbestos-Fiber Dispersion Heatmap (both 1h Real-Time & 24h Temporal Accumulation)
+  // Real-time recomputation of the 3D Asbestos-Fiber Dispersion Heatmap (both 1h Real-Time & 24h Temporal 3D Volume Accumulation)
   useEffect(() => {
     const canvas = asbestosCanvasRef.current;
     if (!canvas) return;
@@ -4982,12 +5234,23 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       waterSuppressionActive,
       weatherHours,
       isTemporal24hAsbestosActive,
-      showLeewardWake
+      showLeewardWake,
+      effectiveTemporalAccumulationHours
     );
     if (asbestosTextureRef.current) {
       asbestosTextureRef.current.needsUpdate = true;
     }
     setAsbestosMetrics(metrics);
+    if (onBornehavePlumeAlertUpdate) {
+      const daycareAlert = evaluateBornehaveDaycare3DPlumeAlert({
+        sources,
+        receptors,
+        weather: currentWeather,
+        evalHeightMeters: asbestosEvalHeightMeters,
+        waterSuppressionActive,
+      });
+      onBornehavePlumeAlertUpdate(daycareAlert);
+    }
   }, [
     sources,
     receptors,
@@ -5000,6 +5263,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     weatherHours,
     isTemporal24hAsbestosActive,
     showLeewardWake,
+    effectiveTemporalAccumulationHours,
+    onBornehavePlumeAlertUpdate,
   ]);
 
   useEffect(() => {
@@ -5177,7 +5442,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       simStateRef.current.waterSuppressionActive,
       simStateRef.current.weatherHours,
       simStateRef.current.isTemporal24hAsbestosActive,
-      simStateRef.current.showLeewardWake
+      simStateRef.current.showLeewardWake,
+      simStateRef.current.effectiveTemporalAccumulationHours
     );
     asbestosHeatmapTex.needsUpdate = true;
     setAsbestosMetrics(initialMetrics);
@@ -5213,6 +5479,117 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     asbestosWireframeMesh.rotation.x = -Math.PI / 2;
     asbestosWireframeMesh.position.y = 0.18;
     asbestosHeatmapGroup.add(asbestosWireframeMesh);
+
+    // =========================================================================
+    // 24-Hour 'Tidsmæssig Akkumulering' 3D Volumetric Exposure Build-Up Rig
+    // Visualizes cumulative neighbor asbestos risk as a 3D volume building up over 00:00->23:00
+    // =========================================================================
+    const temporalVolume3DGroup = new THREE.Group();
+    temporalVolume3DGroup.name = 'asbestos-temporal-24h-volume-buildup-group';
+    temporalVolume3DGroup.visible = simStateRef.current.isTemporal24hAsbestosActive;
+    asbestosHeatmapGroup.add(temporalVolume3DGroup);
+
+    // A) 484-Cell Hexagonal 3D Volumetric Dose Prisms (InstancedMesh anchored at y=0)
+    const hexPrismGeo = new THREE.CylinderGeometry(4.85, 5.25, 1.0, 6, 1, false);
+    hexPrismGeo.translate(0, 0.5, 0); // Base grounded at y=0, +Y scales upward in 3D
+    const hexPrismMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.28,
+      metalness: 0.12,
+      transparent: true,
+      opacity: 0.54,
+      depthWrite: false,
+    });
+    const asbestosVolumeInstanced = new THREE.InstancedMesh(
+      hexPrismGeo,
+      hexPrismMat,
+      ASBESTOS_VOLUME_CELL_COUNT
+    );
+    asbestosVolumeInstanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    const dampedVolumeCellHeights = new Float32Array(ASBESTOS_VOLUME_CELL_COUNT);
+    for (let idx = 0; idx < ASBESTOS_VOLUME_CELL_COUNT; idx++) {
+      _scratchDummy.position.set(0, -50, 0);
+      _scratchDummy.scale.set(0.001, 0.001, 0.001);
+      _scratchDummy.updateMatrix();
+      asbestosVolumeInstanced.setMatrixAt(idx, _scratchDummy.matrix);
+      _scratchColor.setHex(0x8b5cf6);
+      asbestosVolumeInstanced.setColorAt(idx, _scratchColor);
+    }
+    asbestosVolumeInstanced.instanceMatrix.needsUpdate = true;
+    if (asbestosVolumeInstanced.instanceColor) {
+      asbestosVolumeInstanced.instanceColor.needsUpdate = true;
+    }
+    temporalVolume3DGroup.add(asbestosVolumeInstanced);
+
+    // B) Multi-Story 3D Atmospheric Iso-Dose Strata Shells (Stue=2.2m, 1.-2. sal=6.5m, 3. sal=11.5m)
+    const strataHeightsMeters = [2.2, 6.5, 11.5];
+    const asbestosStrataMeshes: THREE.Mesh[] = [];
+    const asbestosStrataMats: THREE.MeshBasicMaterial[] = [];
+    strataHeightsMeters.forEach((hMeters, tierIdx) => {
+      const strataGeo = new THREE.PlaneGeometry(256, 256, 24, 24);
+      const strataMat = new THREE.MeshBasicMaterial({
+        map: asbestosHeatmapTex,
+        transparent: true,
+        opacity: 0.34 - tierIdx * 0.07,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      const strataMesh = new THREE.Mesh(strataGeo, strataMat);
+      strataMesh.rotation.x = -Math.PI / 2;
+      strataMesh.position.y = hMeters / METERS_PER_UNIT;
+      temporalVolume3DGroup.add(strataMesh);
+      asbestosStrataMeshes.push(strataMesh);
+      asbestosStrataMats.push(strataMat);
+    });
+
+    // C) Neighbor Receptor 3D Cumulative Dose Pillars + 100% Daily-GV Benchmark Rings
+    const receptorDosePillarGeo = new THREE.CylinderGeometry(2.35, 2.85, 1.0, 20);
+    receptorDosePillarGeo.translate(0, 0.5, 0);
+    const receptorThresholdRingGeo = new THREE.RingGeometry(2.55, 3.15, 28);
+    receptorThresholdRingGeo.rotateX(-Math.PI / 2);
+
+    const receptorVolumetricNodes = simStateRef.current.receptors.map((rec) => {
+      const rxz = latLngToWorldXZ(rec.center);
+      const nodeGrp = new THREE.Group();
+      nodeGrp.position.set(rxz.x, 0.18, rxz.z);
+
+      const pillarMat = new THREE.MeshStandardMaterial({
+        color: 0xd946ef,
+        emissive: 0xa21caf,
+        emissiveIntensity: 0.72,
+        transparent: true,
+        opacity: 0.66,
+        roughness: 0.22,
+        metalness: 0.25,
+        depthWrite: false,
+      });
+      const pillarMesh = new THREE.Mesh(receptorDosePillarGeo, pillarMat);
+      nodeGrp.add(pillarMesh);
+
+      // Fixed 100% Daily-GV statutory limit reference halo at y = 6.5 world units
+      const limitRingMat = new THREE.MeshBasicMaterial({
+        color: 0xfde047,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+      });
+      const limitRingMesh = new THREE.Mesh(receptorThresholdRingGeo, limitRingMat);
+      limitRingMesh.position.y = 6.5;
+      nodeGrp.add(limitRingMesh);
+
+      temporalVolume3DGroup.add(nodeGrp);
+      return {
+        receptorId: rec.id,
+        nodeGrp,
+        pillarMesh,
+        pillarMat,
+        limitRingMesh,
+        limitRingMat,
+        dampedHeight: 0.4,
+      };
+    });
 
     scene.add(asbestosHeatmapGroup);
 
@@ -6221,6 +6598,83 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     if (particleInstanced.instanceColor) particleInstanced.instanceColor.needsUpdate = true;
     scene.add(particleInstanced);
 
+    // 11B. 3D Visuel 'Fane-stianimation' — Spline-sti, glidende Gaussiske puff-skyer & sigma_y bølge-ringe over tid
+    const plumePathGroup = new THREE.Group();
+    plumePathGroup.name = 'fane-stianimation-group';
+    scene.add(plumePathGroup);
+
+    const PLUME_PATH_SAMPLE_COUNT = 16;
+    const plumePathCtrlPts = Array.from({ length: PLUME_PATH_SAMPLE_COUNT }, (_, idx) => {
+      return new THREE.Vector3(idx * 2.5, 4.0, 0);
+    });
+    const plumePathCurve = new THREE.CatmullRomCurve3(plumePathCtrlPts);
+    const plumePathTubeMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const plumePathTubeMesh = new THREE.Mesh(
+      new THREE.TubeGeometry(plumePathCurve, 44, 0.26, 8, false),
+      plumePathTubeMat
+    );
+    plumePathTubeMesh.renderOrder = 19;
+    plumePathGroup.add(plumePathTubeMesh);
+
+    const PLUME_PATH_PUFF_COUNT = isSoftwareGl ? 10 : 18;
+    const plumePathPuffGeo = new THREE.SphereGeometry(1, 12, 10);
+    const plumePathPuffMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.26,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const plumePathPuffInstanced = new THREE.InstancedMesh(
+      plumePathPuffGeo,
+      plumePathPuffMat,
+      PLUME_PATH_PUFF_COUNT
+    );
+    plumePathPuffInstanced.frustumCulled = false;
+    plumePathPuffInstanced.renderOrder = 20;
+    for (let i = 0; i < PLUME_PATH_PUFF_COUNT; i++) {
+      _scratchColor.setHex(0x38bdf8);
+      plumePathPuffInstanced.setColorAt(i, _scratchColor);
+    }
+    if (plumePathPuffInstanced.instanceColor) {
+      plumePathPuffInstanced.instanceColor.needsUpdate = true;
+    }
+    plumePathGroup.add(plumePathPuffInstanced);
+
+    const PLUME_PATH_RING_COUNT = isSoftwareGl ? 12 : 20;
+    const plumePathRingGeo = new THREE.TorusGeometry(1, 0.08, 8, 24);
+    const plumePathRingMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.58,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const plumePathRingInstanced = new THREE.InstancedMesh(
+      plumePathRingGeo,
+      plumePathRingMat,
+      PLUME_PATH_RING_COUNT
+    );
+    plumePathRingInstanced.frustumCulled = false;
+    plumePathRingInstanced.renderOrder = 21;
+    for (let i = 0; i < PLUME_PATH_RING_COUNT; i++) {
+      _scratchColor.setHex(0xf59e0b);
+      plumePathRingInstanced.setColorAt(i, _scratchColor);
+    }
+    if (plumePathRingInstanced.instanceColor) {
+      plumePathRingInstanced.instanceColor.needsUpdate = true;
+    }
+    plumePathGroup.add(plumePathRingInstanced);
+
+    let lastPlumePathFingerprint = '';
+    let plumePathAnimPhase = 0;
+
     // 12. InstancedMesh for Atmospheric Wind Streamline Arrows across the site
     const WIND_ARROW_COUNT = 36;
     const arrowShapeGeo = new THREE.ConeGeometry(0.45, 2.2, 6);
@@ -6428,6 +6882,688 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     if (percolationInstanced.instanceColor) percolationInstanced.instanceColor.needsUpdate = true;
     subsurfaceGroup.add(percolationInstanced);
 
+    // =========================================================================
+    // 12C. DEDICATED BLOK 1 & BLOK 2 SUBTERRANEAN PERCOLATION PATHWAYS (Pb & PAH)
+    // =========================================================================
+    const blok1Unit = simStateRef.current.buildings.find((b) => b.id === 'BLOK-1');
+    const blok2Unit = simStateRef.current.buildings.find((b) => b.id === 'BLOK-2');
+    const blok1XZ = latLngToWorldXZ(
+      blok1Unit?.center || { lat: 55.41295, lng: 11.35365 }
+    );
+    const blok2XZ = latLngToWorldXZ(
+      blok2Unit?.center || { lat: 55.41318, lng: 11.3541 }
+    );
+    const midBlok12XZ = {
+      x: (blok1XZ.x + blok2XZ.x) * 0.5,
+      z: (blok1XZ.z + blok2XZ.z) * 0.5,
+    };
+
+    const createSubsurfaceBlockBannerTex = (
+      title: string,
+      subtitle: string,
+      accentColor: string
+    ): THREE.CanvasTexture => {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 128;
+      const ctx = c.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#090d16';
+        ctx.fillRect(0, 0, 512, 128);
+        ctx.strokeStyle = accentColor;
+        ctx.lineWidth = 5;
+        ctx.strokeRect(3, 3, 506, 122);
+        ctx.fillStyle = accentColor;
+        ctx.font = 'bold 28px monospace';
+        ctx.fillText(title, 18, 50);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = 'bold 21px monospace';
+        ctx.fillText(subtitle, 18, 92);
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    };
+
+    const blok1SubsurfaceTex = createSubsurfaceBlockBannerTex(
+      'BLOK 1 (Kierulffsvej 14-22)',
+      'Uforseglet Krybekælder · Bly (Pb) & PAH Kilde',
+      '#f59e0b'
+    );
+    const blok2SubsurfaceTex = createSubsurfaceBlockBannerTex(
+      'BLOK 2 (Kierulffsvej 24-32)',
+      'Krybekælder & Sekundær Sandlinse-Perkolation',
+      '#e879f9'
+    );
+
+    // Translucent Subterranean Crawlspace & Foundation Cutaway Boxes at Blok 1 & Blok 2
+    [
+      {
+        xz: blok1XZ,
+        color: 0xf59e0b,
+        bannerTex: blok1SubsurfaceTex,
+        yaw: -0.22,
+      },
+      {
+        xz: blok2XZ,
+        color: 0xe879f9,
+        bannerTex: blok2SubsurfaceTex,
+        yaw: -0.22,
+      },
+    ].forEach((spec) => {
+      // Surface footprint ghost + -1.8m crawlspace trench box
+      const foundationGeo = new THREE.BoxGeometry(11.5, 2.4, 5.4);
+      const foundationMat = new THREE.MeshStandardMaterial({
+        color: spec.color,
+        emissive: spec.color,
+        emissiveIntensity: 0.35,
+        roughness: 0.5,
+        metalness: 0.25,
+        transparent: true,
+        opacity: 0.32,
+        depthWrite: false,
+      });
+      const foundationMesh = new THREE.Mesh(foundationGeo, foundationMat);
+      foundationMesh.position.set(spec.xz.x, -0.5, spec.xz.z);
+      foundationMesh.rotation.y = spec.yaw;
+      subsurfaceGroup.add(foundationMesh);
+
+      const foundationEdges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(foundationGeo),
+        new THREE.LineBasicMaterial({
+          color: spec.color,
+          transparent: true,
+          opacity: 0.92,
+        })
+      );
+      foundationEdges.position.copy(foundationMesh.position);
+      foundationEdges.rotation.y = spec.yaw;
+      subsurfaceGroup.add(foundationEdges);
+
+      // Identification banner floating just above foundation trench
+      const bannerGeo = new THREE.PlaneGeometry(13.5, 3.35);
+      const bannerMat = new THREE.MeshBasicMaterial({
+        map: spec.bannerTex,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.95,
+      });
+      const bannerMesh = new THREE.Mesh(bannerGeo, bannerMat);
+      bannerMesh.position.set(spec.xz.x, 2.6, spec.xz.z);
+      bannerMesh.rotation.y = -0.52;
+      subsurfaceGroup.add(bannerMesh);
+    });
+
+    // Build 8 explicit 3D Percolation Pathway Curves beneath Blok 1 & Blok 2:
+    // Curves 0..3 = Bly (Pb) vertical macropore & sand-stringer pathways (#f59e0b)
+    // Curves 4..7 = PAH-holdigt vand lateral crawlspace-to-sand-lens & OSD pathways (#e879f9)
+    const blok12PercolationCurves: Array<{
+      curve: THREE.CatmullRomCurve3;
+      isPah: boolean;
+    }> = [
+      // Blok 1 Lead (Pb) Macropore Pathway A -> Secondary (-7.2m) -> Primary OSD (-16.5m)
+      {
+        isPah: false,
+        curve: new THREE.CatmullRomCurve3([
+          new THREE.Vector3(blok1XZ.x - 2.4, -0.4, blok1XZ.z - 0.8),
+          new THREE.Vector3(blok1XZ.x - 3.1, -3.6 * SUB_SCALE_Y, blok1XZ.z + 0.6),
+          new THREE.Vector3(blok1XZ.x - 4.5, -7.3 * SUB_SCALE_Y, blok1XZ.z + 2.2),
+          new THREE.Vector3(blok1XZ.x - 6.8, -12.4 * SUB_SCALE_Y, blok1XZ.z + 4.1),
+          new THREE.Vector3(blok1XZ.x - 9.2, -17.2 * SUB_SCALE_Y, blok1XZ.z + 6.4),
+        ]),
+      },
+      // Blok 1 Lead (Pb) Macropore Pathway B
+      {
+        isPah: false,
+        curve: new THREE.CatmullRomCurve3([
+          new THREE.Vector3(blok1XZ.x + 2.1, -0.4, blok1XZ.z + 0.9),
+          new THREE.Vector3(blok1XZ.x + 1.4, -4.1 * SUB_SCALE_Y, blok1XZ.z + 2.1),
+          new THREE.Vector3(blok1XZ.x - 0.6, -7.5 * SUB_SCALE_Y, blok1XZ.z + 3.8),
+          new THREE.Vector3(blok1XZ.x - 3.2, -16.8 * SUB_SCALE_Y, blok1XZ.z + 6.9),
+        ]),
+      },
+      // Blok 2 Lead (Pb) Macropore Pathway C
+      {
+        isPah: false,
+        curve: new THREE.CatmullRomCurve3([
+          new THREE.Vector3(blok2XZ.x - 1.9, -0.4, blok2XZ.z - 0.6),
+          new THREE.Vector3(blok2XZ.x - 2.7, -3.8 * SUB_SCALE_Y, blok2XZ.z + 1.1),
+          new THREE.Vector3(blok2XZ.x - 4.2, -7.4 * SUB_SCALE_Y, blok2XZ.z + 2.9),
+          new THREE.Vector3(blok2XZ.x - 6.9, -16.6 * SUB_SCALE_Y, blok2XZ.z + 5.6),
+        ]),
+      },
+      // Blok 2 Lead (Pb) Macropore Pathway D
+      {
+        isPah: false,
+        curve: new THREE.CatmullRomCurve3([
+          new THREE.Vector3(blok2XZ.x + 2.3, -0.4, blok2XZ.z + 0.7),
+          new THREE.Vector3(blok2XZ.x + 1.8, -4.2 * SUB_SCALE_Y, blok2XZ.z + 2.0),
+          new THREE.Vector3(blok2XZ.x + 0.2, -7.6 * SUB_SCALE_Y, blok2XZ.z + 3.7),
+          new THREE.Vector3(blok2XZ.x - 2.6, -17.0 * SUB_SCALE_Y, blok2XZ.z + 6.5),
+        ]),
+      },
+      // PAH Pathway E: Blok 1 Crawlspace -> Lateral Sand-Lens Cross-Flow under Blok 2 -> Aquifer
+      {
+        isPah: true,
+        curve: new THREE.CatmullRomCurve3([
+          new THREE.Vector3(blok1XZ.x + 0.6, -0.4, blok1XZ.z),
+          new THREE.Vector3(midBlok12XZ.x - 1.2, -3.2 * SUB_SCALE_Y, midBlok12XZ.z + 0.5),
+          new THREE.Vector3(blok2XZ.x - 0.8, -7.2 * SUB_SCALE_Y, blok2XZ.z + 1.4),
+          new THREE.Vector3(blok2XZ.x - 4.4, -11.6 * SUB_SCALE_Y, blok2XZ.z + 4.2),
+          new THREE.Vector3(blok2XZ.x - 7.8, -16.9 * SUB_SCALE_Y, blok2XZ.z + 7.1),
+        ]),
+      },
+      // PAH Pathway F: Blok 1 Trench Direct Fracture Plume
+      {
+        isPah: true,
+        curve: new THREE.CatmullRomCurve3([
+          new THREE.Vector3(blok1XZ.x - 0.5, -0.4, blok1XZ.z + 1.2),
+          new THREE.Vector3(blok1XZ.x - 1.8, -3.9 * SUB_SCALE_Y, blok1XZ.z + 2.8),
+          new THREE.Vector3(blok1XZ.x - 3.9, -7.4 * SUB_SCALE_Y, blok1XZ.z + 4.9),
+          new THREE.Vector3(blok1XZ.x - 7.4, -16.7 * SUB_SCALE_Y, blok1XZ.z + 8.2),
+        ]),
+      },
+      // PAH Pathway G: Blok 2 Foundation Drain Trench -> Secondary Sand Lens SW Plume
+      {
+        isPah: true,
+        curve: new THREE.CatmullRomCurve3([
+          new THREE.Vector3(blok2XZ.x, -0.4, blok2XZ.z - 1.1),
+          new THREE.Vector3(midBlok12XZ.x + 1.4, -3.5 * SUB_SCALE_Y, midBlok12XZ.z + 0.9),
+          new THREE.Vector3(midBlok12XZ.x - 1.5, -7.3 * SUB_SCALE_Y, midBlok12XZ.z + 3.4),
+          new THREE.Vector3(midBlok12XZ.x - 5.2, -16.5 * SUB_SCALE_Y, midBlok12XZ.z + 6.8),
+        ]),
+      },
+      // PAH Pathway H: Inter-block Utility Conduit Trench (Blok 1 <-> Blok 2)
+      {
+        isPah: true,
+        curve: new THREE.CatmullRomCurve3([
+          new THREE.Vector3(midBlok12XZ.x, -0.5, midBlok12XZ.z),
+          new THREE.Vector3(midBlok12XZ.x - 0.9, -4.4 * SUB_SCALE_Y, midBlok12XZ.z + 1.8),
+          new THREE.Vector3(midBlok12XZ.x - 2.8, -7.5 * SUB_SCALE_Y, midBlok12XZ.z + 3.9),
+          new THREE.Vector3(midBlok12XZ.x - 6.1, -17.1 * SUB_SCALE_Y, midBlok12XZ.z + 7.4),
+        ]),
+      },
+    ];
+
+    const blok12PbConduitMat = new THREE.MeshStandardMaterial({
+      color: 0xf59e0b,
+      emissive: 0xd97706,
+      emissiveIntensity: 0.78,
+      roughness: 0.25,
+      metalness: 0.35,
+      transparent: true,
+      opacity: 0.82,
+    });
+
+    const blok12PahConduitMat = new THREE.MeshStandardMaterial({
+      color: 0xe879f9,
+      emissive: 0xc026d3,
+      emissiveIntensity: 0.78,
+      roughness: 0.25,
+      metalness: 0.35,
+      transparent: true,
+      opacity: 0.82,
+    });
+
+    const blok12ConduitMeshes: THREE.Mesh[] = [];
+    blok12PercolationCurves.forEach((item) => {
+      const tubeMesh = new THREE.Mesh(
+        new THREE.TubeGeometry(item.curve, 28, 0.22, 8, false),
+        item.isPah ? blok12PahConduitMat : blok12PbConduitMat
+      );
+      subsurfaceGroup.add(tubeMesh);
+      blok12ConduitMeshes.push(tubeMesh);
+    });
+
+    // 220 Dedicated Instanced Bly (Pb) & PAH-Water Droplets Streaming Along Blok 1 & 2 Pathways
+    const BLOK12_DROP_COUNT = isSoftwareGl ? 128 : 220;
+    const blok12DropGeo = new THREE.SphereGeometry(0.32, 8, 8);
+    const blok12DropMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const blok12PbPahInstanced = new THREE.InstancedMesh(
+      blok12DropGeo,
+      blok12DropMat,
+      BLOK12_DROP_COUNT
+    );
+    blok12PbPahInstanced.frustumCulled = false;
+
+    const blok12PathParticles: Array<{
+      curveIdx: number;
+      t: number;
+      speedScale: number;
+      lateralPhase: number;
+      isPah: boolean;
+    }> = [];
+
+    for (let i = 0; i < BLOK12_DROP_COUNT; i++) {
+      const curveIdx = i % blok12PercolationCurves.length;
+      const isPah = blok12PercolationCurves[curveIdx].isPah;
+      blok12PathParticles.push({
+        curveIdx,
+        t: (i / BLOK12_DROP_COUNT) % 1,
+        speedScale: 0.8 + ((i * 29) % 45) * 0.01,
+        lateralPhase: i * 0.75,
+        isPah,
+      });
+      if (isPah) {
+        _scratchColor.setHex(i % 2 === 0 ? 0xe879f9 : 0x22d3ee);
+      } else {
+        _scratchColor.setHex(i % 2 === 0 ? 0xf59e0b : 0xfde047);
+      }
+      blok12PbPahInstanced.setColorAt(i, _scratchColor);
+    }
+    if (blok12PbPahInstanced.instanceColor) {
+      blok12PbPahInstanced.instanceColor.needsUpdate = true;
+    }
+    subsurfaceGroup.add(blok12PbPahInstanced);
+
+    // =========================================================================
+    // 12D. KIERULFFSVEJ DN200 DRINKING WATER MAIN (-1.65 m) & DISTRICT HEATING (-1.05 m)
+    // =========================================================================
+    const waterMain3DGroup = new THREE.Group();
+    waterMain3DGroup.name = 'kierulffsvej-water-main-3d';
+    scene.add(waterMain3DGroup);
+
+    const initWm = simStateRef.current.waterMainTelemetry;
+    const rawWmPts: LatLngPoint[] =
+      initWm && initWm.sceneSegments.length > 0
+        ? initWm.sceneSegments.flatMap((s, idx) =>
+            idx === 0 ? s.waypoints : s.waypoints.slice(1)
+          )
+        : [
+            { lat: 55.41235, lng: 11.35265 },
+            { lat: 55.41295, lng: 11.35365 },
+            { lat: 55.41335, lng: 11.35455 },
+            { lat: 55.41368, lng: 11.35545 },
+          ];
+
+    const waterMainY = -1.65 * SUB_SCALE_Y;
+    const dhPipeY = -1.05 * SUB_SCALE_Y;
+
+    const waterMainCurve = new THREE.CatmullRomCurve3(
+      rawWmPts.map((pt) => {
+        const xz = latLngToWorldXZ(pt);
+        return new THREE.Vector3(xz.x, waterMainY, xz.z);
+      })
+    );
+
+    const waterMainPipeMat = new THREE.MeshStandardMaterial({
+      color: 0x0ea5e9,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.55,
+      roughness: 0.25,
+      metalness: 0.45,
+      transparent: true,
+      opacity: 0.94,
+    });
+    const waterMainPipeMesh = new THREE.Mesh(
+      new THREE.TubeGeometry(waterMainCurve, 44, 0.26, 12, false),
+      waterMainPipeMat
+    );
+    waterMain3DGroup.add(waterMainPipeMesh);
+
+    // LER ±2.0 m Uncertainty Buffer Cylinder Sleeve
+    const lerRadiusUnits = 2.0 / METERS_PER_UNIT;
+    const lerBufferMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.16,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const lerBufferMesh = new THREE.Mesh(
+      new THREE.TubeGeometry(waterMainCurve, 36, lerRadiusUnits, 12, false),
+      lerBufferMat
+    );
+    waterMain3DGroup.add(lerBufferMesh);
+
+    // Overlying District Heating Twin Pipes (-1.05 m u.t., directly ABOVE water main)
+    const dhSupplyCurve = new THREE.CatmullRomCurve3(
+      rawWmPts.map((pt) => {
+        const xz = latLngToWorldXZ(pt);
+        return new THREE.Vector3(xz.x - 0.28, dhPipeY, xz.z + 0.28);
+      })
+    );
+    const dhReturnCurve = new THREE.CatmullRomCurve3(
+      rawWmPts.map((pt) => {
+        const xz = latLngToWorldXZ(pt);
+        return new THREE.Vector3(xz.x + 0.28, dhPipeY, xz.z - 0.28);
+      })
+    );
+    const dhSupplyMat = new THREE.MeshStandardMaterial({
+      color: 0xfb7185,
+      emissive: 0xe11d48,
+      emissiveIntensity: 0.35,
+      roughness: 0.4,
+      metalness: 0.35,
+      transparent: true,
+      opacity: 0.88,
+    });
+    const dhReturnMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      emissive: 0x0369a1,
+      emissiveIntensity: 0.28,
+      roughness: 0.4,
+      metalness: 0.35,
+      transparent: true,
+      opacity: 0.88,
+    });
+    const dhSupplyMesh = new THREE.Mesh(
+      new THREE.TubeGeometry(dhSupplyCurve, 36, 0.14, 8, false),
+      dhSupplyMat
+    );
+    const dhReturnMesh = new THREE.Mesh(
+      new THREE.TubeGeometry(dhReturnCurve, 36, 0.14, 8, false),
+      dhReturnMat
+    );
+    waterMain3DGroup.add(dhSupplyMesh, dhReturnMesh);
+
+    // 4 Service Branches (stikledninger) to demolition buildings
+    const branchSpecs =
+      initWm?.serviceBranches ?? [
+        {
+          startOnMain: { lat: 55.41295, lng: 11.35365 },
+          buildingConnection: { lat: 55.4131, lng: 11.35352 },
+          cappingStatus: 'uncapped_risk' as const,
+        },
+        {
+          startOnMain: { lat: 55.41335, lng: 11.35455 },
+          buildingConnection: { lat: 55.4135, lng: 11.3544 },
+          cappingStatus: 'capped_at_boundary' as const,
+        },
+      ];
+    const branchMeshes: THREE.Mesh[] = [];
+    branchSpecs.forEach((br) => {
+      const p1 = latLngToWorldXZ(br.startOnMain);
+      const p2 = latLngToWorldXZ(br.buildingConnection);
+      const bCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(p1.x, waterMainY, p1.z),
+        new THREE.Vector3((p1.x + p2.x) * 0.5, -1.2 * SUB_SCALE_Y, (p1.z + p2.z) * 0.5),
+        new THREE.Vector3(p2.x, -0.5 * SUB_SCALE_Y, p2.z),
+      ]);
+      const bMat = new THREE.MeshStandardMaterial({
+        color: br.cappingStatus === 'uncapped_risk' ? 0xf43f5e : 0x38bdf8,
+        emissive: br.cappingStatus === 'uncapped_risk' ? 0xbe123c : 0x0284c7,
+        emissiveIntensity: 0.45,
+        transparent: true,
+        opacity: 0.9,
+      });
+      const bMesh = new THREE.Mesh(
+        new THREE.TubeGeometry(bCurve, 12, 0.11, 6, false),
+        bMat
+      );
+      waterMain3DGroup.add(bMesh);
+      branchMeshes.push(bMesh);
+    });
+
+    // 3 Section Isolation Valves (V-VEST, V-MIDT, V-ØST) + 2 Hydrants
+    const valveGeo = new THREE.CylinderGeometry(0.28, 0.28, Math.abs(waterMainY) + 0.65, 10);
+    const valveMat = new THREE.MeshStandardMaterial({
+      color: 0x0284c7,
+      emissive: 0x38bdf8,
+      emissiveIntensity: 0.55,
+      transparent: true,
+      opacity: 0.94,
+    });
+    (
+      initWm?.valves ?? [
+        { coordinate: rawWmPts[0] },
+        { coordinate: rawWmPts[Math.floor(rawWmPts.length / 2)] },
+        { coordinate: rawWmPts[rawWmPts.length - 1] },
+      ]
+    ).forEach((v) => {
+      const xz = latLngToWorldXZ(v.coordinate);
+      const vMesh = new THREE.Mesh(valveGeo, valveMat);
+      vMesh.position.set(xz.x, waterMainY * 0.5 + 0.2, xz.z);
+      waterMain3DGroup.add(vMesh);
+    });
+
+    const hydrantGeo = new THREE.CylinderGeometry(0.2, 0.24, Math.abs(waterMainY) + 0.85, 10);
+    const hydrantMat = new THREE.MeshStandardMaterial({
+      color: 0xe11d48,
+      emissive: 0xbe123c,
+      emissiveIntensity: 0.45,
+      transparent: true,
+      opacity: 0.92,
+    });
+    (initWm?.hydrants ?? []).forEach((hyd) => {
+      const xz = latLngToWorldXZ(hyd.coordinate);
+      const hMesh = new THREE.Mesh(hydrantGeo, hydrantMat);
+      hMesh.position.set(xz.x, waterMainY * 0.5 + 0.3, xz.z);
+      waterMain3DGroup.add(hMesh);
+    });
+
+    // Animated Flow Particles along Kierulffsvej DN200 Water Main (Zero-GC InstancedMesh)
+    const WATER_FLOW_COUNT = isSoftwareGl ? 36 : 64;
+    const waterFlowGeo = new THREE.SphereGeometry(0.18, 6, 6);
+    const waterFlowMat = new THREE.MeshBasicMaterial({
+      color: 0xe0f2fe,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const waterFlowInstanced = new THREE.InstancedMesh(
+      waterFlowGeo,
+      waterFlowMat,
+      WATER_FLOW_COUNT
+    );
+    waterFlowInstanced.frustumCulled = false;
+    const waterFlowProgress = new Float32Array(WATER_FLOW_COUNT);
+    for (let i = 0; i < WATER_FLOW_COUNT; i++) {
+      waterFlowProgress[i] = i / WATER_FLOW_COUNT;
+    }
+    waterMain3DGroup.add(waterFlowInstanced);
+
+    // Virtual Leak Pin 3D Soil Saturation Zones & Rupture Beacon (Zero-GC)
+    const virtualLeak3DGroup = new THREE.Group();
+    virtualLeak3DGroup.name = 'virtual-leak-saturation-3d';
+    virtualLeak3DGroup.visible = false;
+    scene.add(virtualLeak3DGroup);
+
+    const leakZoneColors = [0xf43f5e, 0xf59e0b, 0x0ea5e9];
+    const leakZoneOpacities = [0.36, 0.24, 0.14];
+    const leakZoneDiscs: THREE.Mesh[] = [];
+    const leakZoneRings: THREE.Mesh[] = [];
+
+    for (let zIdx = 0; zIdx < 3; zIdx++) {
+      const discGeo = new THREE.CircleGeometry(1, 40);
+      discGeo.rotateX(-Math.PI / 2);
+      const discMat = new THREE.MeshBasicMaterial({
+        color: leakZoneColors[zIdx],
+        transparent: true,
+        opacity: leakZoneOpacities[zIdx],
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const discMesh = new THREE.Mesh(discGeo, discMat);
+      discMesh.position.y = 0.12 - zIdx * 0.02;
+      discMesh.renderOrder = 15 + (2 - zIdx);
+      virtualLeak3DGroup.add(discMesh);
+      leakZoneDiscs.push(discMesh);
+
+      const ringGeo = new THREE.RingGeometry(0.95, 1.0, 44);
+      ringGeo.rotateX(-Math.PI / 2);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: leakZoneColors[zIdx],
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.position.y = 0.14;
+      ringMesh.renderOrder = 19;
+      virtualLeak3DGroup.add(ringMesh);
+      leakZoneRings.push(ringMesh);
+    }
+
+    const leakBeaconPillarGeo = new THREE.CylinderGeometry(0.24, 0.34, Math.abs(waterMainY) + 4.8, 12);
+    const leakBeaconPillarMat = new THREE.MeshBasicMaterial({
+      color: 0xf43f5e,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+    });
+    const leakBeaconPillar = new THREE.Mesh(leakBeaconPillarGeo, leakBeaconPillarMat);
+    leakBeaconPillar.position.y = (waterMainY + 4.8) * 0.5;
+    virtualLeak3DGroup.add(leakBeaconPillar);
+
+    const leakBeaconCapGeo = new THREE.OctahedronGeometry(0.68, 0);
+    const leakBeaconCapMat = new THREE.MeshBasicMaterial({
+      color: 0xfde047,
+      transparent: true,
+      opacity: 0.95,
+    });
+    const leakBeaconCap = new THREE.Mesh(leakBeaconCapGeo, leakBeaconCapMat);
+    leakBeaconCap.position.y = 4.9;
+    virtualLeak3DGroup.add(leakBeaconCap);
+
+    // =========================================================================
+    // 12E. SYSTEM B SIMULTANEOUS ALGEDONIC DISPATCH (S1 + S3) 3D LAYER (ZERO-GC)
+    // =========================================================================
+    const simultaneousAlgedonic3DGroup = new THREE.Group();
+    simultaneousAlgedonic3DGroup.name = 'simultaneous-algedonic-s1-s3-3d';
+    simultaneousAlgedonic3DGroup.visible = false;
+    scene.add(simultaneousAlgedonic3DGroup);
+
+    // S1 P1 Danger Zone Disc + Perimeter Ring + Inverted Octagon Beacon
+    const s1DangerDiscMat = new THREE.MeshBasicMaterial({
+      color: 0xdc2626,
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const s1DangerDiscMesh = new THREE.Mesh(
+      new THREE.CircleGeometry(1, 36).rotateX(-Math.PI / 2),
+      s1DangerDiscMat
+    );
+    s1DangerDiscMesh.position.y = 0.34;
+    s1DangerDiscMesh.renderOrder = 14;
+    simultaneousAlgedonic3DGroup.add(s1DangerDiscMesh);
+
+    const s1DangerRingMat = new THREE.MeshBasicMaterial({
+      color: 0xef4444,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const s1DangerRingMesh = new THREE.Mesh(
+      new THREE.RingGeometry(0.95, 1.0, 48).rotateX(-Math.PI / 2),
+      s1DangerRingMat
+    );
+    s1DangerRingMesh.position.y = 0.38;
+    s1DangerRingMesh.renderOrder = 15;
+    simultaneousAlgedonic3DGroup.add(s1DangerRingMesh);
+
+    const s1OctagonMat = new THREE.MeshStandardMaterial({
+      color: 0xe11d48,
+      emissive: 0xdc2626,
+      emissiveIntensity: 0.9,
+      roughness: 0.25,
+      metalness: 0.3,
+    });
+    const s1OctagonBeaconMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.75, 1.75, 0.55, 8),
+      s1OctagonMat
+    );
+    s1OctagonBeaconMesh.rotation.x = Math.PI / 2;
+    s1OctagonBeaconMesh.rotation.y = Math.PI / 8;
+    s1OctagonBeaconMesh.position.y = 9.5;
+    simultaneousAlgedonic3DGroup.add(s1OctagonBeaconMesh);
+
+    // S1 Upwind Escape Chevrons (InstancedMesh, 12 chevrons across Valbyvej & Rosenkildevej)
+    const S1_ESCAPE_CHEVRON_COUNT = 12;
+    const s1EscapeGeo = new THREE.ConeGeometry(0.62, 1.85, 6);
+    s1EscapeGeo.rotateX(Math.PI / 2);
+    const s1EscapeMat = new THREE.MeshBasicMaterial({
+      color: 0x22c55e,
+      transparent: true,
+      opacity: 0.95,
+    });
+    const s1EscapeInstanced = new THREE.InstancedMesh(
+      s1EscapeGeo,
+      s1EscapeMat,
+      S1_ESCAPE_CHEVRON_COUNT
+    );
+    s1EscapeInstanced.frustumCulled = false;
+    simultaneousAlgedonic3DGroup.add(s1EscapeInstanced);
+
+    // S1 Island Mode (Ø-DRIFT) Protective Perimeter Shields (up to 6 blocks)
+    const MAX_ISLAND_SHIELDS = 6;
+    const islandShieldGeo = new THREE.CylinderGeometry(6.8, 7.2, 6.2, 16, 1, true);
+    const islandShieldMat = new THREE.MeshBasicMaterial({
+      color: 0x10b981,
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const islandShieldMeshes: THREE.Mesh[] = [];
+    for (let i = 0; i < MAX_ISLAND_SHIELDS; i++) {
+      const shield = new THREE.Mesh(islandShieldGeo, islandShieldMat);
+      shield.visible = false;
+      shield.renderOrder = 16;
+      simultaneousAlgedonic3DGroup.add(shield);
+      islandShieldMeshes.push(shield);
+    }
+
+    // S3 Locked Valve Collars (V-VEST & V-MIDT)
+    const MAX_S3_VALVE_COLLARS = 3;
+    const s3ValveCollarGeo = new THREE.TorusGeometry(1.1, 0.24, 8, 20);
+    s3ValveCollarGeo.rotateX(Math.PI / 2);
+    const s3ValveCollarMat = new THREE.MeshBasicMaterial({
+      color: 0xf43f5e,
+      transparent: true,
+      opacity: 0.95,
+    });
+    const s3ValveCollarMeshes: THREE.Mesh[] = [];
+    for (let i = 0; i < MAX_S3_VALVE_COLLARS; i++) {
+      const collar = new THREE.Mesh(s3ValveCollarGeo, s3ValveCollarMat);
+      collar.visible = false;
+      collar.renderOrder = 19;
+      simultaneousAlgedonic3DGroup.add(collar);
+      s3ValveCollarMeshes.push(collar);
+    }
+
+    // S3 Tanker Ingress Corridors (14 emerald open dashes + 6 red blocked barricades)
+    const S3_OPEN_DASH_COUNT = 14;
+    const s3OpenDashGeo = new THREE.BoxGeometry(0.85, 0.35, 2.2);
+    const s3OpenDashMat = new THREE.MeshBasicMaterial({
+      color: 0x10b981,
+      transparent: true,
+      opacity: 0.92,
+    });
+    const s3OpenDashInstanced = new THREE.InstancedMesh(
+      s3OpenDashGeo,
+      s3OpenDashMat,
+      S3_OPEN_DASH_COUNT
+    );
+    s3OpenDashInstanced.frustumCulled = false;
+    simultaneousAlgedonic3DGroup.add(s3OpenDashInstanced);
+
+    const S3_BLOCKED_BAR_COUNT = 6;
+    const s3BlockedBarGeo = new THREE.BoxGeometry(1.6, 0.75, 0.75);
+    const s3BlockedBarMat = new THREE.MeshBasicMaterial({
+      color: 0xef4444,
+      transparent: true,
+      opacity: 0.92,
+    });
+    const s3BlockedBarInstanced = new THREE.InstancedMesh(
+      s3BlockedBarGeo,
+      s3BlockedBarMat,
+      S3_BLOCKED_BAR_COUNT
+    );
+    s3BlockedBarInstanced.frustumCulled = false;
+    simultaneousAlgedonic3DGroup.add(s3BlockedBarInstanced);
+
     // 13. Raycaster for Interactive Clicking & Hovering
     const raycaster = new THREE.Raycaster();
     raycaster.layers.set(1);
@@ -6507,7 +7643,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           const wSpd = simStateRef.current.currentWeather.windSpeed10m;
           const calmSpd = (wSpd * 0.18).toFixed(1);
           setHoveredEntityLabel(
-            `🌪️ Læ-Effekt bag ${buildingLabel} · Vindstille lomme (${calmSpd} m/s, -82% vind) · Støv akkumuleres 2,3× mere intenst`
+            `Læ-Effekt bag ${buildingLabel} · Vindstille lomme (${calmSpd} m/s, -82% vind) · Støv akkumuleres 2,3× mere intenst`
           );
         } else if (clickableType === 'weather_correlation_point' && correlationPointId) {
           const pt = simStateRef.current.weatherCorrelationSummary.points.find(
@@ -6515,7 +7651,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           );
           if (pt) {
             setHoveredEntityLabel(
-              `🌡️ 3D Vejr-Korrelation [${pt.code}] ${pt.locationLabel} · Vind ${pt.windSpeedMs} m/s (stød ${pt.windGustsMs} m/s) × Støv S=${pt.dustIntensityS.toFixed(
+              `3D Vejr-Korrelation [${pt.code}] ${pt.locationLabel} · Vind ${pt.windSpeedMs} m/s (stød ${pt.windGustsMs} m/s) × Støv S=${pt.dustIntensityS.toFixed(
                 2
               )} · Korrelation ${Math.round(pt.correlationIndex * 100)}% · SHA-256 #${pt.sha256Signature.slice(
                 0,
@@ -6605,13 +7741,16 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
 
       // Toggle surface ground translucency and subsurface cutaway visibility
       const showSubsurface =
-        state.isUndergroundActive || state.cameraPreset === 'underground_aquifer';
+        state.isUndergroundActive ||
+        state.cameraPreset === 'underground_aquifer' ||
+        state.cameraPreset === 'blok1_blok2_percolation';
       subsurfaceGroup.visible = showSubsurface;
-      groundMat.opacity = showSubsurface ? 0.36 : 1.0;
+      groundMat.opacity = showSubsurface ? 0.34 : 1.0;
       groundMat.depthWrite = !showSubsurface;
 
       // Toggle 3D Asbestos-Fiber Dispersion Heatmap visibility & breathing-zone slice height
-      asbestosHeatmapGroup.visible = state.showAsbestosHeatmap && !showSubsurface;
+      const asbestosLayerVisible = !state.visibleSubstances || state.visibleSubstances.asbestos !== false;
+      asbestosHeatmapGroup.visible = state.showAsbestosHeatmap && asbestosLayerVisible && !showSubsurface;
       const targetHeatmapSliceY =
         state.asbestosEvalHeightMeters > 2.0
           ? state.asbestosEvalHeightMeters / METERS_PER_UNIT
@@ -6624,14 +7763,139 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       );
       asbestosWireframeMesh.position.y = asbestosHeatmapMesh.position.y + 0.04;
 
+      // Update 24-Hour 'Tidsmæssig Akkumulering' 3D Volumetric Build-Up (Hex-Prism Volume + Strata + Neighbor Pillars)
+      const showTemporalVol3D =
+        state.showAsbestosHeatmap &&
+        asbestosLayerVisible &&
+        state.isTemporal24hAsbestosActive &&
+        !showSubsurface;
+      temporalVolume3DGroup.visible = showTemporalVol3D;
+      if (showTemporalVol3D) {
+        const gridQ = state.asbestosMetrics.volumetricGrid22x22;
+        const accumFrac = THREE.MathUtils.clamp(
+          state.effectiveTemporalAccumulationHours / 24,
+          1 / 24,
+          1.0
+        );
+
+        for (let gz = 0; gz < ASBESTOS_VOLUME_GRID_DIM; gz++) {
+          const cellWorldZ = ((gz + 0.5) / ASBESTOS_VOLUME_GRID_DIM - 0.5) * 242;
+          for (let gx = 0; gx < ASBESTOS_VOLUME_GRID_DIM; gx++) {
+            const idx = gz * ASBESTOS_VOLUME_GRID_DIM + gx;
+            const q24 = gridQ[idx] || 0;
+            const cellWorldX = ((gx + 0.5) / ASBESTOS_VOLUME_GRID_DIM - 0.5) * 242;
+
+            // 3D volumetric height grows smoothly with cumulative dose q24 (1.0 = 100% Daily-GV -> ~8.2 units, up to 19 units)
+            const targetH =
+              q24 >= 0.055
+                ? Math.min(19.0, 0.55 + Math.pow(q24, 0.86) * 7.65)
+                : 0.001;
+            const curH = THREE.MathUtils.damp(
+              dampedVolumeCellHeights[idx],
+              targetH,
+              7.5,
+              dt
+            );
+            dampedVolumeCellHeights[idx] = curH;
+
+            if (curH > 0.04) {
+              const radialFill = THREE.MathUtils.clamp(0.62 + q24 * 0.28, 0.62, 0.96);
+              _scratchDummy.position.set(cellWorldX, 0.16, cellWorldZ);
+              _scratchDummy.rotation.set(0, 0, 0);
+              _scratchDummy.scale.set(radialFill, curH, radialFill);
+              _scratchDummy.updateMatrix();
+              asbestosVolumeInstanced.setMatrixAt(idx, _scratchDummy.matrix);
+
+              if (q24 >= 1.0) {
+                // Critical 24h cumulative exceedance (> 0.024 fibre/cm³·t): Crimson / Magenta
+                const critT = Math.min(1, (q24 - 1.0) / 1.1);
+                _scratchColor.setRGB(0.95, 0.15 + critT * 0.06, 0.42 + critT * 0.35);
+              } else if (q24 >= 0.5) {
+                // Elevated neighbor 24h risk (50%-100% Daily-GV): Amber -> Rose-Orange
+                const midT = (q24 - 0.5) / 0.5;
+                _scratchColor.setRGB(0.96, 0.68 - midT * 0.42, 0.12 + midT * 0.22);
+              } else if (q24 >= 0.18) {
+                // Moderate cumulative plume envelope: Violet-Purple -> Amber
+                const lowT = (q24 - 0.18) / 0.32;
+                _scratchColor.setRGB(0.56 + lowT * 0.38, 0.34 + lowT * 0.34, 0.95 - lowT * 0.78);
+              } else {
+                // Early accumulation trace: Sky-Indigo
+                _scratchColor.setRGB(0.24, 0.66, 0.96);
+              }
+              asbestosVolumeInstanced.setColorAt(idx, _scratchColor);
+            } else {
+              _scratchDummy.position.set(cellWorldX, -50, cellWorldZ);
+              _scratchDummy.scale.set(0.001, 0.001, 0.001);
+              _scratchDummy.updateMatrix();
+              asbestosVolumeInstanced.setMatrixAt(idx, _scratchDummy.matrix);
+            }
+          }
+        }
+        asbestosVolumeInstanced.instanceMatrix.needsUpdate = true;
+        if (asbestosVolumeInstanced.instanceColor) {
+          asbestosVolumeInstanced.instanceColor.needsUpdate = true;
+        }
+        hexPrismMat.opacity = 0.42 + accumFrac * 0.2;
+
+        // Elevate & modulate multi-story 3D atmospheric strata shells as cumulative 24h volume builds up
+        const strataBaseHeights = [2.2, 6.5, 11.5];
+        for (let sTier = 0; sTier < asbestosStrataMeshes.length; sTier++) {
+          const sMesh = asbestosStrataMeshes[sTier];
+          const sMat = asbestosStrataMats[sTier];
+          const targetY =
+            (strataBaseHeights[sTier] * (0.55 + 0.45 * accumFrac)) / METERS_PER_UNIT;
+          sMesh.position.y = THREE.MathUtils.damp(sMesh.position.y, targetY, 6.0, dt);
+          sMat.opacity =
+            (0.28 - sTier * 0.06) *
+            (0.45 + 0.55 * accumFrac) *
+            (0.92 + 0.08 * Math.sin(elapsed * 2.2 + sTier));
+        }
+
+        // Update 3D Neighbor Receptor Cumulative Risk Pillars (6.5 world units = 100% Daily-GV threshold ring)
+        const recDoses = state.asbestosMetrics.receptorCumulativeDoses;
+        for (let rIdx = 0; rIdx < receptorVolumetricNodes.length; rIdx++) {
+          const rNode = receptorVolumetricNodes[rIdx];
+          const doseEntry = recDoses.find((d) => d.id === rNode.receptorId);
+          const qRec = doseEntry ? doseEntry.dailyQuotient : 0.12;
+          const targetPillarH = Math.min(18.5, Math.max(0.45, qRec * 6.5));
+          rNode.dampedHeight = THREE.MathUtils.damp(
+            rNode.dampedHeight,
+            targetPillarH,
+            7.0,
+            dt
+          );
+          const isSelectedRec = rNode.receptorId === state.selectedReceptorId;
+          const radScale = isSelectedRec ? 1.24 : 1.0;
+          rNode.pillarMesh.scale.set(radScale, rNode.dampedHeight, radScale);
+
+          if (qRec >= 1.0) {
+            rNode.pillarMat.color.setHex(0xf43f5e);
+            rNode.pillarMat.emissive.setHex(0xe11d48);
+            rNode.limitRingMat.color.setHex(0xf43f5e);
+          } else if (qRec >= 0.45) {
+            rNode.pillarMat.color.setHex(0xf59e0b);
+            rNode.pillarMat.emissive.setHex(0xd97706);
+            rNode.limitRingMat.color.setHex(0xfde047);
+          } else {
+            rNode.pillarMat.color.setHex(0xa855f7);
+            rNode.pillarMat.emissive.setHex(0x7e22ce);
+            rNode.limitRingMat.color.setHex(0x38bdf8);
+          }
+        }
+      }
+
       // Update demolition source nodes (including live releaseHeightMeters & fiberReleaseIndex from Stof-panelet)
+      const hiddenSourceSet = new Set(state.hiddenSourceIds);
       const activeSources = state.sources.filter((s) => s.active);
+      const visibleActiveSources = activeSources.filter((s) => !hiddenSourceSet.has(s.id));
       state.sources.forEach((src, sIdx) => {
         const node = sourceNodesMap.get(src.id);
         if (!node) return;
+        const isVisuallyHidden = hiddenSourceSet.has(src.id);
+        node.root.visible = !isVisuallyHidden;
 
         node.releaseY = Math.max(2.2, src.releaseHeightMeters / METERS_PER_UNIT);
-        node.selectionRingMesh.visible = state.selectedSourceId === src.id;
+        node.selectionRingMesh.visible = !isVisuallyHidden && state.selectedSourceId === src.id;
 
         const haloMat = node.statusHaloMesh.material as THREE.MeshStandardMaterial;
         if (src.active) {
@@ -6648,11 +7912,33 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
         }
 
         node.waterCannonHead.rotation.y = yawRotationY + Math.sin(elapsed * 1.8 + sIdx) * 0.22;
-        node.mistConeMesh.visible = state.waterSuppressionActive && src.active;
+        node.mistConeMesh.visible = !isVisuallyHidden && state.waterSuppressionActive && src.active;
 
         const cones = plumeConesMap.get(src.id);
         if (cones) {
-          cones.group.visible = state.showPlumeVolumes && src.active;
+          const substanceMap = state.visibleSubstances;
+          const hasMatchingVisibleSubstance = !substanceMap
+            ? true
+            : src.substances.some((subKey) => substanceMap[subKey] !== false);
+          cones.group.visible =
+            !isVisuallyHidden &&
+            state.showPlumeVolumes &&
+            src.active &&
+            hasMatchingVisibleSubstance;
+          cones.redCone.visible =
+            !substanceMap ||
+            substanceMap.asbestos !== false ||
+            substanceMap.pcb !== false ||
+            substanceMap.heavyMetals !== false;
+          cones.orangeCone.visible =
+            !substanceMap ||
+            substanceMap.pcb !== false ||
+            substanceMap.heavyMetals !== false ||
+            substanceMap.asbestos !== false;
+          cones.yellowCone.visible =
+            !substanceMap ||
+            substanceMap.asbestos !== false ||
+            substanceMap.quartzWool !== false;
           cones.group.position.y = node.releaseY + 0.6;
           cones.group.rotation.y = yawRotationY;
 
@@ -6820,7 +8106,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
             const srcObj = state.sources.find((s) => s.id === wn.buildingId);
             // Category 'e_demolished_unsecured' removes the physical building superstructure and its leeward wake
             wn.root.visible = srcObj
-              ? srcObj.active &&
+              ? !hiddenSourceSet.has(srcObj.id) &&
+                srcObj.active &&
                 srcObj.buildingCategory !== 'e_demolished_unsecured' &&
                 srcObj.buildingHeight3DMeters !== 0
               : false;
@@ -7333,9 +8620,10 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           const eddyNode = windTunnelMachineNodesMap.get(src.id);
           if (!eddyNode) return;
           const isMachineVisible =
-            state.windTunnelScope === 'selected_machine'
+            !hiddenSourceSet.has(src.id) &&
+            (state.windTunnelScope === 'selected_machine'
               ? src.id === fallbackSelId
-              : src.active || src.id === fallbackSelId;
+              : src.active || src.id === fallbackSelId);
 
           eddyNode.root.visible = isMachineVisible;
           if (!isMachineVisible) return;
@@ -8204,8 +9492,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           const sNode = sourceNodesMap.get(mTel.sourceId);
           if (!eNode) return;
 
-          eNode.root.visible = mTel.active;
-          if (!mTel.active) return;
+          eNode.root.visible = mTel.active && !hiddenSourceSet.has(mTel.sourceId);
+          if (!eNode.root.visible) return;
 
           if (sNode) {
             eNode.releaseY = sNode.releaseY;
@@ -8414,7 +9702,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       const maxPlumeReachUnits = 95 * suppressionFactor;
       const advectionRate = (0.11 + windSpeed * 0.022) * dt;
 
-      if (activeSources.length === 0) {
+      if (visibleActiveSources.length === 0) {
         particleInstanced.visible = false;
       } else {
         particleInstanced.visible = true;
@@ -8422,7 +9710,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           const p = particles[i];
           p.progress = (p.progress + advectionRate * p.speedFactor) % 1;
 
-          const activeSrc = activeSources[p.sourceIdx % activeSources.length];
+          const activeSrc = visibleActiveSources[p.sourceIdx % visibleActiveSources.length];
           const srcNode = sourceNodesMap.get(activeSrc.id);
           if (!srcNode) continue;
 
@@ -8454,6 +9742,146 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           particleInstanced.setMatrixAt(i, _scratchDummy.matrix);
         }
         particleInstanced.instanceMatrix.needsUpdate = true;
+      }
+
+      // Update 3D 'Fane-stianimation' (Calculated Gaussian Puff Path over Time)
+      const showPlumePathNow =
+        state.showPlumePathAnimation3D && !showSubsurface && visibleActiveSources.length > 0;
+      plumePathGroup.visible = showPlumePathNow;
+      if (showPlumePathNow) {
+        const primaryPathSrc =
+          (state.selectedSourceId &&
+            visibleActiveSources.find((s) => s.id === state.selectedSourceId)) ||
+          visibleActiveSources[0];
+        const primaryPathSrcNode = primaryPathSrc
+          ? sourceNodesMap.get(primaryPathSrc.id)
+          : undefined;
+
+        if (primaryPathSrc && primaryPathSrcNode) {
+          const hrsArr = state.weatherHours;
+          const baseHrIdx = weather.hourIndex;
+          const pathFingerprint = `${primaryPathSrc.id}|${baseHrIdx}|${weather.windSpeed10m.toFixed(
+            1
+          )}|${weather.windDirection10m}|${state.waterSuppressionActive ? 1 : 0}|${
+            hrsArr ? hrsArr.length : 0
+          }`;
+
+          if (pathFingerprint !== lastPlumePathFingerprint) {
+            lastPlumePathFingerprint = pathFingerprint;
+            let curX = primaryPathSrcNode.worldX - 0.5;
+            let curZ = primaryPathSrcNode.worldZ;
+            let curY = primaryPathSrcNode.releaseY + 0.8;
+            plumePathCtrlPts[0].set(curX, curY, curZ);
+
+            const stepLen =
+              THREE.MathUtils.clamp(3.2 + windSpeed * 0.36, 3.6, 7.2) *
+              suppressionFactor;
+
+            for (let k = 1; k < PLUME_PATH_SAMPLE_COUNT; k++) {
+              const frac = k / (PLUME_PATH_SAMPLE_COUNT - 1);
+              const futureHrOffset = Math.min(5, Math.floor(frac * 5.2));
+              const futureHr =
+                hrsArr && hrsArr.length > 0
+                  ? hrsArr[Math.min(hrsArr.length - 1, baseHrIdx + futureHrOffset)]
+                  : weather;
+              const stepPlumeDeg = (futureHr.windDirection10m + 180) % 360;
+              const stepPlumeRad = (stepPlumeDeg * Math.PI) / 180;
+              const stepDirX = Math.sin(stepPlumeRad);
+              const stepDirZ = -Math.cos(stepPlumeRad);
+
+              curX += stepDirX * stepLen;
+              curZ += stepDirZ * stepLen;
+              curY = Math.max(
+                1.1,
+                curY + (state.waterSuppressionActive ? -0.18 : 0.24)
+              );
+              plumePathCtrlPts[k].set(curX, curY, curZ);
+            }
+
+            plumePathTubeMesh.geometry.dispose();
+            plumePathTubeMesh.geometry = new THREE.TubeGeometry(
+              plumePathCurve,
+              44,
+              state.waterSuppressionActive ? 0.18 : 0.26,
+              8,
+              false
+            );
+          }
+
+          // Compute peak exposure severity for tube tinting
+          let maxExpS = 0;
+          for (let eIdx = 0; eIdx < state.receptorExposures.length; eIdx++) {
+            const sVal = state.receptorExposures[eIdx].sumQuotient;
+            if (sVal > maxExpS) maxExpS = sVal;
+          }
+          const effMaxS = state.waterSuppressionActive ? maxExpS * 0.38 : maxExpS;
+          plumePathTubeMat.color.setHex(
+            effMaxS >= 1.0 ? 0xf43f5e : effMaxS >= 0.5 ? 0xf59e0b : 0x38bdf8
+          );
+          plumePathTubeMat.opacity = 0.56 + 0.16 * Math.sin(elapsed * 2.4);
+
+          // Advance traveling puffs and Gaussian sigma_y rings along spline curve (zero allocations)
+          plumePathAnimPhase = (plumePathAnimPhase + dt * (0.15 + windSpeed * 0.018)) % 1.0;
+
+          for (let i = 0; i < PLUME_PATH_PUFF_COUNT; i++) {
+            const u = (i / PLUME_PATH_PUFF_COUNT + plumePathAnimPhase) % 1.0;
+            plumePathCurve.getPointAt(u, _scratchVecA);
+
+            const puffRadius =
+              (0.75 + u * (2.8 + spread.sy * 12.0)) * suppressionFactor;
+            const envFade = Math.sin(u * Math.PI);
+            const scaledR = Math.max(0.22, puffRadius * (0.45 + 0.55 * envFade));
+
+            _scratchDummy.position.copy(_scratchVecA);
+            _scratchDummy.rotation.set(0, elapsed * 0.6 + i * 0.4, 0);
+            _scratchDummy.scale.set(scaledR * 1.15, scaledR * 0.85, scaledR * 1.15);
+            _scratchDummy.updateMatrix();
+            plumePathPuffInstanced.setMatrixAt(i, _scratchDummy.matrix);
+
+            if (u < 0.32 && effMaxS >= 0.8) {
+              _scratchColor.setHex(0xf43f5e);
+            } else if (u < 0.65) {
+              _scratchColor.setHex(0xf59e0b);
+            } else {
+              _scratchColor.setHex(0x38bdf8);
+            }
+            plumePathPuffInstanced.setColorAt(i, _scratchColor);
+          }
+          plumePathPuffInstanced.instanceMatrix.needsUpdate = true;
+          if (plumePathPuffInstanced.instanceColor) {
+            plumePathPuffInstanced.instanceColor.needsUpdate = true;
+          }
+
+          for (let i = 0; i < PLUME_PATH_RING_COUNT; i++) {
+            const u = (i / PLUME_PATH_RING_COUNT + plumePathAnimPhase * 1.15) % 1.0;
+            plumePathCurve.getPointAt(u, _scratchVecA);
+            plumePathCurve.getTangentAt(u, _scratchVecB);
+            _scratchVecB.normalize();
+            _scratchQuat.setFromUnitVectors(_scratchAxisZ, _scratchVecB);
+
+            const ringRad =
+              (0.85 + u * (3.1 + spread.sy * 13.5)) * suppressionFactor;
+
+            _scratchDummy.position.copy(_scratchVecA);
+            _scratchDummy.quaternion.copy(_scratchQuat);
+            _scratchDummy.scale.set(ringRad, ringRad * 0.72, 1);
+            _scratchDummy.updateMatrix();
+            plumePathRingInstanced.setMatrixAt(i, _scratchDummy.matrix);
+
+            if (effMaxS >= 1.0 && u < 0.45) {
+              _scratchColor.setHex(0xfb7185);
+            } else if (u < 0.58) {
+              _scratchColor.setHex(0xfbbf24);
+            } else {
+              _scratchColor.setHex(0x38bdf8);
+            }
+            plumePathRingInstanced.setColorAt(i, _scratchColor);
+          }
+          plumePathRingInstanced.instanceMatrix.needsUpdate = true;
+          if (plumePathRingInstanced.instanceColor) {
+            plumePathRingInstanced.instanceColor.needsUpdate = true;
+          }
+        }
       }
 
       // =========================================================================
@@ -8529,6 +9957,312 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           }
           percolationInstanced.instanceMatrix.needsUpdate = true;
         }
+
+        // Update Dedicated Blok 1 & Blok 2 Bly (Pb) & PAH Subterranean Percolation Conduits & Droplets
+        // Rate scales directly with current precipitation (mm/t) & Darcy macropore velocity
+        const rainDrive = Math.min(3.2, 0.35 + rainMm * 0.16 + sim.saturationRatio * 0.55);
+        blok12PbConduitMat.emissiveIntensity = 0.55 + Math.min(1.45, rainMm * 0.085);
+        blok12PahConduitMat.emissiveIntensity = 0.55 + Math.min(1.45, rainMm * 0.09);
+
+        const conduitPulse = 0.85 + Math.min(0.85, rainMm * 0.045);
+        for (let cIdx = 0; cIdx < blok12ConduitMeshes.length; cIdx++) {
+          blok12ConduitMeshes[cIdx].scale.set(conduitPulse, 1.0, conduitPulse);
+        }
+
+        const blok12StepSpeed =
+          (0.055 + rainMm * 0.024 + sim.macroporeVelocityMetersPerDay * 0.014) * dt;
+        const activeDepthFrac = THREE.MathUtils.clamp(
+          sim.plumeMaxDepthMeters / 17.5,
+          0.32,
+          1.0
+        );
+
+        for (let i = 0; i < BLOK12_DROP_COUNT; i++) {
+          const bp = blok12PathParticles[i];
+          bp.t = (bp.t + blok12StepSpeed * bp.speedScale) % 1;
+          const clampedT = bp.t * activeDepthFrac;
+          const curveSpec = blok12PercolationCurves[bp.curveIdx];
+          curveSpec.curve.getPointAt(clampedT, _scratchVecA);
+
+          const jitter = 0.18 + rainMm * 0.02;
+          const wx = _scratchVecA.x + Math.cos(elapsed * 2.2 + bp.lateralPhase) * jitter;
+          const wz = _scratchVecA.z + Math.sin(elapsed * 2.2 + bp.lateralPhase) * jitter;
+          const wy = _scratchVecA.y;
+
+          const sFactor =
+            (0.68 + Math.sin(bp.t * Math.PI) * 0.55) * Math.min(1.65, 0.75 + rainDrive * 0.32);
+
+          _scratchDummy.position.set(wx, wy, wz);
+          _scratchDummy.rotation.set(0, 0, 0);
+          _scratchDummy.scale.set(sFactor * 0.9, sFactor * 1.55, sFactor * 0.9);
+          _scratchDummy.updateMatrix();
+          blok12PbPahInstanced.setMatrixAt(i, _scratchDummy.matrix);
+        }
+        blok12PbPahInstanced.instanceMatrix.needsUpdate = true;
+      }
+
+      // =========================================================================
+      // Update 3D Kierulffsvej DN200 Water Main Layer (Subsurface + X-Ray Surface)
+      // =========================================================================
+      const showWaterMain3D =
+        state.showWaterMainLayer !== undefined ? state.showWaterMainLayer : showSubsurface;
+      waterMain3DGroup.visible = showWaterMain3D;
+      if (showWaterMain3D) {
+        const wm = state.waterMainTelemetry;
+        const wmStatus = wm?.overallStatus ?? 'nominal';
+        const isXraySurface = !showSubsurface;
+
+        if (wmStatus === 'critical_rupture') {
+          const pulse = 0.55 + 0.45 * Math.sin(elapsed * 8.0);
+          waterMainPipeMat.color.setHex(0xef4444);
+          waterMainPipeMat.emissive.setHex(0xdc2626);
+          waterMainPipeMat.emissiveIntensity = 0.7 + pulse * 0.9;
+          lerBufferMat.color.setHex(0xf87171);
+          waterFlowMat.color.setHex(0xfca5a5);
+        } else if (wmStatus === 'warning' || wmStatus === 'advisory') {
+          waterMainPipeMat.color.setHex(0xf59e0b);
+          waterMainPipeMat.emissive.setHex(0xd97706);
+          waterMainPipeMat.emissiveIntensity = 0.65;
+          lerBufferMat.color.setHex(0xfbbf24);
+          waterFlowMat.color.setHex(0xfde68a);
+        } else {
+          waterMainPipeMat.color.setHex(0x0ea5e9);
+          waterMainPipeMat.emissive.setHex(0x0284c7);
+          waterMainPipeMat.emissiveIntensity = 0.55;
+          lerBufferMat.color.setHex(0x38bdf8);
+          waterFlowMat.color.setHex(0xe0f2fe);
+        }
+
+        waterMainPipeMat.opacity = isXraySurface ? 0.58 : 0.95;
+        waterMainPipeMat.depthTest = !isXraySurface;
+        waterMainPipeMesh.renderOrder = isXraySurface ? 18 : 1;
+
+        dhSupplyMat.opacity = isXraySurface ? 0.42 : 0.88;
+        dhSupplyMat.depthTest = !isXraySurface;
+        dhSupplyMesh.renderOrder = isXraySurface ? 17 : 1;
+
+        dhReturnMat.opacity = isXraySurface ? 0.42 : 0.88;
+        dhReturnMat.depthTest = !isXraySurface;
+        dhReturnMesh.renderOrder = isXraySurface ? 17 : 1;
+
+        valveMat.opacity = isXraySurface ? 0.65 : 0.94;
+        valveMat.depthTest = !isXraySurface;
+        hydrantMat.opacity = isXraySurface ? 0.65 : 0.92;
+        hydrantMat.depthTest = !isXraySurface;
+
+        for (let bIdx = 0; bIdx < branchMeshes.length; bIdx++) {
+          const bm = branchMeshes[bIdx];
+          const bMat = bm.material as THREE.MeshStandardMaterial;
+          bMat.opacity = isXraySurface ? 0.52 : 0.9;
+          bMat.depthTest = !isXraySurface;
+          bm.renderOrder = isXraySurface ? 17 : 1;
+        }
+
+        lerBufferMesh.visible = state.showLerBuffer !== false;
+        lerBufferMat.opacity = isXraySurface ? 0.14 : 0.2;
+
+        const flowSpeedFactor =
+          ((wm?.flowLs ?? 18.5) / 18.5) * 0.14 * state.simulationSpeedMultiplier;
+        for (let i = 0; i < WATER_FLOW_COUNT; i++) {
+          waterFlowProgress[i] = (waterFlowProgress[i] + flowSpeedFactor * dt) % 1;
+          waterMainCurve.getPointAt(waterFlowProgress[i], _scratchVecA);
+          _scratchDummy.position.copy(_scratchVecA);
+          _scratchDummy.rotation.set(0, 0, 0);
+          _scratchDummy.scale.setScalar(wmStatus === 'critical_rupture' ? 1.35 : 1.0);
+          _scratchDummy.updateMatrix();
+          waterFlowInstanced.setMatrixAt(i, _scratchDummy.matrix);
+        }
+        waterFlowInstanced.instanceMatrix.needsUpdate = true;
+        waterFlowInstanced.renderOrder = isXraySurface ? 19 : 2;
+      }
+
+      // Update 3D Virtual Leak Pin Soil Saturation Zones
+      const vLeak = state.virtualLeakImpact;
+      if (vLeak && state.virtualLeakPinPoint) {
+        virtualLeak3DGroup.visible = true;
+        const pinXZ = latLngToWorldXZ(vLeak.pinPoint);
+        virtualLeak3DGroup.position.set(pinXZ.x, 0, pinXZ.z);
+        const pulse = 1 + 0.06 * Math.sin(elapsed * 4.2);
+        for (let zIdx = 0; zIdx < 3; zIdx++) {
+          const zSpec = vLeak.saturationZones[zIdx];
+          const radUnits = ((zSpec?.radiusMeters ?? (10 + zIdx * 12)) / METERS_PER_UNIT) * pulse;
+          leakZoneDiscs[zIdx].scale.set(radUnits, 1, radUnits);
+          leakZoneRings[zIdx].scale.set(radUnits, 1, radUnits);
+        }
+        leakBeaconCap.rotation.y = elapsed * 2.2;
+        leakBeaconCap.position.y = 4.9 + Math.sin(elapsed * 3.5) * 0.35;
+      } else {
+        virtualLeak3DGroup.visible = false;
+      }
+
+      // =========================================================================
+      // Update System B Simultaneous Algedonic Dispatch (S1 + S3) 3D Overlay
+      // =========================================================================
+      const simDispatch = state.simultaneousDispatch;
+      const isSimDispatchActive = Boolean(simDispatch && simDispatch.active);
+      simultaneousAlgedonic3DGroup.visible = isSimDispatchActive;
+      if (isSimDispatchActive && simDispatch) {
+        const epXZ = latLngToWorldXZ(simDispatch.system1State.epicenter);
+        const radiusUnits = Math.max(
+          8,
+          simDispatch.system1State.dangerRadiusMeters / METERS_PER_UNIT
+        );
+        const p1Pulse = simDispatch.isBlinkingP1
+          ? 0.55 + 0.45 * Math.sin(elapsed * 7.5)
+          : 0.85;
+
+        s1DangerDiscMesh.position.set(epXZ.x, 0.34, epXZ.z);
+        s1DangerDiscMesh.scale.set(radiusUnits, 1, radiusUnits);
+        s1DangerDiscMat.opacity = simDispatch.isBlinkingP1 ? 0.14 + 0.14 * p1Pulse : 0.16;
+
+        s1DangerRingMesh.position.set(epXZ.x, 0.38, epXZ.z);
+        s1DangerRingMesh.scale.set(radiusUnits, 1, radiusUnits);
+        s1DangerRingMat.opacity = simDispatch.isBlinkingP1 ? 0.52 + 0.45 * p1Pulse : 0.85;
+
+        s1OctagonBeaconMesh.position.set(
+          epXZ.x,
+          10.2 + Math.sin(elapsed * 4.0) * 0.45,
+          epXZ.z
+        );
+        s1OctagonBeaconMesh.rotation.z = elapsed * 0.65;
+        s1OctagonMat.emissiveIntensity = simDispatch.isBlinkingP1
+          ? 0.6 + p1Pulse * 1.1
+          : 0.7;
+
+        // Animate System 1 Upwind Escape Chevrons along Valbyvej & Rosenkildevej
+        const escapeVecs = simDispatch.system1State.escapeVectors;
+        if (escapeVecs.length > 0) {
+          for (let i = 0; i < S1_ESCAPE_CHEVRON_COUNT; i++) {
+            const vec = escapeVecs[i % escapeVecs.length];
+            const slotIdx = Math.floor(i / escapeVecs.length);
+            const slotsPerVec = Math.max(
+              1,
+              Math.ceil(S1_ESCAPE_CHEVRON_COUNT / escapeVecs.length)
+            );
+            const t = ((elapsed * 0.48 + slotIdx / slotsPerVec) % 1 + 1) % 1;
+            const oXZ = latLngToWorldXZ(vec.origin);
+            const dXZ = latLngToWorldXZ(vec.targetMusterPoint);
+            _scratchVecA.set(oXZ.x, 2.2, oXZ.z);
+            _scratchVecB.set(dXZ.x, 2.2, dXZ.z);
+            _scratchVecC.lerpVectors(_scratchVecA, _scratchVecB, t);
+            _scratchDummy.position.copy(_scratchVecC);
+            _scratchDummy.lookAt(_scratchVecB);
+            _scratchDummy.scale.setScalar(0.95 + 0.25 * Math.sin(t * Math.PI));
+            _scratchDummy.updateMatrix();
+            s1EscapeInstanced.setMatrixAt(i, _scratchDummy.matrix);
+          }
+          s1EscapeInstanced.instanceMatrix.needsUpdate = true;
+          s1EscapeInstanced.visible = true;
+        } else {
+          s1EscapeInstanced.visible = false;
+        }
+
+        // Island Mode (Ø-DRIFT) Shields over protected buildings
+        const islandIds = simDispatch.system1State.islandModeBlockIds;
+        let shieldSlot = 0;
+        for (
+          let bIdx = 0;
+          bIdx < state.buildings.length && shieldSlot < MAX_ISLAND_SHIELDS;
+          bIdx++
+        ) {
+          const b = state.buildings[bIdx];
+          if (!islandIds.includes(b.id)) continue;
+          const bXZ = latLngToWorldXZ(b.center);
+          const sm = islandShieldMeshes[shieldSlot];
+          sm.visible = true;
+          sm.position.set(bXZ.x, 3.2, bXZ.z);
+          shieldSlot++;
+        }
+        for (let i = shieldSlot; i < MAX_ISLAND_SHIELDS; i++) {
+          islandShieldMeshes[i].visible = false;
+        }
+        islandShieldMat.opacity = 0.16 + 0.08 * Math.sin(elapsed * 3.2);
+
+        // System 3 Locked Valves (V-VEST & V-MIDT)
+        const lockedCodes = simDispatch.system3State.lockedValveCodes;
+        const valves = state.waterMainTelemetry?.valves ?? [];
+        let valveSlot = 0;
+        for (
+          let vIdx = 0;
+          vIdx < valves.length && valveSlot < MAX_S3_VALVE_COLLARS;
+          vIdx++
+        ) {
+          const v = valves[vIdx];
+          if (!lockedCodes.includes(v.code as 'V-VEST' | 'V-MIDT')) continue;
+          const vXZ = latLngToWorldXZ(v.coordinate);
+          const collar = s3ValveCollarMeshes[valveSlot];
+          collar.visible = true;
+          collar.position.set(
+            vXZ.x,
+            simDispatch.isBlinkingP1 ? 1.05 + 0.15 * Math.sin(elapsed * 5) : 1.05,
+            vXZ.z
+          );
+          collar.scale.setScalar(simDispatch.isBlinkingP1 ? 1.0 + 0.18 * p1Pulse : 1.08);
+          valveSlot++;
+        }
+        for (let i = valveSlot; i < MAX_S3_VALVE_COLLARS; i++) {
+          s3ValveCollarMeshes[i].visible = false;
+        }
+
+        // System 3 Tanker Ingress Corridors (OPEN_INGRESS) & Blocked Nordre Ringgade
+        const corridors = simDispatch.system3State.tankerIngressCorridors;
+        const openCorridors = corridors.filter((c) => c.status === 'OPEN_INGRESS');
+        const blockedCorridors = corridors.filter((c) => c.status === 'BLOCKED_CLOSED');
+
+        if (openCorridors.length > 0) {
+          for (let i = 0; i < S3_OPEN_DASH_COUNT; i++) {
+            const corr = openCorridors[i % openCorridors.length];
+            const slotIdx = Math.floor(i / openCorridors.length);
+            const slotsPerCorr = Math.max(
+              1,
+              Math.ceil(S3_OPEN_DASH_COUNT / openCorridors.length)
+            );
+            const segCount = Math.max(1, corr.waypoints.length - 1);
+            const progress = ((elapsed * 0.25 + slotIdx / slotsPerCorr) % 1 + 1) % 1;
+            const segFloat = progress * segCount;
+            const segIdx = Math.min(segCount - 1, Math.floor(segFloat));
+            const localT = segFloat - segIdx;
+            const pA = latLngToWorldXZ(corr.waypoints[segIdx]);
+            const pB = latLngToWorldXZ(corr.waypoints[segIdx + 1]);
+            _scratchVecA.set(pA.x, 0.55, pA.z);
+            _scratchVecB.set(pB.x, 0.55, pB.z);
+            _scratchVecC.lerpVectors(_scratchVecA, _scratchVecB, localT);
+            _scratchDummy.position.copy(_scratchVecC);
+            _scratchDummy.lookAt(_scratchVecB);
+            _scratchDummy.scale.setScalar(1);
+            _scratchDummy.updateMatrix();
+            s3OpenDashInstanced.setMatrixAt(i, _scratchDummy.matrix);
+          }
+          s3OpenDashInstanced.instanceMatrix.needsUpdate = true;
+          s3OpenDashInstanced.visible = true;
+        } else {
+          s3OpenDashInstanced.visible = false;
+        }
+
+        if (blockedCorridors.length > 0) {
+          const bc = blockedCorridors[0];
+          const segCount = Math.max(1, bc.waypoints.length - 1);
+          for (let i = 0; i < S3_BLOCKED_BAR_COUNT; i++) {
+            const t = (i + 0.5) / S3_BLOCKED_BAR_COUNT;
+            const segFloat = t * segCount;
+            const segIdx = Math.min(segCount - 1, Math.floor(segFloat));
+            const localT = segFloat - segIdx;
+            const pA = latLngToWorldXZ(bc.waypoints[segIdx]);
+            const pB = latLngToWorldXZ(bc.waypoints[segIdx + 1]);
+            _scratchVecA.set(pA.x, 0.72, pA.z);
+            _scratchVecB.set(pB.x, 0.72, pB.z);
+            _scratchVecC.lerpVectors(_scratchVecA, _scratchVecB, localT);
+            _scratchDummy.position.copy(_scratchVecC);
+            _scratchDummy.lookAt(_scratchVecB);
+            _scratchDummy.scale.setScalar(1);
+            _scratchDummy.updateMatrix();
+            s3BlockedBarInstanced.setMatrixAt(i, _scratchDummy.matrix);
+          }
+          s3BlockedBarInstanced.instanceMatrix.needsUpdate = true;
+          s3BlockedBarInstanced.visible = true;
+        } else {
+          s3BlockedBarInstanced.visible = false;
+        }
       }
 
       // Update Instanced Wind Streamline Arrows
@@ -8565,10 +10299,14 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
         if (preset === 'overview') {
           _scratchTargetPos.set(-48, 52, 76);
           _scratchTargetLook.set(4, 3, 2);
+        } else if (preset === 'blok1_blok2_percolation') {
+          // Focused 3D subterranean cutaway framing Blok 1 & Blok 2 crawlspaces and -25m Pb/PAH pathways
+          _scratchTargetPos.set(midBlok12XZ.x - 24, 8.5, midBlok12XZ.z + 29);
+          _scratchTargetLook.set(midBlok12XZ.x - 2.0, -6.2, midBlok12XZ.z + 2.5);
         } else if (preset === 'underground_aquifer') {
-          // Subterranean cutaway inspection angle viewing both surface blocks and -25m aquifers
-          _scratchTargetPos.set(-46, 14, 72);
-          _scratchTargetLook.set(0, -8.5, 0);
+          // Subterranean cutaway inspection angle centered toward Blok 1 & 2 and -25m aquifers
+          _scratchTargetPos.set(midBlok12XZ.x - 38, 12, midBlok12XZ.z + 52);
+          _scratchTargetLook.set(midBlok12XZ.x - 2.5, -7.8, midBlok12XZ.z + 2.0);
         } else if (preset === 'downwind_corridor') {
           _scratchTargetPos.set(-dirX * 58, 34, -dirZ * 58);
           _scratchTargetLook.set(dirX * 26, 4, dirZ * 26);
@@ -8652,6 +10390,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       thermalCorrelationSpotTex.dispose();
       dustBlanketDecalTex.dispose();
       asbestosHeatmapTex.dispose();
+      blok1SubsurfaceTex.dispose();
+      blok2SubsurfaceTex.dispose();
       asbestosCanvasRef.current = null;
       asbestosTextureRef.current = null;
       asbestosReliefGeoRef.current = null;
@@ -8666,7 +10406,10 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     receptorExposures.find((r) => r.receptorId === selectedReceptorId) || receptorExposures[0];
   const rawS = selectedReceptorExp ? selectedReceptorExp.sumQuotient : 0;
   const effectiveS = waterSuppressionActive ? rawS * 0.38 : rawS;
-  const showSubsurfaceUI = isUndergroundActive || cameraPreset === 'underground_aquifer';
+  const showSubsurfaceUI =
+    isUndergroundActive ||
+    cameraPreset === 'underground_aquifer' ||
+    cameraPreset === 'blok1_blok2_percolation';
 
   return (
     <div
@@ -8728,20 +10471,21 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   : '3D Digital Tvilling & 3D Heatmaps'}
               </span>
               {is3dHudReleased && (
-                <span className="px-1 py-0.2 rounded bg-cyan-500/20 border border-cyan-400/50 text-[8.5px] font-mono text-cyan-200 uppercase shrink-0">
+                <span className="px-1 py-0.2 rounded bg-cyan-500/20 border border-cyan-400/50 text-[11px] font-mono text-cyan-200 uppercase shrink-0">
                   Frigivet
                 </span>
               )}
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-200 border border-cyan-500/40 whitespace-nowrap">
-                📅 {currentWeather.isoTime.slice(0, 10)} · kl. {currentWeather.hourLabel}
+              <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-200 border border-cyan-500/40 whitespace-nowrap inline-flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-cyan-300 shrink-0" />
+                <span>{currentWeather.isoTime.slice(0, 10)} · kl. {currentWeather.hourLabel}</span>
               </span>
               <button
                 type="button"
                 onClick={() => setIs3dHudMinimized((v) => !v)}
-                className="px-1.5 py-0.5 rounded bg-slate-900/95 hover:bg-slate-800 border border-slate-700 hover:border-amber-400/60 text-[9.5px] font-mono font-semibold text-slate-200 hover:text-amber-200 flex items-center gap-1 transition-colors"
+                className="px-1.5 py-0.5 rounded bg-slate-900/95 hover:bg-slate-800 border border-slate-700 hover:border-amber-400/60 text-[11px] font-mono font-semibold text-slate-200 hover:text-amber-200 flex items-center gap-1 transition-colors"
                 title={is3dHudMinimized ? 'Gendan 3D Heatmap-vindue' : 'Minimer 3D Heatmap-vindue'}
               >
                 {is3dHudMinimized ? (
@@ -8762,7 +10506,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   setIs3dHudReleased((v) => !v);
                   setIs3dHudMinimized(false);
                 }}
-                className={`px-1.5 py-0.5 rounded border text-[9.5px] font-mono font-semibold flex items-center gap-1 transition-colors ${
+                className={`px-1.5 py-0.5 rounded border text-[11px] font-mono font-semibold flex items-center gap-1 transition-colors ${
                   is3dHudReleased
                     ? 'bg-cyan-500/25 border-cyan-400 text-cyan-100 hover:bg-cyan-500/35'
                     : 'bg-slate-900/95 hover:bg-slate-800 border-slate-700 hover:border-cyan-400/60 text-cyan-300'
@@ -8798,11 +10542,11 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   : 'bg-slate-900 text-slate-200 border border-slate-800'
               }`}
             >
-              <div className="text-[9px] uppercase opacity-80">Vind (10m)</div>
+              <div className="text-[11px] uppercase opacity-80">Vind (10m)</div>
               <div className="font-bold">{currentWeather.windSpeed10m} m/s</div>
             </div>
             <div className="rounded px-2 py-1 bg-slate-900 text-slate-200 border border-slate-800">
-              <div className="text-[9px] text-slate-400 uppercase">
+              <div className="text-[11px] text-slate-400 uppercase">
                 {showSubsurfaceUI ? 'Nedbør / Darcy' : '3D Fanevektor'}
               </div>
               <div className="font-bold text-cyan-300">
@@ -8812,7 +10556,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
               </div>
             </div>
             <div className="rounded px-2 py-1 bg-slate-900 text-slate-200 border border-slate-800">
-              <div className="text-[9px] text-slate-400 uppercase">
+              <div className="text-[11px] text-slate-400 uppercase">
                 {showSubsurfaceUI ? 'Bly (Pb) Grundvand' : 'Sumkvotient S'}
               </div>
               <div
@@ -8836,12 +10580,12 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           </div>
 
           {/* Contaminant Particle Legend */}
-          <div className="mt-2 pt-1.5 border-t border-slate-800/80 flex flex-wrap items-center gap-2.5 text-[10px] font-mono text-slate-300">
+          <div className="mt-2 pt-1.5 border-t border-slate-800/80 flex flex-wrap items-center gap-2.5 text-[11px] font-mono text-slate-300">
             <span className="text-slate-400">
-              {showSubsurfaceUI ? '3D Perkolat:' : '3D Partikler:'}
+              {showSubsurfaceUI ? 'Blok 1 & 2 Perkolat:' : '3D Partikler:'}
             </span>
-            <span className="text-rose-400 font-semibold">
-              ■ {showSubsurfaceUI ? 'PAH/Asbestslam' : 'Asbest'}
+            <span className="text-fuchsia-400 font-semibold">
+              ■ {showSubsurfaceUI ? 'PAH-holdigt vand' : 'Asbest'}
             </span>
             <span className="text-amber-400 font-semibold">■ Bly (Pb)</span>
             <span className="text-purple-400 font-semibold">■ PCB</span>
@@ -8850,6 +10594,115 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
             </span>
           </div>
 
+          {/* Dedicated Blok 1 & Blok 2 Subterranean Percolation Rate Readout (Bly & PAH vs. Nedbør) */}
+          {showSubsurfaceUI && (
+            <div className="mt-2 pt-2 border-t border-cyan-500/40 space-y-1.5 text-[11px] font-mono tabular-nums">
+              <div
+                data-testid="3d-percolation-source-switcher"
+                className="flex flex-wrap items-center justify-between gap-1.5 bg-slate-950/90 border border-slate-800 rounded px-2 py-1"
+              >
+                <span className="text-cyan-300 font-semibold">Kilde på Perkulationskort:</span>
+                <select
+                  aria-label="Skift kilde i 3D Perkolation"
+                  value={selectedSourceId || ''}
+                  onChange={(e) => {
+                    if (e.target.value) onSelectSource(e.target.value);
+                  }}
+                  className="bg-slate-900 border border-cyan-500/50 rounded px-1.5 py-0.5 text-[11px] text-slate-100 font-semibold focus:outline-none cursor-pointer max-w-[190px]"
+                >
+                  {sources.map((src) => (
+                    <option key={src.id} value={src.id}>
+                      {src.code} — {src.name.split('—')[0].trim()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-cyan-200 uppercase">
+                  Blok 1 &amp; 2 Perkolations-veje (Pb &amp; PAH)
+                </span>
+                <button
+                  type="button"
+                  onClick={handleFocusBlok12Percolation3D}
+                  className="px-2 py-0.5 rounded bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-extrabold text-[11px] cursor-pointer"
+                  title="Fokuser 3D-kameraet direkte på de underjordiske perkolations-veje under Blok 1 og Blok 2"
+                >
+                  Fokus Blok 1 &amp; 2
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="rounded bg-slate-900 border border-amber-500/40 p-1.5 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-amber-300 font-bold">Bly (Pb) Nedsivning</span>
+                    <span
+                      className={
+                        blok12PercolationMetrics.pbSecondaryUgL >= 1.0
+                          ? 'text-rose-400 font-extrabold'
+                          : 'text-emerald-300 font-bold'
+                      }
+                    >
+                      {blok12PercolationMetrics.pbSecondaryUgL.toFixed(2)} µg/L
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-extrabold text-white">
+                    {blok12PercolationMetrics.pbLeachingRateMgM2H.toFixed(3)} mg/m²/t
+                  </div>
+                  <div className="h-1.5 w-full rounded bg-slate-950 overflow-hidden">
+                    <div
+                      className="h-full bg-amber-400"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.max(8, blok12PercolationMetrics.pbLeachingRateMgM2H * 14)
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded bg-slate-900 border border-fuchsia-500/40 p-1.5 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-fuchsia-300 font-bold">PAH-holdigt Vand</span>
+                    <span
+                      className={
+                        blok12PercolationMetrics.pahSecondaryUgL >= 0.01
+                          ? 'text-rose-400 font-extrabold'
+                          : 'text-emerald-300 font-bold'
+                      }
+                    >
+                      {blok12PercolationMetrics.pahSecondaryUgL.toFixed(3)} µg/L
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-extrabold text-white">
+                    {blok12PercolationMetrics.pahLeachingRateUgM2H.toFixed(3)} µg/m²/t
+                  </div>
+                  <div className="h-1.5 w-full rounded bg-slate-950 overflow-hidden">
+                    <div
+                      className="h-full bg-fuchsia-400"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.max(8, blok12PercolationMetrics.pahLeachingRateUgM2H * 4)
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-300 bg-slate-950/90 border border-slate-800 rounded px-2 py-1">
+                <span>
+                  Nedbør: <strong className="text-cyan-300">{effectivePrecipMm.toFixed(1)} mm/t</strong>{' '}
+                  (Infiltr. {blok12PercolationMetrics.infiltrationMmH.toFixed(1)} mm/t)
+                </span>
+                <span>
+                  Hastighed: <strong className="text-amber-300">{blok12PercolationMetrics.verticalVelocityCmH} cm/t</strong>
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Real-Time / 24h Temporal Accumulation 3D Asbestos-Fiber Dispersion Heatmap Telemetry & Color Scale */}
           {showAsbestosHeatmap && !showSubsurfaceUI && (
             <div
@@ -8857,7 +10710,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 isTemporal24hAsbestosActive ? 'border-fuchsia-500/50' : 'border-rose-500/40'
               }`}
             >
-              <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+              <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
                 <span
                   className={`font-bold uppercase tracking-wider flex items-center gap-1 ${
                     isTemporal24hAsbestosActive ? 'text-fuchsia-300' : 'text-rose-300'
@@ -8897,32 +10750,133 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 </span>
               </div>
 
+              {/* Dynamic 'Tidsmæssig Akkumulering' Mode Switcher: Øjebliksbillede vs. 24t Kumulativ Eksponeringsrisiko */}
+              <div
+                className="grid grid-cols-2 gap-1 p-0.5 rounded bg-slate-950 border border-slate-800 text-[11px] font-mono"
+                role="group"
+                aria-label="Skift mellem Øjebliksbillede og 24-timers kumulativ eksponeringsrisiko"
+              >
+                <button
+                  type="button"
+                  onClick={() => handleToggleTemporal24hAsbestos(false)}
+                  className={`px-2 py-1 rounded font-semibold cursor-pointer transition-colors whitespace-nowrap truncate ${
+                    !isTemporal24hAsbestosActive
+                      ? 'bg-rose-600 text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Øjebliksbillede (kl. {currentWeather.hourLabel})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleTemporal24hAsbestos(true)}
+                  className={`px-2 py-1 rounded font-semibold cursor-pointer transition-colors whitespace-nowrap truncate ${
+                    isTemporal24hAsbestosActive
+                      ? 'bg-fuchsia-600 text-white'
+                      : 'text-fuchsia-300 hover:text-fuchsia-100'
+                  }`}
+                >
+                  Tidsmæssig Akkumulering (24t)
+                </button>
+              </div>
+
               {isTemporal24hAsbestosActive ? (
-                <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
-                  <div className="bg-slate-900/90 border border-fuchsia-500/30 rounded px-2 py-1">
-                    <div className="text-[8.5px] text-slate-400 uppercase">Mest Udsat Nabo (24t)</div>
-                    <div className="text-fuchsia-200 font-bold truncate">
-                      {asbestosMetrics.mostExposedNeighborName}
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-3 gap-1.5 text-[11px] font-mono tabular-nums">
+                    <div className="bg-slate-900/90 border border-fuchsia-500/30 rounded px-2 py-1">
+                      <div className="text-[11px] text-slate-400 uppercase">Mest Udsat Nabo (24t)</div>
+                      <div className="text-fuchsia-200 font-bold truncate">
+                        {asbestosMetrics.mostExposedNeighborName}
+                      </div>
+                    </div>
+                    <div className="bg-slate-900/90 border border-fuchsia-500/30 rounded px-2 py-1">
+                      <div className="text-[11px] text-slate-400 uppercase">Nabo Døgn-Dosis / Timer</div>
+                      <div className="text-amber-300 font-bold">
+                        {asbestosMetrics.mostExposedNeighborDoseFibersCm3H.toFixed(3)} ·{' '}
+                        {asbestosMetrics.mostExposedNeighborHoursAboveGv}t &gt; GV
+                      </div>
+                    </div>
+                    <div className="bg-slate-900/90 border border-fuchsia-500/30 rounded px-2 py-1">
+                      <div className="text-[11px] text-slate-400 uppercase">3D-Volumen Opbygget</div>
+                      <div className="text-rose-300 font-bold">
+                        00:00–{String(Math.max(0, effectiveTemporalAccumulationHours - 1)).padStart(2, '0')}:00 ({effectiveTemporalAccumulationHours}t)
+                      </div>
                     </div>
                   </div>
-                  <div className="bg-slate-900/90 border border-fuchsia-500/30 rounded px-2 py-1">
-                    <div className="text-[8.5px] text-slate-400 uppercase">Nabo Døgn-Dosis / Timer</div>
-                    <div className="text-amber-300 font-bold">
-                      {asbestosMetrics.mostExposedNeighborDoseFibersCm3H.toFixed(3)} ·{' '}
-                      {asbestosMetrics.mostExposedNeighborHoursAboveGv}t &gt; GV
+
+                  {/* Interactive 24h 3D Volumetric Accumulation Scrubber & Play/Sync Controls */}
+                  <div className="bg-slate-950/95 border border-fuchsia-500/40 rounded px-2 py-1.5 space-y-1 text-[11px] font-mono tabular-nums">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setIsPlayingTemporalVolume24h((v) => !v)}
+                        className={`px-2 py-0.5 rounded font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                          isPlayingTemporalVolume24h
+                            ? 'bg-rose-600 text-white'
+                            : 'bg-fuchsia-600 text-white hover:bg-fuchsia-500'
+                        }`}
+                        title="Afspil døgnets 3D-volumen-opbygning time for time (skaleret med aktiv simulerings-hastighed)"
+                      >
+                        {isPlayingTemporalVolume24h ? (
+                          <>
+                            <Pause className="w-2.5 h-2.5" />
+                            <span>Pause ({simulationSpeedMultiplier}x)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-2.5 h-2.5" />
+                            <span>Afspil 24t 3D-Volumen ({simulationSpeedMultiplier}x)</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsPlayingTemporalVolume24h(false);
+                          setSyncTemporalVolumeToTimeline((prev) => {
+                            const next = !prev;
+                            if (!next) setTemporalVolumeHoursCap(24);
+                            return next;
+                          });
+                        }}
+                        className={`px-1.5 py-0.5 rounded border cursor-pointer transition-colors ${
+                          syncTemporalVolumeToTimeline
+                            ? 'bg-cyan-500/25 border-cyan-400 text-cyan-200 font-bold'
+                            : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-fuchsia-400/60'
+                        }`}
+                        title="Synkronisér 3D-volumen-opbygningen med den valgte time på døgn-tidslinjen eller vis hele 24t døgnet"
+                      >
+                        {syncTemporalVolumeToTimeline ? 'Synk: Tidslinje' : 'Horisont: Fuld 24t'}
+                      </button>
                     </div>
-                  </div>
-                  <div className="bg-slate-900/90 border border-fuchsia-500/30 rounded px-2 py-1">
-                    <div className="text-[8.5px] text-slate-400 uppercase">Døgn-Risikozone</div>
-                    <div className="text-rose-300 font-bold">
-                      {asbestosMetrics.exceedanceAreaM2.toLocaleString('da-DK')} m²
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-fuchsia-300 shrink-0">Opbygning:</span>
+                      <input
+                        type="range"
+                        min={1}
+                        max={24}
+                        step={1}
+                        value={effectiveTemporalAccumulationHours}
+                        onChange={(e) => {
+                          setIsPlayingTemporalVolume24h(false);
+                          setSyncTemporalVolumeToTimeline(false);
+                          setTemporalVolumeHoursCap(Number(e.target.value));
+                        }}
+                        aria-label="Tidsmæssig 3D-volumen-akkumulering fra 1 til 24 timer"
+                        className="flex-1 accent-fuchsia-500 cursor-pointer"
+                      />
+                      <span className="text-white font-bold shrink-0">
+                        {effectiveTemporalAccumulationHours}/24t
+                      </span>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
+                <div className="grid grid-cols-3 gap-1.5 text-[11px] font-mono">
                   <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1">
-                    <div className="text-[8.5px] text-slate-400 uppercase">Kilde-Parametre</div>
+                    <div className="text-[11px] text-slate-400 uppercase">Kilde-Parametre</div>
                     <div className="text-slate-200 font-semibold truncate">
                       {asbestosSourceScope === 'selected_source'
                         ? asbestosMetrics.dominantSourceLabel
@@ -8930,14 +10884,14 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                     </div>
                   </div>
                   <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1">
-                    <div className="text-[8.5px] text-slate-400 uppercase">Højde / Fiber-Idx</div>
+                    <div className="text-[11px] text-slate-400 uppercase">Højde / Fiber-Idx</div>
                     <div className="text-emerald-300 font-semibold">
                       H={asbestosMetrics.dominantReleaseHeightM}m ·{' '}
                       {asbestosMetrics.dominantFiberReleasePct}%
                     </div>
                   </div>
                   <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1">
-                    <div className="text-[8.5px] text-slate-400 uppercase">&gt; 0,003 fibre/cm³</div>
+                    <div className="text-[11px] text-slate-400 uppercase">&gt; 0,003 fibre/cm³</div>
                     <div className="text-rose-300 font-bold">
                       {asbestosMetrics.exceedanceAreaM2.toLocaleString('da-DK')} m²
                     </div>
@@ -8945,30 +10899,83 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 </div>
               )}
 
-              {/* False-Color Legend Bar */}
-              <div className="space-y-0.5 pt-0.5">
+              {/* Detailed 3D-Heatmap Color-Gradient & Contour Legend */}
+              <div
+                data-3d-heatmap-gradient-legend="true"
+                className="bg-slate-950/95 border border-slate-800 rounded p-2 space-y-1.5"
+              >
+                <div className="flex items-center justify-between text-[11px] font-mono">
+                  <span className="font-bold text-slate-200">
+                    Legende · 3D-Heatmap Farvegradienter ({isTemporal24hAsbestosActive ? '24t Kumulativ Dosis' : 'Øjebliksbillede'})
+                  </span>
+                  <span className="text-slate-400 tabular-nums">
+                    {isTemporal24hAsbestosActive ? 'Døgn-GV: 0,0240 f/cm³·t' : 'BEK 613 GV: 0,0030 f/cm³'}
+                  </span>
+                </div>
+
                 <div
-                  className={`h-2 w-full rounded-sm border border-slate-700 ${
+                  className={`h-2.5 w-full rounded-xs border border-slate-700 ${
                     isTemporal24hAsbestosActive
-                      ? 'bg-gradient-to-r from-sky-400/60 via-purple-500 via-amber-400 to-rose-600'
-                      : 'bg-gradient-to-r from-teal-500/50 via-amber-400 to-rose-600'
+                      ? 'bg-gradient-to-r from-sky-400 via-violet-500 via-amber-400 to-rose-600'
+                      : 'bg-gradient-to-r from-teal-500 via-emerald-400 via-amber-400 to-rose-600'
                   }`}
                 />
-                <div className="flex items-center justify-between text-[9px] font-mono text-slate-300">
-                  {isTemporal24hAsbestosActive ? (
-                    <>
-                      <span className="text-purple-300">0,0024 (Lav 24t)</span>
-                      <span className="text-amber-300">0,0120 (Forhøjet Nabo-Risiko)</span>
-                      <span className="text-rose-300 font-bold">≥0,0240 fibre/cm³·t (Kritisk Døgn)</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-emerald-300">0,0003 (10% Aktionsværdi)</span>
-                      <span className="text-amber-300">0,0015 (50% GV)</span>
-                      <span className="text-rose-300 font-bold">≥0,0030 fibre/cm³ (GV)</span>
-                    </>
-                  )}
-                </div>
+
+                {isTemporal24hAsbestosActive ? (
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] font-mono tabular-nums text-slate-300">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="w-2.5 h-2.5 rounded-xs bg-sky-400 shrink-0" />
+                      <span className="truncate">
+                        <strong className="text-sky-300">Blå/Indigo:</strong> &lt;0,0024 (&lt;10% Lav)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="w-2.5 h-2.5 rounded-xs bg-violet-500 shrink-0" />
+                      <span className="truncate">
+                        <strong className="text-purple-300">Violet:</strong> 0,0024–0,0120 (10–50%)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="w-2.5 h-2.5 rounded-xs bg-amber-400 shrink-0" />
+                      <span className="truncate">
+                        <strong className="text-amber-300">Rav/Orange:</strong> 0,0120–0,0240 (Forhøjet)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="w-2.5 h-2.5 rounded-xs bg-rose-600 border border-white shrink-0" />
+                      <span className="truncate">
+                        <strong className="text-rose-300">Karmoisin/Hvid:</strong> ≥0,0240 (Kritisk 24t)
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] font-mono tabular-nums text-slate-300">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="w-2.5 h-2.5 rounded-xs bg-teal-500 shrink-0" />
+                      <span className="truncate">
+                        <strong className="text-teal-300">Turkis:</strong> &lt;0,0003 (&lt;10% Spor)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="w-2.5 h-2.5 rounded-xs bg-emerald-400 shrink-0" />
+                      <span className="truncate">
+                        <strong className="text-emerald-300">Smaragd:</strong> ≥0,0003 (Aktionsværdi)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="w-2.5 h-2.5 rounded-xs bg-amber-400 shrink-0" />
+                      <span className="truncate">
+                        <strong className="text-amber-300">Rav/Gul:</strong> 0,0015–0,0030 (50–100%)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="w-2.5 h-2.5 rounded-xs bg-rose-600 border border-white shrink-0" />
+                      <span className="truncate">
+                        <strong className="text-rose-300">Karmoisin/Hvid:</strong> ≥0,0030 (Over GV)
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -8976,31 +10983,31 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           {/* 3D 'Læ-Effekt' (Building Wake / Calm Wind Recirculation & Dust Accumulation) Telemetry */}
           {showLeewardWake && !showSubsurfaceUI && (
             <div className="mt-2 pt-2 border-t border-amber-500/40 space-y-1">
-              <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+              <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
                 <span className="font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1">
                   <Wind className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>🌪️ Bygnings Læ-Effekt (Vindstille Støv-Zoner)</span>
+                  <span>Bygnings Læ-Effekt (Vindstille Støv-Zoner)</span>
                 </span>
                 <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-400/50 font-bold">
                   -{asbestosMetrics.leewardWindReductionPct}% Vind ·{' '}
                   {asbestosMetrics.peakLeewardAccumulationFactor}× Støv
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-1.5 text-[9.5px] font-mono">
+              <div className="grid grid-cols-3 gap-1.5 text-[11px] font-mono">
                 <div className="bg-slate-900/90 border border-amber-500/30 rounded px-2 py-1">
-                  <div className="text-[8px] text-slate-400 uppercase">Læ-Vind (Recirkulation)</div>
+                  <div className="text-[11px] text-slate-400 uppercase">Læ-Vind (Recirkulation)</div>
                   <div className="text-amber-200 font-bold">
                     {asbestosMetrics.leewardCalmWindSpeedMs} m/s (Vindstille)
                   </div>
                 </div>
                 <div className="bg-slate-900/90 border border-amber-500/30 rounded px-2 py-1">
-                  <div className="text-[8px] text-slate-400 uppercase">Læ-Retning</div>
+                  <div className="text-[11px] text-slate-400 uppercase">Læ-Retning</div>
                   <div className="text-cyan-200 font-bold">
                     {plumeDirectionDeg}° ({degreesToCompass(plumeDirectionDeg)})
                   </div>
                 </div>
                 <div className="bg-slate-900/90 border border-amber-500/30 rounded px-2 py-1">
-                  <div className="text-[8px] text-slate-400 uppercase">Kritisk Læ-Lomme</div>
+                  <div className="text-[11px] text-slate-400 uppercase">Kritisk Læ-Lomme</div>
                   <div className="text-rose-300 font-bold truncate">
                     {asbestosMetrics.criticalLeewardBuildingLabel}
                   </div>
@@ -9012,10 +11019,10 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           {/* 3D 'Vis Vejr-Korrelation' (Wind Speed vs. Observed Dust Intensity SHA-256 Heatmap Points) Telemetry */}
           {showWeatherCorrelation && !showSubsurfaceUI && (
             <div className="mt-2 pt-2 border-t border-orange-500/50 space-y-1.5">
-              <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+              <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
                 <span className="font-bold uppercase tracking-wider text-orange-300 flex items-center gap-1">
-                  <Compass className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-                  <span>🌡️ 3D Vejr-Korrelation (SHA-256 Heatmap-Punkter)</span>
+                  <Thermometer className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                  <span>3D Vejr-Korrelation (SHA-256 Heatmap-Punkter)</span>
                 </span>
                 <span className="px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-200 border border-orange-400/60 font-bold">
                   r = {weatherCorrelationSummary.pearsonR >= 0 ? '+' : ''}
@@ -9024,23 +11031,23 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 </span>
               </div>
 
-              <div className="grid grid-cols-3 gap-1.5 text-[9.5px] font-mono">
+              <div className="grid grid-cols-3 gap-1.5 text-[11px] font-mono">
                 <div className="bg-slate-900/90 border border-orange-500/30 rounded px-2 py-1">
-                  <div className="text-[8px] text-slate-400 uppercase">SHA-256 Punkter (3D)</div>
+                  <div className="text-[11px] text-slate-400 uppercase">SHA-256 Punkter (3D)</div>
                   <div className="text-orange-200 font-bold">
                     {weatherCorrelationSummary.totalSignedPoints} pkt (
                     {weatherCorrelationSummary.userObservationCount} obs)
                   </div>
                 </div>
                 <div className="bg-slate-900/90 border border-orange-500/30 rounded px-2 py-1">
-                  <div className="text-[8px] text-slate-400 uppercase">Vind (Gns / Peak)</div>
+                  <div className="text-[11px] text-slate-400 uppercase">Vind (Gns / Peak)</div>
                   <div className="text-cyan-200 font-bold">
                     {weatherCorrelationSummary.avgWindSpeedMs} /{' '}
                     {weatherCorrelationSummary.peakWindSpeedMs} m/s
                   </div>
                 </div>
                 <div className="bg-slate-900/90 border border-orange-500/30 rounded px-2 py-1">
-                  <div className="text-[8px] text-slate-400 uppercase">Støv-Intensitet S</div>
+                  <div className="text-[11px] text-slate-400 uppercase">Støv-Intensitet S</div>
                   <div className="text-rose-300 font-bold">
                     Gns {weatherCorrelationSummary.avgDustIntensityS.toFixed(2)} · Peak{' '}
                     {weatherCorrelationSummary.peakDustIntensityS.toFixed(2)}
@@ -9049,7 +11056,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
               </div>
 
               {/* Compact Interactive SHA-256 3D Heatmap-Points Log */}
-              <div className="max-h-28 overflow-y-auto rounded border border-slate-800 bg-slate-950/90 divide-y divide-slate-800/80 text-[9px] font-mono">
+              <div className="max-h-28 overflow-y-auto rounded border border-slate-800 bg-slate-950/90 divide-y divide-slate-800/80 text-[11px] font-mono">
                 {weatherCorrelationSummary.points.slice(0, 6).map((pt) => {
                   const isSel = selectedCorrelationPointId === pt.id;
                   return (
@@ -9103,7 +11110,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 {/* Thermal 3D Heatmap-Points Legend Bar */}
               <div className="space-y-0.5 pt-0.5">
                 <div className="h-1.5 w-full rounded-sm border border-slate-700 bg-gradient-to-r from-emerald-400 via-amber-400 via-orange-500 to-fuchsia-500" />
-                <div className="flex items-center justify-between text-[8.5px] font-mono text-slate-300">
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-300">
                   <span className="text-emerald-300">Lav Vind/Støv (&lt;40%)</span>
                   <span className="text-amber-300">Moderat (40-65%)</span>
                   <span className="text-fuchsia-300 font-bold">
@@ -9117,10 +11124,10 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           {/* 3D Courtyard Accumulated Dust-Dose Heatmap & Dust Fallout (Synchronized with Timeline Slider) */}
           {showDustDeposition3D && !showSubsurfaceUI && (
             <div className="mt-2 pt-2 border-t border-amber-500/50 space-y-1.5">
-              <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+              <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
                 <span className="font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>🔥 3D-Varmekort: Akkumulerede Støv-Doser i Gårdmiljøer</span>
+                  <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>3D-Varmekort: Akkumulerede Støv-Doser i Gårdmiljøer</span>
                 </span>
                 <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-200 border border-rose-400/60 font-bold">
                   00:00→{currentWeather.hourLabel} ({dustDepositionProgressHours.toFixed(1)}t dosis)
@@ -9128,7 +11135,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
               </div>
 
               {/* Timeline Synchronization & Playback Controls */}
-              <div className="flex flex-wrap items-center gap-1.5 bg-slate-900/95 border border-amber-500/30 rounded px-2 py-1 text-[9.5px] font-mono">
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-900/95 border border-amber-500/30 rounded px-2 py-1 text-[11px] font-mono">
                 <button
                   type="button"
                   onClick={() => {
@@ -9145,10 +11152,11 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   }`}
                   title="Når aktiv, animeres 3D-varmekortet over akkumulerede støv-doser i gårdmiljøerne synkront med tidslinje-slideren i bunden"
                 >
+                  <Link className="w-3 h-3 shrink-0" />
                   <span>
                     {syncCourtyardHeatmapWithTimeline && !isPlayingDustDeposition
-                      ? '🔗 Synkron med Tidslinje: AKTIV'
-                      : '🔗 Synkronisér med Tidslinje'}
+                      ? 'Synkron med Tidslinje: AKTIV'
+                      : 'Synkronisér med Tidslinje'}
                   </span>
                 </button>
 
@@ -9203,11 +11211,11 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
 
               {/* Ranked Live Readout: Mest Udsatte Receptorer (#1, #2, #3) */}
               <div className="space-y-1">
-                <div className="flex items-center justify-between text-[8.5px] font-mono uppercase text-slate-400">
+                <div className="flex items-center justify-between text-[11px] font-mono uppercase text-slate-400">
                   <span>Mest Udsatte Receptorer (3D Akkumulering)</span>
                   <span>Akkumuleret Støv / Lagtykkelse</span>
                 </div>
-                <div className="rounded border border-slate-800 bg-slate-950/90 divide-y divide-slate-800/80 text-[9px] font-mono">
+                <div className="rounded border border-slate-800 bg-slate-950/90 divide-y divide-slate-800/80 text-[11px] font-mono">
                   {dustDepositionSummary.topExposedReceptors.map((prof) => {
                     const sampled = sampleCumulativeDepositionAtHour(
                       prof,
@@ -9237,7 +11245,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                         <div className="flex items-center justify-between gap-1.5">
                           <span className="truncate flex items-center gap-1">
                             <span
-                              className={`px-1 py-0.2 rounded text-[8px] font-bold shrink-0 ${
+                              className={`px-1 py-0.2 rounded text-[11px] font-bold shrink-0 ${
                                 prof.exposureRank === 1
                                   ? 'bg-rose-600 text-white'
                                   : prof.exposureRank === 2
@@ -9284,14 +11292,14 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
             <div className="pt-2 border-t border-slate-800/90 space-y-2 text-[11px] font-mono">
               <div className="flex flex-wrap items-center justify-between gap-1.5">
                 <div className="flex items-center gap-1.5">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400" />
+                  <Wind className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                   <span className="text-cyan-200 font-bold uppercase tracking-wider">
-                    🌀 3D Vindtunnels-Visualisering (Eddy &gt; 10 m/s)
+                    3D Vindtunnels-Visualisering (Eddy &gt; 10 m/s)
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span
-                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                    className={`px-1.5 py-0.5 rounded text-[11px] font-bold border ${
                       windTunnelEddySummary.isLiveAbove10Ms
                         ? 'bg-rose-950/90 border-rose-500/70 text-rose-200'
                         : windTunnelEddySummary.isThresholdExceededOrForced
@@ -9314,26 +11322,28 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   <button
                     type="button"
                     onClick={() => setWindTunnelScope('selected_machine')}
-                    className={`px-2 py-0.5 rounded text-[10px] border cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] border cursor-pointer inline-flex items-center gap-1 ${
                       windTunnelScope === 'selected_machine'
                         ? 'bg-cyan-400 text-slate-950 font-bold border-cyan-200'
                         : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-cyan-400/60'
                     }`}
                     title="Vis 3D vindtunnels-hvirvler (Eddy-strukturer) omkring den valgte nedrivningsmaskine"
                   >
-                    🎯 Valgt Maskine ({windTunnelEddySummary.selectedMachineProfile.sourceCode})
+                    <Target className="w-3 h-3 shrink-0" />
+                    <span>Valgt Maskine ({windTunnelEddySummary.selectedMachineProfile.sourceCode})</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setWindTunnelScope('all_active_machines')}
-                    className={`px-2 py-0.5 rounded text-[10px] border cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] border cursor-pointer inline-flex items-center gap-1 ${
                       windTunnelScope === 'all_active_machines'
                         ? 'bg-cyan-400 text-slate-950 font-bold border-cyan-200'
                         : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-cyan-400/60'
                     }`}
                     title="Vis 3D vindtunnels-hvirvler omkring alle aktive nedrivningsmaskiner samtidig"
                   >
-                    🏗️ Alle Maskiner ({activeSourceCount})
+                    <Layers className="w-3 h-3 shrink-0" />
+                    <span>Alle Maskiner ({activeSourceCount})</span>
                   </button>
                 </div>
 
@@ -9341,16 +11351,19 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   <button
                     type="button"
                     onClick={() => setForceHighWindTunnelPreview((v) => !v)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-semibold border cursor-pointer inline-flex items-center gap-1 ${
                       forceHighWindTunnelPreview
                         ? 'bg-amber-400 text-slate-950 font-bold border-amber-200'
                         : 'bg-slate-900 text-amber-300 border-amber-500/50 hover:bg-amber-950/60'
                     }`}
                     title="Aktuel timevind er under 10 m/s — klik for at tvinge/simulere > 10 m/s storm-vindtunnel på den valgte nedrivningsmaskine"
                   >
-                    {forceHighWindTunnelPreview
-                      ? '⚡ >10 m/s Vindtunnel-Sim: TIL'
-                      : '⚡ Tving >10 m/s Vindtunnel-Sim'}
+                    <Zap className="w-3 h-3 shrink-0" />
+                    <span>
+                      {forceHighWindTunnelPreview
+                        ? '>10 m/s Vindtunnel-Sim: TIL'
+                        : 'Tving >10 m/s Vindtunnel-Sim'}
+                    </span>
                   </button>
                 )}
               </div>
@@ -9358,34 +11371,34 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
               {/* CFD / Eddy Vortex Telemetry Grid for Selected Demolition Machine */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                 <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1">
-                  <div className="text-[9px] uppercase text-slate-400">Reynolds Tal (Re)</div>
+                  <div className="text-[11px] uppercase text-slate-400">Reynolds Tal (Re)</div>
                   <div className="text-xs font-bold text-cyan-300">
                     {(windTunnelEddySummary.selectedMachineProfile.reynoldsNumber / 1e6).toFixed(2)}×10⁶
                   </div>
-                  <div className="text-[9px] text-slate-400">Superkritisk hvirvel</div>
+                  <div className="text-[11px] text-slate-400">Superkritisk hvirvel</div>
                 </div>
                 <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1">
-                  <div className="text-[9px] uppercase text-slate-400">Vortex Frekvens (fₛ)</div>
+                  <div className="text-[11px] uppercase text-slate-400">Vortex Frekvens (fₛ)</div>
                   <div className="text-xs font-bold text-amber-300">
                     {windTunnelEddySummary.selectedMachineProfile.strouhalFreqHz.toFixed(2)} Hz
                   </div>
-                  <div className="text-[9px] text-slate-400">von Kármán (St=0,21)</div>
+                  <div className="text-[11px] text-slate-400">von Kármán (St=0,21)</div>
                 </div>
                 <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1">
-                  <div className="text-[9px] uppercase text-slate-400">Turbulent Energi (TKE)</div>
+                  <div className="text-[11px] uppercase text-slate-400">Turbulent Energi (TKE)</div>
                   <div className="text-xs font-bold text-rose-300">
                     {windTunnelEddySummary.selectedMachineProfile.tkeM2S2.toFixed(1)} m²/s²
                   </div>
-                  <div className="text-[9px] text-slate-400">
+                  <div className="text-[11px] text-slate-400">
                     Γ = {windTunnelEddySummary.selectedMachineProfile.eddyCirculationM2S.toFixed(1)} m²/s
                   </div>
                 </div>
                 <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1">
-                  <div className="text-[9px] uppercase text-slate-400">Fiber-Medrivning</div>
+                  <div className="text-[11px] uppercase text-slate-400">Fiber-Medrivning</div>
                   <div className="text-xs font-bold text-rose-400">
                     {windTunnelEddySummary.selectedMachineProfile.dustEntrainmentMultiplier.toFixed(2)}× løft
                   </div>
-                  <div className="text-[9px] text-slate-400">
+                  <div className="text-[11px] text-slate-400">
                     Eddy-køl: {windTunnelEddySummary.selectedMachineProfile.wakeLengthMeters.toFixed(1)} m
                   </div>
                 </div>
@@ -9393,7 +11406,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
 
               {/* Quick Machine Selector Pills for Wind-Tunnel Inspection */}
               <div className="flex flex-wrap items-center justify-between gap-1 bg-slate-950/80 border border-slate-800/90 rounded px-2 py-1">
-                <span className="text-[9px] uppercase text-slate-400">
+                <span className="text-[11px] uppercase text-slate-400">
                   Vælg Nedrivningsmaskine i Vindtunnel:
                 </span>
                 <div className="flex flex-wrap items-center gap-1">
@@ -9405,7 +11418,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                         onSelectSource(mp.sourceId);
                         handleSelectCameraPreset('source_blok1');
                       }}
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-mono border cursor-pointer transition-colors ${
+                      className={`px-1.5 py-0.5 rounded text-[11px] font-mono border cursor-pointer transition-colors ${
                         mp.isSelected
                           ? 'bg-cyan-500/30 border-cyan-400 text-cyan-100 font-bold'
                           : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-cyan-500/50'
@@ -9429,11 +11442,11 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 <div className="flex items-center gap-1.5">
                   <Volume2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                   <span className="text-indigo-200 font-bold uppercase tracking-wider">
-                    🔊 3D Lydbølge-Animation (Nedbøjning over Barriere)
+                    3D Lydbølge-Animation (Nedbøjning over Barriere)
                   </span>
                 </div>
                 <span
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                  className={`px-1.5 py-0.5 rounded text-[11px] font-bold border ${
                     acousticRefractionSummary.selectedCorridor.totalRefractionDb >= 3.0
                       ? 'bg-rose-950/90 border-rose-500/70 text-rose-200'
                       : 'bg-indigo-950/90 border-indigo-400/70 text-indigo-200'
@@ -9452,7 +11465,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsPlayingSoundWave3D((v) => !v)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 border cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 border cursor-pointer ${
                       isPlayingSoundWave3D
                         ? 'bg-indigo-500 text-white border-indigo-300'
                         : 'bg-slate-900 text-indigo-200 border-indigo-500/50 hover:bg-slate-800'
@@ -9481,7 +11494,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                       key={spd}
                       type="button"
                       onClick={() => setSoundWaveSpeed3D(spd)}
-                      className={`px-1.5 py-0.5 rounded text-[9px] border cursor-pointer ${
+                      className={`px-1.5 py-0.5 rounded text-[11px] border cursor-pointer ${
                         soundWaveSpeed3D === spd
                           ? 'bg-cyan-500/30 border-cyan-400 text-cyan-200 font-bold'
                           : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -9502,17 +11515,25 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                           : 'all_downwind_corridors'
                       )
                     }
-                    className="px-2 py-0.5 rounded text-[9.5px] bg-slate-900 hover:bg-slate-800 text-indigo-200 border border-indigo-500/40 cursor-pointer"
+                    className="px-2 py-0.5 rounded text-[11px] bg-slate-900 hover:bg-slate-800 text-indigo-200 border border-indigo-500/40 cursor-pointer inline-flex items-center gap-1"
                     title="Skift mellem at vise 3D lydbølge-refraktionsstier til alle medvinds-receptorer eller kun til den valgte receptor"
                   >
-                    {soundWaveCorridorScope === 'all_downwind_corridors'
-                      ? '🌐 Alle Medvinds-Stier'
-                      : `🎯 Kun ${acousticRefractionSummary.selectedCorridor.receptorCode}`}
+                    {soundWaveCorridorScope === 'all_downwind_corridors' ? (
+                      <>
+                        <Globe className="w-3 h-3 shrink-0" />
+                        <span>Alle Medvinds-Stier</span>
+                      </>
+                    ) : (
+                      <>
+                        <Target className="w-3 h-3 shrink-0" />
+                        <span>Kun {acousticRefractionSummary.selectedCorridor.receptorCode}</span>
+                      </>
+                    )}
                   </button>
                   <button
                     type="button"
                     onClick={() => setForceStrongRefraction3D((v) => !v)}
-                    className={`px-1.5 py-0.5 rounded text-[9.5px] border cursor-pointer ${
+                    className={`px-1.5 py-0.5 rounded text-[11px] border cursor-pointer ${
                       forceStrongRefraction3D
                         ? 'bg-rose-600/30 border-rose-400 text-rose-200 font-bold'
                         : 'bg-slate-900 border-slate-700 text-slate-300'
@@ -9527,37 +11548,37 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
               {/* Acoustic Refraction & Barrier Bypass Telemetry Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                 <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1">
-                  <div className="text-[9px] uppercase text-slate-400">Medvinds-Refraktion</div>
+                  <div className="text-[11px] uppercase text-slate-400">Medvinds-Refraktion</div>
                   <div className="text-xs font-bold text-rose-300">
                     {acousticRefractionSummary.selectedCorridor.totalRefractionDb >= 0 ? '+' : ''}
                     {acousticRefractionSummary.selectedCorridor.totalRefractionDb.toFixed(1)} dB
                   </div>
-                  <div className="text-[8.5px] text-slate-400">
+                  <div className="text-[11px] text-slate-400">
                     ∂u/∂z = +{acousticRefractionSummary.windGradientDuDz} s⁻¹
                   </div>
                 </div>
                 <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1">
-                  <div className="text-[9px] uppercase text-slate-400">2,5m Skærmtab</div>
+                  <div className="text-[11px] uppercase text-slate-400">2,5m Skærmtab</div>
                   <div className="text-xs font-bold text-amber-300">
                     -{acousticRefractionSummary.selectedCorridor.barrierBypassLossDb.toFixed(1)} dB tabt
                   </div>
-                  <div className="text-[8.5px] text-slate-400">
+                  <div className="text-[11px] text-slate-400">
                     Rest-skærm:{' '}
                     {acousticRefractionSummary.selectedCorridor.remainingBarrierShieldingDb.toFixed(1)}{' '}
                     dB
                   </div>
                 </div>
                 <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1">
-                  <div className="text-[9px] uppercase text-slate-400">Krumningsradius R_c</div>
+                  <div className="text-[11px] uppercase text-slate-400">Krumningsradius R_c</div>
                   <div className="text-xs font-bold text-cyan-300">
                     {acousticRefractionSummary.selectedCorridor.rayCurvatureRadiusKm.toFixed(2)} km
                   </div>
-                  <div className="text-[8.5px] text-slate-400">
+                  <div className="text-[11px] text-slate-400">
                     Nedbøjning mod {acousticRefractionSummary.selectedCorridor.receptorCode}
                   </div>
                 </div>
                 <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1">
-                  <div className="text-[9px] uppercase text-slate-400">Receptor Støj L_Aeq</div>
+                  <div className="text-[11px] uppercase text-slate-400">Receptor Støj L_Aeq</div>
                   <div
                     className={`text-xs font-bold ${
                       acousticRefractionSummary.selectedCorridor.effectiveReceptorLaeqDb >
@@ -9569,7 +11590,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                     {acousticRefractionSummary.selectedCorridor.effectiveReceptorLaeqDb.toFixed(1)} /{' '}
                     {acousticRefractionSummary.hourlyNoiseLimitLaeqDb.toFixed(0)} dB(A)
                   </div>
-                  <div className="text-[8.5px] text-slate-400">
+                  <div className="text-[11px] text-slate-400">
                     Peak {acousticRefractionSummary.selectedCorridor.impulsePeakLafmaxDb.toFixed(0)} dB
                   </div>
                 </div>
@@ -9577,73 +11598,81 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
 
               {/* Sub-Toggles for Item #2 (Acoustisk Refraktions-Overlay), Item #5 (Lydbølge-Reflektion), and Item #6 (Barriere-Top Diffraktion) */}
               <div className="flex flex-wrap items-center justify-between gap-1.5 bg-slate-950/90 border border-indigo-500/30 rounded px-2 py-1.5">
-                <span className="text-[9px] uppercase text-slate-400">
+                <span className="text-[11px] uppercase text-slate-400">
                   3D Bølge-Fysik lag:
                 </span>
                 <div className="flex flex-wrap items-center gap-1">
                   <button
                     type="button"
                     onClick={() => setShowAcousticRefractionOverlay3D((v) => !v)}
-                    className={`px-2 py-0.5 rounded text-[9.5px] font-mono border cursor-pointer transition-colors ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono border cursor-pointer transition-colors inline-flex items-center gap-1 ${
                       showAcousticRefractionOverlay3D
                         ? 'bg-amber-400 text-slate-950 font-bold border-amber-200'
                         : 'bg-slate-900 text-amber-200 border-amber-500/40 hover:bg-slate-800'
                     }`}
                     title="Vis/skjul 'Acoustisk refraktions-overlay': lysende 3D-buer over støjskærmen i realtid baseret på maxDownwindRefractionDb"
                   >
-                    🌈 Refraktions-Overlay (Max +{acousticRefractionSummary.maxDownwindRefractionDb.toFixed(1)} dB):{' '}
-                    {showAcousticRefractionOverlay3D ? 'AKTIV' : 'SLUKKET'}
+                    <Volume2 className="w-3 h-3 shrink-0" />
+                    <span>
+                      Refraktions-Overlay (Max +{acousticRefractionSummary.maxDownwindRefractionDb.toFixed(1)} dB):{' '}
+                      {showAcousticRefractionOverlay3D ? 'AKTIV' : 'SLUKKET'}
+                    </span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setShowSoundWaveReflection3D((v) => !v)}
-                    className={`px-2 py-0.5 rounded text-[9.5px] font-mono border cursor-pointer transition-colors ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono border cursor-pointer transition-colors inline-flex items-center gap-1 ${
                       showSoundWaveReflection3D
                         ? 'bg-rose-500 text-white font-bold border-rose-300'
                         : 'bg-slate-900 text-rose-200 border-rose-500/40 hover:bg-slate-800'
                     }`}
                     title="Vis/skjul 'Lydbølge-Reflektion': tegner reflekterede bølgevektorer mod barrieren når lydbølgerne rammer skærmoverfladen"
                   >
-                    ↩️ Lydbølge-Reflektion: {showSoundWaveReflection3D ? 'AKTIV' : 'SLUKKET'}
+                    <Undo2 className="w-3 h-3 shrink-0" />
+                    <span>Lydbølge-Reflektion: {showSoundWaveReflection3D ? 'AKTIV' : 'SLUKKET'}</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setShowBarrierDiffractionArcs3D((v) => !v)}
-                    className={`px-2 py-0.5 rounded text-[9.5px] font-mono border cursor-pointer transition-colors ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono border cursor-pointer transition-colors inline-flex items-center gap-1 ${
                       showBarrierDiffractionArcs3D
                         ? 'bg-cyan-400 text-slate-950 font-bold border-cyan-200'
                         : 'bg-slate-900 text-cyan-200 border-cyan-500/40 hover:bg-slate-800'
                     }`}
                     title="Vis/skjul 'Barriere-Top Diffraktion': cirkulære bølgefront-segmenter der bøjer sig hen over barrierens top ind i skyggezonen"
                   >
-                    ◠ Cirkulær Top-Diffraktion: {showBarrierDiffractionArcs3D ? 'AKTIV' : 'SLUKKET'}
+                    <Layers className="w-3 h-3 shrink-0" />
+                    <span>Cirkulær Top-Diffraktion: {showBarrierDiffractionArcs3D ? 'AKTIV' : 'SLUKKET'}</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setShowHydraulicHammerImpulseWaves3D((v) => !v)}
-                    className={`px-2 py-0.5 rounded text-[9.5px] font-mono border cursor-pointer transition-colors ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono border cursor-pointer transition-colors inline-flex items-center gap-1 ${
                       showHydraulicHammerImpulseWaves3D
                         ? 'bg-fuchsia-500 text-white font-bold border-amber-200'
                         : 'bg-slate-900 text-fuchsia-200 border-fuchsia-500/40 hover:bg-slate-800'
                     }`}
                     title="Vis/skjul 3D visuel animation af impuls-støjbølger fra hydrauliske betonhammere, der forplantes og nedbøjes mod naboblokke baseret på beregnet refraktion (dB) pr. time"
                   >
-                    🔨 Impuls-Støjbølger fra Kilde ({acousticRefractionSummary.selectedCorridor.sourceCode} ·{' '}
-                    L_WA {acousticRefractionSummary.sourceSoundPowerLwaDb.toFixed(0)} dB ·{' '}
-                    {acousticRefractionSummary.isNoiseLimitExceededInSelectedHour
-                      ? `⚠ GRÆNSE OVERSKREDET +${acousticRefractionSummary.maxExceedanceDbInHour.toFixed(1)} dB`
-                      : 'Under grænse'}
-                    ): {showHydraulicHammerImpulseWaves3D ? 'AKTIV' : 'SLUKKET'}
+                    <Hammer className="w-3 h-3 shrink-0" />
+                    <span>
+                      Impuls-Støjbølger fra Kilde ({acousticRefractionSummary.selectedCorridor.sourceCode} ·{' '}
+                      L_WA {acousticRefractionSummary.sourceSoundPowerLwaDb.toFixed(0)} dB ·{' '}
+                      {acousticRefractionSummary.isNoiseLimitExceededInSelectedHour
+                        ? `⚠ GRÆNSE OVERSKREDET +${acousticRefractionSummary.maxExceedanceDbInHour.toFixed(1)} dB`
+                        : 'Under grænse'}
+                      ): {showHydraulicHammerImpulseWaves3D ? 'AKTIV' : 'SLUKKET'}
+                    </span>
                   </button>
                 </div>
               </div>
 
               {/* Quick Receptor Corridor Selector Pills */}
               <div className="flex flex-wrap items-center justify-between gap-1 bg-slate-950/80 border border-slate-800/90 rounded px-2 py-1">
-                <span className="text-[9px] uppercase text-slate-400">
+                <span className="text-[11px] uppercase text-slate-400">
                   Vælg Refraktions-Korridor (Kilde → Støjskærm → Receptor):
                 </span>
                 <div className="flex flex-wrap items-center gap-1">
@@ -9652,7 +11681,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                       key={corr.receptorId}
                       type="button"
                       onClick={() => onSelectReceptor(corr.receptorId)}
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-mono border cursor-pointer transition-colors ${
+                      className={`px-1.5 py-0.5 rounded text-[11px] font-mono border cursor-pointer transition-colors ${
                         corr.isSelectedReceptor
                           ? 'bg-indigo-500/35 border-indigo-400 text-indigo-100 font-bold'
                           : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-indigo-500/50'
@@ -9677,10 +11706,10 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <span className="text-amber-200 font-bold uppercase tracking-wider">
-                    💨 3D Dynamisk Støv-Emitter (Maskin-Belastning × Vind)
+                    3D Dynamisk Støv-Emitter (Maskin-Belastning × Vind)
                   </span>
                 </div>
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-950/90 border border-amber-400/70 text-amber-200">
+                <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-amber-950/90 border border-amber-400/70 text-amber-200">
                   {activeSourceCount} Aktive · Peak{' '}
                   {machineryDustEmitterSummary.peakVolumetricDensityMgM3.toFixed(1)} mg/m³ ·{' '}
                   {machineryDustEmitterSummary.meanDispersionSpeedMs.toFixed(1)} m/s
@@ -9690,7 +11719,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
               {/* Machine Load Output % Slider & Quick Presets */}
               <div className="bg-slate-950/90 border border-amber-500/30 rounded px-2 py-1.5 space-y-1.5">
                 <div className="flex flex-wrap items-center justify-between gap-1.5">
-                  <span className="text-[9.5px] text-slate-300">
+                  <span className="text-[11px] text-slate-300">
                     Maskinernes Belastnings-Output:{' '}
                     <strong className="text-amber-300">{machineryLoadOutputPct}%</strong> · Vind:{' '}
                     <strong className="text-cyan-300">
@@ -9708,7 +11737,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                         key={preset.pct}
                         type="button"
                         onClick={() => setMachineryLoadOutputPct(preset.pct)}
-                        className={`px-1.5 py-0.5 rounded text-[8.5px] border cursor-pointer ${
+                        className={`px-1.5 py-0.5 rounded text-[11px] border cursor-pointer ${
                           machineryLoadOutputPct === preset.pct
                             ? 'bg-amber-400 text-slate-950 font-bold border-amber-200'
                             : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-amber-400/60'
@@ -9732,7 +11761,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
               </div>
 
               {/* Per-Machine Volumetric Dust Density & Dispersion Speed Readout */}
-              <div className="rounded border border-slate-800 bg-slate-950/90 divide-y divide-slate-800/80 text-[9px]">
+              <div className="rounded border border-slate-800 bg-slate-950/90 divide-y divide-slate-800/80 text-[11px]">
                 {machineryDustEmitterSummary.machineTelemetries
                   .filter((m) => m.active)
                   .map((m) => (
@@ -9749,7 +11778,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                       <span className="truncate flex items-center gap-1.5">
                         <span className="font-bold text-amber-300">{m.sourceCode}</span>
                         <span className="truncate text-slate-300">{m.sourceName}</span>
-                        <span className="text-[8px] px-1 rounded bg-slate-800 text-amber-200">
+                        <span className="text-[11px] px-1 rounded bg-slate-800 text-amber-200">
                           Output {m.loadOutputPct}%
                         </span>
                       </span>
@@ -9775,8 +11804,9 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
 
         {/* Hover Entity Readout */}
         {hoveredEntityLabel && (
-          <div className="bg-[#0B0E17]/95 border border-cyan-500/60 rounded px-3 py-1.5 text-xs font-mono text-cyan-200 shadow-md">
-            🎯 {hoveredEntityLabel} (Klik for at inspicere)
+          <div className="bg-[#0B0E17]/95 border border-cyan-500/60 rounded px-3 py-1.5 text-xs font-mono text-cyan-200 shadow-md flex items-center gap-1.5">
+            <Target className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>{hoveredEntityLabel} (Klik for at inspicere)</span>
           </div>
         )}
       </div>
@@ -9797,8 +11827,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           <Sparkles className="w-3.5 h-3.5" />
           <span>
             {showMachineryDustEmitter3D
-              ? `💨 3D Støv-Emitter (${machineryDustEmitterSummary.peakVolumetricDensityMgM3.toFixed(1)} mg/m³ · ${machineryLoadOutputPct}%)`
-              : '💨 3D Støv-Emitter'}
+              ? `3D Støv-Emitter (${machineryDustEmitterSummary.peakVolumetricDensityMgM3.toFixed(1)} mg/m³ · ${machineryLoadOutputPct}%)`
+              : '3D Støv-Emitter'}
           </span>
         </button>
 
@@ -9815,8 +11845,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           <Volume2 className="w-3.5 h-3.5" />
           <span>
             {showAcousticRefractionOverlay3D
-              ? `🌈 Refraktions-Overlay (+${acousticRefractionSummary.maxDownwindRefractionDb.toFixed(1)} dB Buer)`
-              : '🌈 Refraktions-Overlay'}
+              ? `Refraktions-Overlay (+${acousticRefractionSummary.maxDownwindRefractionDb.toFixed(1)} dB Buer)`
+              : 'Refraktions-Overlay'}
           </span>
         </button>
 
@@ -9833,10 +11863,10 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           <Volume2 className="w-3.5 h-3.5" />
           <span>
             {showSoundWaveAnimation3D
-              ? `🔊 3D Lydbølge-Animation (${
+              ? `3D Lydbølge-Animation (${
                   acousticRefractionSummary.selectedCorridor.totalRefractionDb >= 0 ? '+' : ''
                 }${acousticRefractionSummary.selectedCorridor.totalRefractionDb.toFixed(1)} dB)`
-              : '🔊 3D Lydbølge-Animation'}
+              : '3D Lydbølge-Animation'}
           </span>
         </button>
 
@@ -9853,8 +11883,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           <Wind className="w-3.5 h-3.5" />
           <span>
             {showWindTunnelEddy3D
-              ? `🌀 3D Vindtunnel (Eddy > 10 m/s): AKTIV (${windTunnelEddySummary.effectiveTunnelWindMs.toFixed(1)} m/s)`
-              : '🌀 3D Vindtunnel (Eddy > 10 m/s)'}
+              ? `3D Vindtunnel (Eddy > 10 m/s): AKTIV (${windTunnelEddySummary.effectiveTunnelWindMs.toFixed(1)} m/s)`
+              : '3D Vindtunnel (Eddy > 10 m/s)'}
           </span>
         </button>
 
@@ -9868,11 +11898,11 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           }`}
           title="Vis/skjul 3D-varmekort over akkumulerede støv-doser ved de mest udsatte receptorer (animeres synkront med tidslinje-slideren for at visualisere ophobning af respirabelt støv i boligblokkenes gårdmiljøer)"
         >
-          <Sparkles className="w-3.5 h-3.5" />
+          <Flame className="w-3.5 h-3.5" />
           <span>
             {showDustDeposition3D
-              ? `🔥 3D Gårdmiljø Støv-Dosis Varmekort (${dustDepositionProgressHours.toFixed(1)}t)`
-              : '🔥 3D Gårdmiljø Støv-Dosis Varmekort'}
+              ? `3D Gårdmiljø Støv-Dosis Varmekort (${dustDepositionProgressHours.toFixed(1)}t)`
+              : '3D Gårdmiljø Støv-Dosis Varmekort'}
           </span>
         </button>
 
@@ -9886,13 +11916,13 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           }`}
           title="Vis/skjul 'Vis Vejr-Korrelation' overlay i 3D-scenen: viser korrelationen mellem vindhastighed (m/s) og observeret støv-intensitet (baseret på SHA-256 signerede observationer) som varmekort-punkter i 3D-rummet"
         >
-          <Compass className="w-3.5 h-3.5" />
+          <Thermometer className="w-3.5 h-3.5" />
           <span>
             {showWeatherCorrelation
-              ? `🌡️ Vis Vejr-Korrelation: AKTIV (r=${
+              ? `Vis Vejr-Korrelation: AKTIV (r=${
                   weatherCorrelationSummary.pearsonR >= 0 ? '+' : ''
                 }${weatherCorrelationSummary.pearsonR.toFixed(2)})`
-              : '🌡️ Vis Vejr-Korrelation'}
+              : 'Vis Vejr-Korrelation'}
           </span>
         </button>
 
@@ -9909,8 +11939,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           <Wind className="w-3.5 h-3.5" />
           <span>
             {showLeewardWake
-              ? '🌪️ Læ-Effekt (Vindstille Zoner): AKTIV'
-              : '🌪️ Vis Læ-Effekt (Vindstille Zoner)'}
+              ? 'Læ-Effekt (Vindstille Zoner): AKTIV'
+              : 'Vis Læ-Effekt (Vindstille Zoner)'}
           </span>
         </button>
 
@@ -9924,11 +11954,11 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           }`}
           title="Generér 'Tidsmæssig Asbest-Akkumulering' heatmap-overlay over hele døgnet (24 timer) til vurdering af samlet eksponeringsrisiko for naboer"
         >
-          <Sparkles className="w-3.5 h-3.5" />
+          <Hourglass className="w-3.5 h-3.5" />
           <span>
             {isTemporal24hAsbestosActive
-              ? '⏳ Tidsmæssig Asbest-Akkumulering (24t): AKTIV'
-              : '⏳ Tidsmæssig Asbest-Akkumulering (24t Døgn-Risiko)'}
+              ? 'Tidsmæssig Asbest-Akkumulering (24t): AKTIV'
+              : 'Tidsmæssig Asbest-Akkumulering (24t Døgn-Risiko)'}
           </span>
         </button>
         <button
@@ -9944,6 +11974,25 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           <Droplets className="w-3.5 h-3.5" />
           <span>{showSubsurfaceUI ? '3D Grundvand: AKTIV' : '3D Underjordisk Perkolation'}</span>
         </button>
+
+        {onToggleWaterMainLayer && (
+          <button
+            type="button"
+            data-testid="3d-hud-water-main-layer-btn"
+            onClick={onToggleWaterMainLayer}
+            className={`px-2.5 py-1.5 rounded border text-xs font-mono font-semibold flex items-center gap-1.5 shadow-md transition-colors cursor-pointer ${
+              showWaterMainLayer
+                ? 'bg-sky-500 text-slate-950 border-sky-200 font-bold'
+                : 'bg-[#0B0E17]/95 border-sky-500/60 hover:bg-sky-950 text-sky-200'
+            }`}
+            title="Slå Kierulffsvej DN200 Drikkevands Hovedrør 3D-lag til/fra"
+          >
+            <Droplets className="w-3.5 h-3.5" />
+            <span>
+              {showWaterMainLayer ? 'Drikkevands Hovedrør: TIL' : 'Drikkevands Hovedrør'}
+            </span>
+          </button>
+        )}
 
         {onSwitchTo2DPercolation && (
           <button
@@ -10018,7 +12067,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                     dt.setUTCDate(dt.getUTCDate() - 1);
                     onChangeDateIso(dt.toISOString().slice(0, 10));
                   }}
-                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[10px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
+                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[11px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
                   title="Forrige dato (-1 dag)"
                 >
                   −1d
@@ -10042,7 +12091,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                     dt.setUTCDate(dt.getUTCDate() + 1);
                     onChangeDateIso(dt.toISOString().slice(0, 10));
                   }}
-                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[10px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
+                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[11px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
                   title="Næste dato (+1 dag)"
                 >
                   +1d
@@ -10050,27 +12099,29 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 <button
                   type="button"
                   onClick={() => onChangeDateIso(new Date().toISOString().slice(0, 10))}
-                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-amber-400 hover:text-slate-950 text-[10px] font-bold text-amber-200 border border-amber-500/40 transition-colors cursor-pointer"
+                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-amber-400 hover:text-slate-950 text-[11px] font-bold text-amber-200 border border-amber-500/40 transition-colors cursor-pointer"
                   title="Skift til dags dato (I dag)"
                 >
                   I dag
                 </button>
               </div>
             ) : (
-              <span className="text-white font-extrabold">
-                📅 {selectedDateIso || currentWeather.isoTime.slice(0, 10)}
+              <span className="text-white font-extrabold inline-flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-cyan-300 shrink-0" />
+                <span>{selectedDateIso || currentWeather.isoTime.slice(0, 10)}</span>
               </span>
             )}
             <span className="text-cyan-400">·</span>
-            <span className="text-amber-300 font-extrabold">
-              🕒 kl. {currentWeather.hourLabel}
+            <span className="text-amber-300 font-extrabold inline-flex items-center gap-1">
+              <Clock className="w-3 h-3 text-amber-300 shrink-0" />
+              <span>kl. {currentWeather.hourLabel}</span>
             </span>
             {onStepHour && (
               <div className="flex items-center gap-1 ml-0.5 pl-1 border-l border-cyan-500/40">
                 <button
                   type="button"
                   onClick={() => onStepHour(-1)}
-                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[10px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
+                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[11px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
                   title="Forrige time (-1t)"
                 >
                   −1t
@@ -10078,14 +12129,14 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 <button
                   type="button"
                   onClick={() => onStepHour(1)}
-                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[10px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
+                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-[11px] font-bold text-cyan-200 border border-cyan-500/40 transition-colors cursor-pointer"
                   title="Næste time (+1t)"
                 >
                   +1t
                 </button>
               </div>
             )}
-            <span className="text-slate-400 text-[10px] hidden xl:inline">
+            <span className="text-slate-400 text-[11px] hidden xl:inline">
               ({currentWeather.temperature2m.toFixed(1)}°C · {currentWeather.windSpeed10m.toFixed(1)} m/s)
             </span>
           </div>
@@ -10111,6 +12162,34 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           </button>
         )}
 
+        <CompactSimulerMenu
+          showWaterMainLayer={Boolean(showWaterMainLayer)}
+          onToggleWaterMainLayer={onToggleWaterMainLayer}
+          showLerBuffer={showLerBuffer}
+          onToggleLerBuffer={onToggleLerBuffer}
+          hasSteelRoadPlates={hasSteelRoadPlates || waterMainTelemetry?.hasSteelRoadPlates}
+          onToggleSteelRoadPlates={onToggleSteelRoadPlates}
+          simulatedPipeRuptureActive={
+            simulatedPipeRuptureActive || waterMainTelemetry?.simulatedPipeRuptureActive
+          }
+          onToggleSimulatedPipeRupture={onToggleSimulatedPipeRupture}
+          isS3ValveLockoutActive={
+            isS3ValveLockoutActive ||
+            Boolean(
+              waterMainTelemetry?.valves.some((v) => v.code === 'V-VEST' && v.status === 'closed')
+            )
+          }
+          onToggleS3ValveLockout={onToggleS3ValveLockout}
+          hasVirtualLeakPin={Boolean(virtualLeakPinPoint)}
+          onToggleVirtualLeakPinQuick={onToggleVirtualLeakPinQuick}
+          sources={sources}
+          onToggleSourceActive={onToggleSourceActive}
+          onIsolateNearbyMachinery={onIsolateNearbyMachinery}
+          onRestoreAllMachinery={onRestoreAllMachinery}
+          pipePpvMmPerSec={waterMainTelemetry?.pipePpvMmPerSec}
+          align="right"
+        />
+
         {/* 'Kun Kort' Button + Top-Right 'Afslut' Button when 'Kun Kort' is active */}
         {!effectiveMapOnly ? (
           <button
@@ -10119,14 +12198,14 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
             className="px-2.5 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 border border-emerald-200 text-xs font-mono font-extrabold text-slate-950 flex items-center gap-1.5 shadow-md transition-colors cursor-pointer"
             title="Kun Kort — Vis kun 3D-kortet med filtre og skjul øvrige paneler"
           >
-            <Maximize2 className="w-3.5 h-3.5 text-slate-950" />
-            <span>🗺️ Kun Kort</span>
+            <MapIcon className="w-3.5 h-3.5 text-slate-950" />
+            <span>Kun Kort</span>
           </button>
         ) : (
           <button
             type="button"
             onClick={handleToggleMapOnly}
-            className="px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-500 border-2 border-rose-200 text-xs font-mono font-extrabold text-white flex items-center gap-1.5 shadow-xl transition-colors cursor-pointer"
+            className="px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-500 border border-rose-300 text-xs font-mono font-extrabold text-white flex items-center gap-1.5 shadow-lg transition-colors cursor-pointer"
             title="Afslut 'Kun Kort' visning (Esc)"
           >
             <X className="w-4 h-4 text-white" />
@@ -10206,13 +12285,17 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 {isBottomDockReleased && (
                   <GripHorizontal className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                 )}
-                <span className="text-[10px] font-mono uppercase text-slate-400 mr-1 flex items-center gap-1">
+                <span className="text-[11px] font-mono uppercase text-slate-400 mr-1 flex items-center gap-1">
                   <Camera className="w-3.5 h-3.5 text-cyan-400" />
                   <span>Kamera:</span>
                 </span>
                 {[
                   { key: 'overview', label: 'Overblik' },
-                  { key: 'underground_aquifer', label: '💧 Underjordisk Grundvand (-25m)' },
+                  {
+                    key: 'blok1_blok2_percolation',
+                    label: 'Blok 1 & 2 Perkolation (Pb & PAH)',
+                  },
+                  { key: 'underground_aquifer', label: 'Grundvand Overblik (-25m)' },
                   { key: 'downwind_corridor', label: 'Medvinds-Korridor' },
                   { key: 'source_blok1', label: 'Kilde (Blok 1)' },
                   { key: 'receptor_roedtjoornevej', label: 'Rødtjørnevej 2' },
@@ -10223,8 +12306,15 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                     key={preset.key}
                     type="button"
                     onClick={() => {
-                      if (preset.key === 'underground_aquifer') {
-                        handleToggleUnderground3D(true);
+                      if (preset.key === 'blok1_blok2_percolation') {
+                        handleFocusBlok12Percolation3D();
+                      } else if (preset.key === 'underground_aquifer') {
+                        if (onToggleUndergroundMode) {
+                          onToggleUndergroundMode(true);
+                        } else {
+                          setLocalUndergroundMode(true);
+                        }
+                        handleSelectCameraPreset('underground_aquifer');
                       } else {
                         handleSelectCameraPreset(preset.key as CameraPresetKey);
                       }
@@ -10242,7 +12332,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
 
               <div className="flex items-center gap-1.5">
                 {/* Inline Zoom + / - in Bottom Camera Dock */}
-                <div className="inline-flex items-center rounded bg-slate-900 border border-cyan-500/50 overflow-hidden font-mono text-[10px]">
+                <div className="inline-flex items-center rounded bg-slate-900 border border-cyan-500/50 overflow-hidden font-mono text-[11px]">
                   <button
                     type="button"
                     onClick={() => handleZoom3D('in')}
@@ -10265,7 +12355,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsDockCollapsed(true)}
-                  className="px-2 py-1 rounded bg-slate-900 border border-slate-700 hover:border-amber-400/60 text-[10px] font-mono font-semibold text-slate-200 hover:text-amber-200 flex items-center gap-1"
+                  className="px-2 py-1 rounded bg-slate-900 border border-slate-700 hover:border-amber-400/60 text-[11px] font-mono font-semibold text-slate-200 hover:text-amber-200 flex items-center gap-1"
                   title="Minimer 3D kontrolpanelet"
                 >
                   <Minus className="w-3 h-3 text-amber-400" />
@@ -10274,7 +12364,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsBottomDockReleased((v) => !v)}
-                  className={`px-2 py-1 rounded border text-[10px] font-mono font-semibold flex items-center gap-1 ${
+                  className={`px-2 py-1 rounded border text-[11px] font-mono font-semibold flex items-center gap-1 ${
                     isBottomDockReleased
                       ? 'bg-cyan-500/25 border-cyan-400 text-cyan-100'
                       : 'bg-slate-900 border-slate-700 hover:border-cyan-400/60 text-cyan-300'
@@ -10323,7 +12413,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                         key={btn.label}
                         type="button"
                         onClick={() => handleSetPrecipOverride(btn.val)}
-                        className={`px-2 py-0.5 rounded text-[10px] border ${
+                        className={`px-2 py-0.5 rounded text-[11px] border ${
                           active
                             ? 'bg-cyan-400 text-slate-950 font-bold border-cyan-200'
                             : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
@@ -10398,26 +12488,28 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   }`}
                   title="Slå 3D Asbest-Fiber Sprednings-Heatmap (fibre/cm³ mod BEK 613/2026 GV = 0,003 fibre/cm³) til/fra"
                 >
-                  <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+                  <Biohazard className="w-3.5 h-3.5 text-rose-400" />
                   <span>
-                    ☣ 3D Asbest-Fiber Heatmap: {showAsbestosHeatmap ? 'AKTIV' : 'SLUKKET'}
+                    3D Asbest-Fiber Heatmap: {showAsbestosHeatmap ? 'AKTIV' : 'SLUKKET'}
                   </span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleToggleTemporal24hAsbestos()}
-                  className={`px-2.5 py-1 rounded text-xs font-mono font-semibold flex items-center gap-1.5 border transition-colors ${
+                  className={`px-2.5 py-1 rounded text-xs font-mono font-semibold flex items-center gap-1.5 border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     isTemporal24hAsbestosActive
                       ? 'bg-fuchsia-600/35 border-fuchsia-400 text-fuchsia-100 shadow-xs'
                       : 'bg-slate-900 border-slate-800 text-fuchsia-300 hover:border-fuchsia-500/60'
                   }`}
-                  title="Generér 'Tidsmæssig Asbest-Akkumulering' heatmap-overlay over hele døgnet (24t samlet eksponeringsrisiko for naboer)"
+                  title="Skift dynamisk mellem Øjebliksbillede (realtids fibre/cm³) og 24-timers kumulativ eksponeringsrisiko (fibre/cm³·t) i 3D-heatmappet"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-fuchsia-400" />
+                  <Layers className="w-3.5 h-3.5 text-fuchsia-400" />
                   <span>
-                    ⏳ Tidsmæssig Asbest-Akkumulering (24t):{' '}
-                    {isTemporal24hAsbestosActive ? 'AKTIV' : 'SLUKKET'}
+                    Tidsmæssig Akkumulering:{' '}
+                    {isTemporal24hAsbestosActive
+                      ? '24t Kumulativ Risiko'
+                      : `Øjebliksbillede (kl. ${currentWeather.hourLabel})`}
                   </span>
                 </button>
 
@@ -10433,7 +12525,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 >
                   <Wind className="w-3.5 h-3.5 text-amber-400" />
                   <span>
-                    🌪️ Læ-Effekt (Vindstille Zoner): {showLeewardWake ? 'AKTIV' : 'SLUKKET'}
+                    Læ-Effekt (Vindstille Zoner): {showLeewardWake ? 'AKTIV' : 'SLUKKET'}
                   </span>
                 </button>
 
@@ -10447,9 +12539,9 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   }`}
                   title="Vis/skjul 'Vis Vejr-Korrelation' overlay i 3D-scenen (korrelation mellem vindhastighed og observeret støv-intensitet baseret på SHA-256 signerede observationer som varmekort-punkter i 3D-rummet)"
                 >
-                  <Compass className="w-3.5 h-3.5 text-orange-400" />
+                  <Thermometer className="w-3.5 h-3.5 text-orange-400" />
                   <span>
-                    🌡️ Vis Vejr-Korrelation: {showWeatherCorrelation ? 'AKTIV' : 'SLUKKET'}
+                    Vis Vejr-Korrelation: {showWeatherCorrelation ? 'AKTIV' : 'SLUKKET'}
                   </span>
                 </button>
 
@@ -10465,7 +12557,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                   <span>
-                    🪨 3D Støvnedfald &amp; Akkumulering:{' '}
+                    3D Støvnedfald &amp; Akkumulering:{' '}
                     {showDustDeposition3D
                       ? `AKTIV (${dustDepositionProgressHours.toFixed(1)}t)`
                       : 'SLUKKET'}
@@ -10484,7 +12576,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 >
                   <Wind className="w-3.5 h-3.5 text-cyan-400" />
                   <span>
-                    🌀 3D Vindtunnel (Eddy &gt; 10 m/s):{' '}
+                    3D Vindtunnel (Eddy &gt; 10 m/s):{' '}
                     {showWindTunnelEddy3D
                       ? `AKTIV (${windTunnelEddySummary.effectiveTunnelWindMs.toFixed(1)} m/s)`
                       : 'SLUKKET'}
@@ -10503,7 +12595,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 >
                   <Volume2 className="w-3.5 h-3.5 text-indigo-400" />
                   <span>
-                    🔊 3D Lydbølge-Animation:{' '}
+                    3D Lydbølge-Animation:{' '}
                     {showSoundWaveAnimation3D
                       ? `AKTIV (${
                           acousticRefractionSummary.selectedCorridor.totalRefractionDb >= 0 ? '+' : ''
@@ -10525,9 +12617,9 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   }`}
                   title="Vis/skjul 3D animation af impuls-støjbølger fra hydrauliske betonhammere mod naboblokke baseret på beregnet refraktion (dB) pr. time"
                 >
-                  <Volume2 className="w-3.5 h-3.5 text-fuchsia-300" />
+                  <Hammer className="w-3.5 h-3.5 text-fuchsia-300" />
                   <span>
-                    🔨 Betonhammer Impuls-Bølger (kl. {currentWeather.hourLabel}):{' '}
+                    Betonhammer Impuls-Bølger (kl. {currentWeather.hourLabel}):{' '}
                     {showSoundWaveAnimation3D && showHydraulicHammerImpulseWaves3D
                       ? `AKTIV (${
                           acousticRefractionSummary.selectedCorridor.totalRefractionDb >= 0 ? '+' : ''
@@ -10548,7 +12640,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                   <span>
-                    💨 3D Støv-Emitter:{' '}
+                    3D Støv-Emitter:{' '}
                     {showMachineryDustEmitter3D
                       ? `AKTIV (${machineryDustEmitterSummary.peakVolumetricDensityMgM3.toFixed(1)} mg/m³)`
                       : 'SLUKKET'}
@@ -10567,7 +12659,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 >
                   <Volume2 className="w-3.5 h-3.5 text-rose-400" />
                   <span>
-                    🌈 Refraktions-Overlay:{' '}
+                    Refraktions-Overlay:{' '}
                     {showAcousticRefractionOverlay3D
                       ? `AKTIV (+${acousticRefractionSummary.maxDownwindRefractionDb.toFixed(1)} dB)`
                       : 'SLUKKET'}
@@ -10584,9 +12676,9 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   }`}
                   title="Vis/skjul 'Lydbølge-Reflektion' (reflekterede bølgevektorer mod barrieren når lydbølger rammer skærmoverfladen)"
                 >
-                  <Volume2 className="w-3.5 h-3.5 text-pink-400" />
+                  <Undo2 className="w-3.5 h-3.5 text-pink-400" />
                   <span>
-                    ↩️ Lydbølge-Reflektion: {showSoundWaveReflection3D ? 'AKTIV' : 'SLUKKET'}
+                    Lydbølge-Reflektion: {showSoundWaveReflection3D ? 'AKTIV' : 'SLUKKET'}
                   </span>
                 </button>
 
@@ -10600,9 +12692,9 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   }`}
                   title="Vis/skjul 'Barriere-Top Diffraktion' (cirkulære bølgefront-segmenter der bøjer sig hen over barrierens top)"
                 >
-                  <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
+                  <Layers className="w-3.5 h-3.5 text-cyan-400" />
                   <span>
-                    ◠ Top-Diffraktion: {showBarrierDiffractionArcs3D ? 'AKTIV' : 'SLUKKET'}
+                    Top-Diffraktion: {showBarrierDiffractionArcs3D ? 'AKTIV' : 'SLUKKET'}
                   </span>
                 </button>
 
@@ -10617,6 +12709,23 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                 >
                   <Layers className="w-3.5 h-3.5 text-rose-400" />
                   <span>3D Isokoner</span>
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="toggle-plume-path-animation-3d-btn"
+                  onClick={() => setShowPlumePathAnimation3D((v) => !v)}
+                  className={`px-2.5 py-1 rounded text-xs font-mono font-semibold flex items-center gap-1.5 border transition-colors ${
+                    showPlumePathAnimation3D
+                      ? 'bg-cyan-500/25 border-cyan-400 text-cyan-100 shadow-xs'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-cyan-500/50'
+                  }`}
+                  title="Vis/skjul 3D 'Fane-stianimation': animerer beregnet Gaussisk puff-spredning langs vindretningen over tid (+0t til +5t)"
+                >
+                  <Navigation className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>
+                    Fane-stianimation: {showPlumePathAnimation3D ? 'AKTIV' : 'SLUKKET'}
+                  </span>
                 </button>
 
                 <button
@@ -10642,8 +12751,9 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   }`}
                   title="Tegn et semi-transparent horisontalt snitplan i højden z_NPL på hver beboet blok (a_inhabited) med indadrettede røde vektorpile under planet og udadrettede cyan vektorpile over planet"
                 >
-                  <span>🌡️ Vis 3D Neutraltryksplan &amp; Indeklima-Sug</span>
-                  <span className="px-1.5 py-0.2 rounded bg-slate-950/90 text-[10px]">
+                  <Thermometer className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Vis 3D Neutraltryksplan &amp; Indeklima-Sug</span>
+                  <span className="px-1.5 py-0.2 rounded bg-slate-950/90 text-[11px]">
                     z_NPL = {neutralPressurePlaneHeightMeters.toFixed(1)}m
                   </span>
                 </button>
@@ -10652,7 +12762,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
               {/* Active Demolition Source Toggles */}
               {onToggleSourceActive && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] font-mono uppercase text-slate-400">Kilder:</span>
+                  <span className="text-[11px] font-mono uppercase text-slate-400">Kilder:</span>
                   {sources.slice(0, 4).map((src) => (
                     <button
                       key={src.id}
@@ -10676,8 +12786,9 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
             {showAsbestosHeatmap && !showSubsurfaceUI && (
               <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/90 text-[11px] font-mono">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-rose-300 font-semibold">
-                    ☣ Kilde-Filter (Stof-panel):
+                  <span className="text-rose-300 font-semibold inline-flex items-center gap-1">
+                    <Biohazard className="w-3 h-3 shrink-0" />
+                    <span>Kilde-Filter (Stof-panel):</span>
                   </span>
                   <button
                     type="button"
@@ -10729,10 +12840,11 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
 
             {/* Row 5: 3D Building Operational Categories (a–e) Filter & Quick Status Switcher */}
             {!showSubsurfaceUI && (
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/90 text-[10.5px] font-mono">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/90 text-[11px] font-mono">
                 <div className="flex flex-wrap items-center gap-1">
-                  <span className="text-cyan-300 font-semibold mr-1">
-                    🏢 3D Bygningskategorier (29):
+                  <span className="text-cyan-300 font-semibold mr-1 inline-flex items-center gap-1">
+                    <Building2 className="w-3 h-3 shrink-0" />
+                    <span>3D Bygningskategorier (29):</span>
                   </span>
                   {(
                     [
@@ -10784,7 +12896,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                           e.target.value as BuildingOperationalCategory
                         )
                       }
-                      className="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-[10px] font-mono text-white"
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-[11px] font-mono text-white"
                     >
                       {(
                         Object.values(BUILDING_CATEGORY_METADATA) as Array<
@@ -10803,10 +12915,11 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
 
             {/* Row 6: 3D Neutral Pressure Plane (z_NPL) Elevation Controls when active */}
             {show3DNeutralPressurePlane && !showSubsurfaceUI && (
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/90 text-[10.5px] font-mono">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/90 text-[11px] font-mono">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-amber-300 font-bold">
-                    🌡️ 3D Neutraltryksplan (z_NPL) på Beboede Blokke (a. Beboet):
+                  <span className="text-amber-300 font-bold inline-flex items-center gap-1">
+                    <Thermometer className="w-3 h-3 shrink-0" />
+                    <span>3D Neutraltryksplan (z_NPL) på Beboede Blokke (a. Beboet):</span>
                   </span>
                   <span className="text-rose-300">
                     ▼ Under z_NPL ({neutralPressurePlaneHeightMeters.toFixed(1)} m): Røde

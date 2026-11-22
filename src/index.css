@@ -11,6 +11,39 @@ html {
   -webkit-overflow-scrolling: touch;
 }
 
+:root {
+  /* 4-Trins Skifer-Overfladehierarki (Tonal Elevation — WCAG 2.2 AA & ANSI/ISA-101) */
+  --surface-canvas: #0B0F19;
+  --surface-panel: #111827;
+  --surface-card: #1E293B;
+  --surface-overlay: #263449;
+  --border-subtle: #334155;
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+
+  /* ANSI/ISA-18.2 Semantiske Status-Tokens */
+  --status-critical-text: #F87171;
+  --status-critical-border: #EF4444;
+  --status-warning-text: #FBBF24;
+  --status-warning-border: #F59E0B;
+  --status-action-text: #38BDF8;
+  --status-action-border: #0284C7;
+  --status-normal-text: #94A3B8;
+  --status-verified-text: #4ADE80;
+
+  /* Kompatibilitets-aliaser til eksisterende ISA-variabler */
+  --isa-surface-0: var(--surface-canvas);
+  --isa-surface-1: var(--surface-panel);
+  --isa-surface-2: var(--surface-card);
+  --isa-surface-3: var(--surface-overlay);
+  --isa-border-subtle: var(--border-subtle);
+  --isa-border-default: var(--border-subtle);
+  --isa-border-elevated: #475569;
+
+  /* Analyst Density Mode Scaling (Standard = 1, Kompakt Tilsyn = 0.80) */
+  --density-scale: 1;
+}
+
 @layer base {
   html,
   body,
@@ -23,13 +56,41 @@ html {
     -webkit-overflow-scrolling: touch;
   }
 
+  @media (min-width: 1024px) {
+    html:not(:has(.ringparken-app-shell[data-edition-forced='true'])),
+    body:not(:has(.ringparken-app-shell[data-edition-forced='true'])),
+    body:not(:has(.ringparken-app-shell[data-edition-forced='true'])) #root {
+      height: 100dvh;
+      max-height: 100dvh;
+      overflow: hidden;
+    }
+  }
+
   .overflow-y-auto {
     @apply scroll-smooth;
     -webkit-overflow-scrolling: touch;
   }
 
   body {
+    background-color: var(--surface-canvas);
+    color: var(--text-primary);
     font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+
+  button,
+  input,
+  select,
+  textarea,
+  table,
+  thead,
+  tbody,
+  tfoot,
+  tr,
+  th,
+  td,
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 
   code, pre, .font-mono {
@@ -39,6 +100,15 @@ html {
 }
 
 @media print {
+  html,
+  body,
+  #root,
+  .ringparken-app-shell,
+  #main-workspace-anchor {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
   body {
     background: #ffffff !important;
     color: #0f172a !important;
@@ -120,6 +190,23 @@ html {
   align-self: end;
 }
 
+@media screen {
+  #main-workspace-anchor aside.sidebar .pdf-report-widget-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "header"
+      "stats"
+      "meta"
+      "actions";
+  }
+
+  #main-workspace-anchor aside.sidebar .pdf-grid-area-stats,
+  #main-workspace-anchor aside.sidebar .pdf-grid-area-actions {
+    justify-self: stretch;
+    align-self: stretch;
+  }
+}
+
 /* Automatic height adaptation when windows/panels are minimized */
 [data-window-minimized="true"],
 .window-minimized-collapse {
@@ -130,25 +217,892 @@ html {
   align-self: flex-start !important;
 }
 
+/* Global 'Minimer alle' i højre sidepanel: skjuler alle sekundære paneler/kort i sidepanelet undtagen det aktive analysevindue */
+#main-workspace-anchor aside.sidebar [data-sidebar-scroll-body="true"][data-minimize-others="true"] > div > :not([data-window-id][data-window-minimized="false"]):not(:has([data-window-id][data-window-minimized="false"])) {
+  display: none !important;
+}
+
+#main-workspace-anchor aside.sidebar [data-sidebar-scroll-body="true"][data-minimize-others="true"] [data-window-minimized="true"] {
+  display: none !important;
+}
+
 @keyframes sQuotientWarningPulse {
   0%,
   100% {
-    transform: scale(1);
     opacity: 1;
-    box-shadow:
-      0 0 0 0 rgba(244, 63, 94, 0.85),
-      0 0 16px rgba(244, 63, 94, 0.9);
+    border-color: var(--status-critical-border);
   }
   50% {
-    transform: scale(1.04);
-    opacity: 0.88;
-    box-shadow:
-      0 0 0 6px rgba(244, 63, 94, 0),
-      0 0 24px rgba(251, 191, 36, 0.95);
+    opacity: 0.82;
+    border-color: var(--status-warning-border);
   }
 }
 
 .s-quotient-warning-pulse,
 [data-s-warning-active="true"] {
-  animation: sQuotientWarningPulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: sQuotientWarningPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .s-quotient-warning-pulse,
+  [data-s-warning-active="true"],
+  .animate-pulse,
+  .animate-ping,
+  .animate-bounce {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ============================================================================
+ * AUTOMATIC WIDTH & ORIENTATION ADAPTATION
+ * Covers Standard (Desktop), Tablet, and Mobil in both Stående (Portrait)
+ * and Liggende (Landscape) states — natively via CSS media queries AND via
+ * explicit data-effective-edition / data-effective-orientation modes.
+ * ============================================================================ */
+.ringparken-app-shell {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.ringparken-app-shell *,
+.ringparken-app-shell *::before,
+.ringparken-app-shell *::after {
+  box-sizing: border-box;
+}
+
+/* ============================================================================
+ * ANALYST DENSITY MODE ('comfortable' = 1.00, 'compact' = 0.80)
+ * Tightens card padding, vertical spacing & table rows ~20% on 13" laptops
+ * without hiding any buttons, badges, or columns.
+ * ============================================================================ */
+.ringparken-app-shell[data-density='comfortable'] {
+  --density-scale: 1;
+}
+
+.ringparken-app-shell[data-density='compact'] {
+  --density-scale: 0.8;
+}
+
+.ringparken-app-shell[data-density='compact'] [data-sidebar-scroll-body="true"] .p-5,
+.ringparken-app-shell[data-density='compact'] [role="dialog"] .p-5 {
+  padding: calc(1.25rem * var(--density-scale));
+}
+
+.ringparken-app-shell[data-density='compact'] [data-sidebar-scroll-body="true"] .p-4,
+.ringparken-app-shell[data-density='compact'] [role="dialog"] .p-4 {
+  padding: calc(1rem * var(--density-scale));
+}
+
+.ringparken-app-shell[data-density='compact'] [data-sidebar-scroll-body="true"] .p-3\.5,
+.ringparken-app-shell[data-density='compact'] [role="dialog"] .p-3\.5 {
+  padding: calc(0.875rem * var(--density-scale));
+}
+
+.ringparken-app-shell[data-density='compact'] [data-sidebar-scroll-body="true"] .p-3,
+.ringparken-app-shell[data-density='compact'] [role="dialog"] .p-3 {
+  padding: calc(0.75rem * var(--density-scale));
+}
+
+.ringparken-app-shell[data-density='compact'] [data-sidebar-scroll-body="true"] .p-2\.5,
+.ringparken-app-shell[data-density='compact'] [role="dialog"] .p-2\.5 {
+  padding: calc(0.625rem * var(--density-scale));
+}
+
+.ringparken-app-shell[data-density='compact'] [data-sidebar-scroll-body="true"] .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: calc(1rem * var(--density-scale));
+}
+
+.ringparken-app-shell[data-density='compact'] [data-sidebar-scroll-body="true"] .space-y-3 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: calc(0.75rem * var(--density-scale));
+}
+
+.ringparken-app-shell[data-density='compact'] [data-sidebar-scroll-body="true"] .space-y-2\.5 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: calc(0.625rem * var(--density-scale));
+}
+
+.ringparken-app-shell[data-density='compact'] [data-sidebar-scroll-body="true"] .space-y-2 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: calc(0.5rem * var(--density-scale));
+}
+
+.ringparken-app-shell[data-density='compact'] [data-sidebar-scroll-body="true"] .gap-4,
+.ringparken-app-shell[data-density='compact'] [role="dialog"] .gap-4 {
+  gap: calc(1rem * var(--density-scale));
+}
+
+.ringparken-app-shell[data-density='compact'] [data-sidebar-scroll-body="true"] .gap-3,
+.ringparken-app-shell[data-density='compact'] [role="dialog"] .gap-3 {
+  gap: calc(0.75rem * var(--density-scale));
+}
+
+.ringparken-app-shell[data-density='compact'] table th,
+.ringparken-app-shell[data-density='compact'] table td {
+  padding-top: calc(0.45rem * var(--density-scale));
+  padding-bottom: calc(0.45rem * var(--density-scale));
+  line-height: 1.25;
+}
+
+#main-workspace-anchor,
+#main-workspace-anchor > div,
+#main-workspace-anchor > aside.sidebar {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 1A. MOBIL — STÅENDE (Portrait, width <= 767px) */
+@media screen and (max-width: 767px) and (orientation: portrait) {
+  .ringparken-app-shell {
+    width: 100%;
+    max-width: 100dvw;
+  }
+  #main-workspace-anchor.main-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) !important;
+    min-height: auto;
+  }
+  #main-workspace-anchor > div,
+  #main-workspace-anchor > aside.sidebar {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    min-height: auto;
+  }
+}
+
+/* 1B. MOBIL — LIGGENDE (Landscape on phones, max-width <= 932px & max-height <= 540px) */
+@media screen and (max-width: 932px) and (max-height: 540px) and (orientation: landscape) {
+  .ringparken-app-shell {
+    width: 100%;
+    max-width: 100dvw;
+  }
+  #main-workspace-anchor.main-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) !important;
+    min-height: auto;
+  }
+  #main-workspace-anchor > div {
+    grid-column: 1 / 2 !important;
+    width: 100% !important;
+    min-height: 320px;
+  }
+  #main-workspace-anchor > aside.sidebar {
+    grid-column: 2 / 3 !important;
+    width: 100% !important;
+    min-height: 320px;
+  }
+}
+
+/* 2A. TABLET — STÅENDE (Portrait, 768px..1023px) */
+@media screen and (min-width: 768px) and (max-width: 1023px) and (orientation: portrait) {
+  .ringparken-app-shell {
+    width: 100%;
+    max-width: 100dvw;
+  }
+  #main-workspace-anchor.main-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  #main-workspace-anchor > div,
+  #main-workspace-anchor > aside.sidebar {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+}
+
+/* 2B. TABLET — LIGGENDE (Landscape, 768px..1023px) */
+@media screen and (min-width: 768px) and (max-width: 1023px) and (orientation: landscape) {
+  .ringparken-app-shell {
+    width: 100%;
+    max-width: 100dvw;
+  }
+  #main-workspace-anchor.main-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr) !important;
+  }
+  #main-workspace-anchor > div {
+    grid-column: 1 / 2 !important;
+    width: 100% !important;
+  }
+  #main-workspace-anchor > aside.sidebar {
+    grid-column: 2 / 3 !important;
+    width: 100% !important;
+  }
+}
+
+/* 3B. STANDARD (Desktop / Widescreen) — LIGGENDE (Landscape, min-width: 1200px) */
+@media screen and (min-width: 1200px) and (orientation: landscape) {
+  .ringparken-app-shell {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+/* Explicit Edition & Orientation Adaptation Modes (Standard / Tablet / Mobil × Stående / Liggende) */
+.ringparken-app-shell[data-edition-forced='true'] {
+  margin-left: auto;
+  margin-right: auto;
+  transition: max-width 200ms ease;
+}
+
+.ringparken-app-shell[data-effective-edition='mobile'][data-edition-forced='true'][data-effective-orientation='portrait'] {
+  max-width: min(100%, 430px);
+  border-left: 1px solid rgba(51, 65, 85, 0.75);
+  border-right: 1px solid rgba(51, 65, 85, 0.75);
+}
+
+.ringparken-app-shell[data-effective-edition='mobile'][data-edition-forced='true'][data-effective-orientation='landscape'] {
+  max-width: min(100%, 896px);
+  border-left: 1px solid rgba(51, 65, 85, 0.75);
+  border-right: 1px solid rgba(51, 65, 85, 0.75);
+}
+
+.ringparken-app-shell[data-effective-edition='tablet'][data-edition-forced='true'][data-effective-orientation='portrait'] {
+  max-width: min(100%, 820px);
+  border-left: 1px solid rgba(51, 65, 85, 0.75);
+  border-right: 1px solid rgba(51, 65, 85, 0.75);
+}
+
+.ringparken-app-shell[data-effective-edition='tablet'][data-edition-forced='true'][data-effective-orientation='landscape'] {
+  max-width: min(100%, 1180px);
+  border-left: 1px solid rgba(51, 65, 85, 0.75);
+  border-right: 1px solid rgba(51, 65, 85, 0.75);
+}
+
+.ringparken-app-shell[data-effective-edition='standard'][data-edition-forced='true'][data-effective-orientation='portrait'] {
+  max-width: min(100%, 1080px);
+  border-left: 1px solid rgba(51, 65, 85, 0.6);
+  border-right: 1px solid rgba(51, 65, 85, 0.6);
+}
+
+.ringparken-app-shell[data-effective-edition='standard'][data-effective-orientation='landscape'] {
+  max-width: 100%;
+}
+
+@media screen and (max-width: 1023px) {
+  .ringparken-app-shell[data-effective-orientation='portrait'] #main-workspace-anchor.main-workspace {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .ringparken-app-shell[data-effective-orientation='portrait'] #main-workspace-anchor > div,
+  .ringparken-app-shell[data-effective-orientation='portrait'] #main-workspace-anchor > aside.sidebar {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+}
+
+.ringparken-app-shell[data-edition-forced='true'][data-effective-orientation='portrait'] #main-workspace-anchor.main-workspace {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.ringparken-app-shell[data-edition-forced='true'][data-effective-orientation='portrait'] #main-workspace-anchor > div,
+.ringparken-app-shell[data-edition-forced='true'][data-effective-orientation='portrait'] #main-workspace-anchor > aside.sidebar {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+}
+
+.ringparken-app-shell[data-edition-forced='true'][data-effective-edition='mobile'][data-effective-orientation='landscape']
+  #main-workspace-anchor.main-workspace {
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) !important;
+}
+
+.ringparken-app-shell[data-edition-forced='true'][data-effective-edition='mobile'][data-effective-orientation='landscape']
+  #main-workspace-anchor > div {
+  grid-column: 1 / 2 !important;
+  width: 100% !important;
+}
+
+.ringparken-app-shell[data-edition-forced='true'][data-effective-edition='mobile'][data-effective-orientation='landscape']
+  #main-workspace-anchor > aside.sidebar {
+  grid-column: 2 / 3 !important;
+  width: 100% !important;
+}
+
+.ringparken-app-shell[data-edition-forced='true'][data-effective-edition='tablet'][data-effective-orientation='landscape']
+  #main-workspace-anchor.main-workspace {
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr) !important;
+}
+
+.ringparken-app-shell[data-edition-forced='true'][data-effective-edition='tablet'][data-effective-orientation='landscape']
+  #main-workspace-anchor > div {
+  grid-column: 1 / 2 !important;
+  width: 100% !important;
+}
+
+.ringparken-app-shell[data-edition-forced='true'][data-effective-edition='tablet'][data-effective-orientation='landscape']
+  #main-workspace-anchor > aside.sidebar {
+  grid-column: 2 / 3 !important;
+  width: 100% !important;
+}
+
+.ringparken-app-shell[data-effective-edition='mobile'] .sidebar-tab-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.ringparken-app-shell[data-effective-edition='tablet'][data-effective-orientation='portrait']
+  .sidebar-tab-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+/* ============================================================================
+ * #main-workspace-anchor CSS ANIMATION FOR REGISTERED NEIGHBOR COMPLAINT
+ * NOISE IMPULSES (PRESSURE-WAVE PROPAGATION PER NEIGHBOR BLOCK WHEN v > 10 m/s)
+ * Compositor-only properties: transform & opacity.
+ * ============================================================================ */
+@keyframes neighborPressureRingExpand {
+  0% {
+    transform: translate3d(-50%, -50%, 0) scale3d(0.18, 0.18, 1);
+    opacity: 0.85;
+  }
+  70% {
+    opacity: 0.34;
+  }
+  100% {
+    transform: translate3d(-50%, -50%, 0) scale3d(2.85, 2.85, 1);
+    opacity: 0;
+  }
+}
+
+@keyframes neighborPressureWavefrontSweep {
+  0% {
+    transform: translate3d(-105%, 0, 0) scaleX(0.75);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.72;
+  }
+  85% {
+    opacity: 0.28;
+  }
+  100% {
+    transform: translate3d(115%, 0, 0) scaleX(1.15);
+    opacity: 0;
+  }
+}
+
+#main-workspace-anchor .neighbor-pressure-ring {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 96px;
+  height: 96px;
+  border-radius: 9999px;
+  border: 1.5px solid rgba(251, 113, 133, 0.72);
+  will-change: transform, opacity;
+  animation-name: neighborPressureRingExpand;
+  animation-duration: var(--neighbor-wave-duration, 1.8s);
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-iteration-count: infinite;
+}
+
+#main-workspace-anchor .neighbor-pressure-ring--1 {
+  animation-delay: 0s;
+}
+
+#main-workspace-anchor .neighbor-pressure-ring--2 {
+  border-color: rgba(251, 191, 36, 0.65);
+  animation-delay: calc(var(--neighbor-wave-duration, 1.8s) * 0.33);
+}
+
+#main-workspace-anchor .neighbor-pressure-ring--3 {
+  border-color: rgba(56, 189, 248, 0.55);
+  animation-delay: calc(var(--neighbor-wave-duration, 1.8s) * 0.66);
+}
+
+#main-workspace-anchor .neighbor-pressure-wavefront {
+  position: absolute;
+  inset: 0;
+  will-change: transform, opacity;
+  animation-name: neighborPressureWavefrontSweep;
+  animation-duration: var(--neighbor-wave-duration, 1.8s);
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-iteration-count: infinite;
+}
+
+@keyframes neighborCriticalWavefrontGlowPulse {
+  0%,
+  100% {
+    filter: brightness(1.08) saturate(1.15)
+      drop-shadow(0 0 18px rgba(244, 63, 94, 0.82))
+      drop-shadow(0 0 34px rgba(251, 191, 36, 0.55));
+  }
+  50% {
+    filter: brightness(1.42) saturate(1.38)
+      drop-shadow(0 0 38px rgba(244, 63, 94, 1))
+      drop-shadow(0 0 72px rgba(251, 191, 36, 0.96));
+  }
+}
+
+#main-workspace-anchor .neighbor-pressure-wavefront--critical {
+  background: linear-gradient(
+    90deg,
+    rgba(244, 63, 94, 0) 0%,
+    rgba(244, 63, 94, 0.64) 43%,
+    rgba(251, 191, 36, 0.82) 52%,
+    rgba(244, 63, 94, 0) 100%
+  );
+  box-shadow:
+    inset 0 0 48px rgba(244, 63, 94, 0.85),
+    0 0 56px 10px rgba(244, 63, 94, 0.94),
+    0 0 96px 18px rgba(251, 191, 36, 0.72);
+  will-change: transform, opacity, filter;
+  animation:
+    neighborPressureWavefrontSweep var(--neighbor-wave-duration, 1.8s) cubic-bezier(0.22, 1, 0.36, 1) infinite,
+    neighborCriticalWavefrontGlowPulse 0.95s ease-in-out infinite;
+}
+
+#main-workspace-anchor .neighbor-pressure-wavefront--elevated {
+  background: linear-gradient(
+    90deg,
+    rgba(245, 158, 11, 0) 0%,
+    rgba(245, 158, 11, 0.2) 50%,
+    rgba(56, 189, 248, 0.22) 58%,
+    rgba(245, 158, 11, 0) 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #main-workspace-anchor .neighbor-pressure-ring,
+  #main-workspace-anchor .neighbor-pressure-wavefront {
+    animation: none !important;
+    opacity: 0.22 !important;
+    transform: none !important;
+  }
+}
+
+/* ============================================================================
+ * #main-workspace-anchor RINGPARKEN MAP CSS PRESSURE-WAVE ANIMATION PER
+ * NEIGHBOR BLOCK (ACTIVATED SPECIFICALLY WHEN WIND SPEED v > 10 m/s)
+ * Compositor-only properties: transform & opacity.
+ * ============================================================================ */
+@keyframes mapBlockPressureRingSvg {
+  0% {
+    transform: scale3d(0.24, 0.24, 1);
+    opacity: 0.92;
+  }
+  65% {
+    opacity: 0.42;
+  }
+  100% {
+    transform: scale3d(2.65, 2.65, 1);
+    opacity: 0;
+  }
+}
+
+@keyframes mapBlockPressureConeSvg {
+  0% {
+    transform: scale3d(0.55, 0.72, 1);
+    opacity: 0.12;
+  }
+  35% {
+    opacity: 0.58;
+  }
+  100% {
+    transform: scale3d(1.55, 1.22, 1);
+    opacity: 0;
+  }
+}
+
+@keyframes mapBlockPressureRingHtml {
+  0% {
+    transform: translate3d(-50%, -50%, 0) scale3d(0.22, 0.22, 1);
+    opacity: 0.9;
+  }
+  68% {
+    opacity: 0.38;
+  }
+  100% {
+    transform: translate3d(-50%, -50%, 0) scale3d(2.75, 2.75, 1);
+    opacity: 0;
+  }
+}
+
+#main-workspace-anchor .map-block-wave-std {
+  --map-block-wave-dur: 2.1s;
+}
+
+#main-workspace-anchor .map-block-wave-med {
+  --map-block-wave-dur: 1.55s;
+}
+
+#main-workspace-anchor .map-block-wave-fast {
+  --map-block-wave-dur: 1.15s;
+}
+
+#main-workspace-anchor .map-svg-pressure-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
+  animation-name: mapBlockPressureRingSvg;
+  animation-duration: var(--map-block-wave-dur, 1.75s);
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-iteration-count: infinite;
+}
+
+#main-workspace-anchor .map-svg-pressure-ring--1 {
+  animation-delay: 0s;
+}
+
+#main-workspace-anchor .map-svg-pressure-ring--2 {
+  animation-delay: calc(var(--map-block-wave-dur, 1.75s) * 0.33);
+}
+
+#main-workspace-anchor .map-svg-pressure-ring--3 {
+  animation-delay: calc(var(--map-block-wave-dur, 1.75s) * 0.66);
+}
+
+#main-workspace-anchor .map-svg-pressure-cone {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  will-change: transform, opacity;
+  animation-name: mapBlockPressureConeSvg;
+  animation-duration: var(--map-block-wave-dur, 1.75s);
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-iteration-count: infinite;
+}
+
+#main-workspace-anchor .map-gmp-pressure-wave-wrap {
+  position: relative;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+#main-workspace-anchor .map-gmp-pressure-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 84px;
+  height: 84px;
+  border-radius: 9999px;
+  border: 2px solid rgba(244, 63, 94, 0.82);
+  will-change: transform, opacity;
+  animation-name: mapBlockPressureRingHtml;
+  animation-duration: var(--map-block-wave-dur, 1.75s);
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-iteration-count: infinite;
+}
+
+#main-workspace-anchor .map-gmp-pressure-ring--1 {
+  animation-delay: 0s;
+}
+
+#main-workspace-anchor .map-gmp-pressure-ring--2 {
+  border-color: rgba(251, 191, 36, 0.78);
+  animation-delay: calc(var(--map-block-wave-dur, 1.75s) * 0.33);
+}
+
+#main-workspace-anchor .map-gmp-pressure-ring--3 {
+  border-color: rgba(34, 211, 238, 0.68);
+  animation-delay: calc(var(--map-block-wave-dur, 1.75s) * 0.66);
+}
+
+@keyframes plume6hSvgFlow {
+  0% {
+    stroke-dashoffset: 32;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+#main-workspace-anchor .map-6h-plume-flow-path {
+  animation: plume6hSvgFlow 1.4s linear infinite;
+  will-change: stroke-dashoffset;
+}
+
+#main-workspace-anchor .map-6h-plume-glow {
+  animation: plume6hSvgFlow 2.6s linear infinite;
+  will-change: stroke-dashoffset;
+}
+
+/* ============================================================================
+ * #main-workspace-anchor >85 dB DEMOLITION SOURCE ACOUSTIC WAVEFRONT &
+ * DYNAMIC EMERGENCY EVACUATION FLOW ANIMATIONS
+ * ============================================================================ */
+@keyframes demolitionSourceWavefrontSvg {
+  0% {
+    transform: scale3d(0.18, 0.18, 1);
+    opacity: 0.94;
+  }
+  60% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale3d(3.2, 3.2, 1);
+    opacity: 0;
+  }
+}
+
+@keyframes demolitionSourceWavefrontHtml {
+  0% {
+    transform: translate3d(-50%, -50%, 0) scale3d(0.2, 0.2, 1);
+    opacity: 0.92;
+  }
+  65% {
+    opacity: 0.42;
+  }
+  100% {
+    transform: translate3d(-50%, -50%, 0) scale3d(3.1, 3.1, 1);
+    opacity: 0;
+  }
+}
+
+@keyframes emergencyEvacFlowDash {
+  0% {
+    stroke-dashoffset: 48;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+#main-workspace-anchor .map-source-wavefront-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
+  animation-name: demolitionSourceWavefrontSvg;
+  animation-duration: var(--source-wave-dur, 1.55s);
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-iteration-count: infinite;
+}
+
+#main-workspace-anchor .map-source-wavefront-ring--1 {
+  animation-delay: 0s;
+}
+
+#main-workspace-anchor .map-source-wavefront-ring--2 {
+  animation-delay: calc(var(--source-wave-dur, 1.55s) * 0.33);
+}
+
+#main-workspace-anchor .map-source-wavefront-ring--3 {
+  animation-delay: calc(var(--source-wave-dur, 1.55s) * 0.66);
+}
+
+#main-workspace-anchor .map-gmp-source-wavefront-wrap {
+  position: relative;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+#main-workspace-anchor .map-gmp-source-wavefront-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 98px;
+  height: 98px;
+  border-radius: 9999px;
+  border: 2.5px solid rgba(244, 63, 94, 0.88);
+  box-shadow: 0 0 18px rgba(244, 63, 94, 0.45);
+  will-change: transform, opacity;
+  animation-name: demolitionSourceWavefrontHtml;
+  animation-duration: var(--source-wave-dur, 1.55s);
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-iteration-count: infinite;
+}
+
+#main-workspace-anchor .map-gmp-source-wavefront-ring--2 {
+  border-color: rgba(251, 191, 36, 0.82);
+  animation-delay: calc(var(--source-wave-dur, 1.55s) * 0.33);
+}
+
+#main-workspace-anchor .map-gmp-source-wavefront-ring--3 {
+  border-color: rgba(249, 115, 22, 0.72);
+  animation-delay: calc(var(--source-wave-dur, 1.55s) * 0.66);
+}
+
+#main-workspace-anchor .map-evac-flow-path {
+  animation: emergencyEvacFlowDash var(--evac-flow-dur, 1.2s) linear infinite;
+  will-change: stroke-dashoffset;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #main-workspace-anchor .map-svg-pressure-ring,
+  #main-workspace-anchor .map-svg-pressure-cone,
+  #main-workspace-anchor .map-gmp-pressure-ring,
+  #main-workspace-anchor .map-6h-plume-flow-path,
+  #main-workspace-anchor .map-6h-plume-glow,
+  #main-workspace-anchor .map-source-wavefront-ring,
+  #main-workspace-anchor .map-gmp-source-wavefront-ring,
+  #main-workspace-anchor .map-evac-flow-path,
+  .dust-impact-threshold-chart .recharts-reference-line,
+  .dust-impact-alert-gradient-pulse {
+    animation: none !important;
+    opacity: 0.35 !important;
+    transform: none !important;
+  }
+}
+
+/* ============================================================================
+ * RECEPTOR DUST DEPOSITION PROFILE WIDGET: IMPACT THRESHOLD SLIDE-IN & PULSE
+ * ============================================================================ */
+@keyframes impactThresholdLineSlideIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(-42px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes impactAlertGradientPulse {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.dust-impact-threshold-chart .recharts-reference-line:has(line[stroke="#f97316"]) {
+  animation: impactThresholdLineSlideIn 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+.dust-impact-alert-gradient-pulse {
+  animation: impactAlertGradientPulse 2.1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: opacity;
+}
+
+/* ============================================================================
+ * AUTHORITY NON-INTERVENTION COUNTER: MIDNIGHT INCREMENT GLIMMER EFFECT
+ * Compositor-only properties: transform & opacity.
+ * ============================================================================ */
+@keyframes authorityGlimmerSheen {
+  0% {
+    transform: translate3d(-135%, 0, 0) skewX(-18deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.75;
+  }
+  75% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(235%, 0, 0) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes authorityDayTickSettle {
+  0% {
+    transform: scale3d(1, 1, 1);
+    opacity: 0.75;
+  }
+  35% {
+    transform: scale3d(1.06, 1.06, 1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale3d(1, 1, 1);
+    opacity: 1;
+  }
+}
+
+.authority-glimmer-sheen {
+  position: absolute;
+  inset: 0;
+  width: 55%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(251, 191, 36, 0) 0%,
+    rgba(251, 191, 36, 0.28) 45%,
+    rgba(255, 255, 255, 0.42) 52%,
+    rgba(251, 191, 36, 0) 100%
+  );
+  will-change: transform, opacity;
+  animation: authorityGlimmerSheen 1.35s cubic-bezier(0.16, 1, 0.3, 1) 1 forwards;
+}
+
+.authority-day-tick-settle {
+  will-change: transform, opacity;
+  animation: authorityDayTickSettle 0.9s cubic-bezier(0.16, 1, 0.3, 1) 1 forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .authority-glimmer-sheen,
+  .authority-day-tick-settle {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ============================================================================
+ * #main-workspace-anchor WATER MAIN CRITICAL TOOLTIP PULSING RED BORDER
+ * Applied when pipePpvMmPerSec > 50 mm/s or simulated/active rupture is detected.
+ * ============================================================================ */
+@keyframes waterMainCriticalBorderPulse {
+  0%,
+  100% {
+    border-color: rgba(244, 63, 94, 0.96);
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.72), 0 0 14px rgba(244, 63, 94, 0.45);
+  }
+  50% {
+    border-color: rgba(254, 205, 211, 1);
+    box-shadow: 0 0 0 4px rgba(244, 63, 94, 0.25), 0 0 24px rgba(244, 63, 94, 0.92);
+  }
+}
+
+@keyframes waterMainSvgCriticalStrokePulse {
+  0%,
+  100% {
+    stroke: #f43f5e;
+    opacity: 1;
+    filter: drop-shadow(0 0 3px rgba(244, 63, 94, 0.75));
+  }
+  50% {
+    stroke: #fecdd3;
+    opacity: 0.82;
+    filter: drop-shadow(0 0 8px rgba(244, 63, 94, 1));
+  }
+}
+
+#main-workspace-anchor .water-main-tooltip-critical-pulse {
+  border-width: 2px;
+  border-color: #f43f5e;
+  animation: waterMainCriticalBorderPulse 1.15s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: box-shadow, border-color;
+}
+
+#main-workspace-anchor .water-main-svg-tooltip-critical-pulse {
+  stroke-width: 2.5px;
+  animation: waterMainSvgCriticalStrokePulse 1.15s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: opacity, stroke, filter;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #main-workspace-anchor .water-main-tooltip-critical-pulse,
+  #main-workspace-anchor .water-main-svg-tooltip-critical-pulse,
+  #main-workspace-anchor .machine-estop-btn-pulse {
+    animation: none !important;
+  }
+}
+
+/* ============================================================================
+ * #main-workspace-anchor E-STOP / MASKIN-STOP ACTIVATION PULSING EFFECT
+ * ============================================================================ */
+@keyframes machineEStopPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.85), 0 0 12px rgba(16, 185, 129, 0.5);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0), 0 0 20px rgba(52, 211, 153, 0.9);
+  }
+}
+
+#main-workspace-anchor .machine-estop-btn-pulse {
+  animation: machineEStopPulse 0.85s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  will-change: transform, box-shadow;
+}
+
+

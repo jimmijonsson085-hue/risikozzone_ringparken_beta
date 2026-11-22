@@ -130,7 +130,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
       {/* Header */}
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <div>
-          <div className="text-[10px] font-mono uppercase tracking-wider text-cyan-300 font-bold flex items-center gap-1.5">
+          <div className="text-[11px] font-mono uppercase tracking-wider text-cyan-300 font-bold flex items-center gap-1.5">
             <Building2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
             <span>INTERAKTIV BYGNINGSKATEGORI-STYRING (A–E) · 29 ENHEDER</span>
           </div>
@@ -139,7 +139,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
           </h4>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono text-slate-300">
+        <div className="flex items-center gap-2 flex-wrap text-[11px] font-mono text-slate-300">
           <span>
             Aktive kilder:{' '}
             <strong className="text-rose-300">
@@ -174,21 +174,21 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
       </div>
 
       {/* Digital Twin Master-KPI Strip (150.000 m² · Skema B 721.618.000 kr.) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-2 rounded bg-slate-950/85 border border-cyan-500/25 font-mono text-[10px]">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-2 rounded bg-slate-950/85 border border-cyan-500/25 font-mono text-[11px]">
         <div className="px-2 py-1 rounded bg-slate-900/90 border border-slate-800">
-          <div className="text-[9px] text-slate-400 uppercase">Matrikelareal (Slagelse)</div>
+          <div className="text-[11px] text-slate-400 uppercase">Matrikelareal (Slagelse)</div>
           <div className="text-cyan-300 font-bold">150.000 m² Digital Tvilling</div>
         </div>
         <div className="px-2 py-1 rounded bg-slate-900/90 border border-slate-800">
-          <div className="text-[9px] text-slate-400 uppercase">Helhedsplan Skema B</div>
+          <div className="text-[11px] text-slate-400 uppercase">Helhedsplan Skema B</div>
           <div className="text-emerald-300 font-bold">721.618.000 kr.</div>
         </div>
         <div className="px-2 py-1 rounded bg-slate-900/90 border border-slate-800">
-          <div className="text-[9px] text-slate-400 uppercase">Bygningsregister</div>
+          <div className="text-[11px] text-slate-400 uppercase">Bygningsregister</div>
           <div className="text-amber-200 font-bold">24 Blokke + 5 Erhverv/Inst.</div>
         </div>
         <div className="px-2 py-1 rounded bg-slate-900/90 border border-slate-800">
-          <div className="text-[9px] text-slate-400 uppercase">Afd. 23 · 24 · 26 · 32 · SAB</div>
+          <div className="text-[11px] text-slate-400 uppercase">Afd. 23 · 24 · 26 · 32 · SAB</div>
           <div className="text-slate-200 font-bold">
             {buildings.reduce((acc, b) => acc + b.dwellingsCount, 0)} boliger + 5 inst.
           </div>
@@ -198,7 +198,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
       {/* What-If Scenario Quick Presets */}
       <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-amber-300 font-bold flex items-center gap-1">
+          <span className="text-[11px] font-mono uppercase tracking-wider text-amber-300 font-bold flex items-center gap-1">
             <Sliders className="w-3 h-3 text-amber-400 shrink-0" />
             <span>Simulér &quot;Hvad-hvis&quot; Fase- &amp; Nedrivningsscenarier:</span>
           </span>
@@ -210,7 +210,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
                 'BLOK-1'
               )
             }
-            className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono flex items-center gap-1 transition-colors"
+            className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono flex items-center gap-1 transition-colors"
             title="Nulstil alle 29 bygninger til standard Helhedsplan-status"
           >
             <RotateCcw className="w-2.5 h-2.5" />
@@ -218,7 +218,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 font-mono text-[10px]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 font-mono text-[11px]">
           <button
             type="button"
             onClick={() =>
@@ -235,7 +235,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
             <div className="font-bold text-amber-300">
               1. Blok 1 → e. Nedrevet, ikke sikret
             </div>
-            <div className="text-[9.5px] text-slate-300 mt-0.5">
+            <div className="text-[11px] text-slate-300 mt-0.5">
               Blotlagt krybekælder (H=1m), vindresuspension ({windResuspensionMult.toFixed(2)}x), +250% perkolation &amp; fjernet læ-effekt
             </div>
           </button>
@@ -258,7 +258,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
             <div className="font-bold text-rose-300">
               2. Blok 9 &amp; 10 → d. Under nedrivning
             </div>
-            <div className="text-[9.5px] text-slate-300 mt-0.5">
+            <div className="text-[11px] text-slate-300 mt-0.5">
               Etape 2 del 2 aktiveres (Kierulffsvej 90-104 skifter fra b. Tom til fuld nedrivning 1,00x)
             </div>
           </button>
@@ -281,7 +281,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
             <div className="font-bold text-amber-200">
               3. Bygning 1 &amp; 2 → e. Uforseglet kældergrube
             </div>
-            <div className="text-[9.5px] text-slate-300 mt-0.5">
+            <div className="text-[11px] text-slate-300 mt-0.5">
               Åben kældergrube ved Kierulffsvej 2 &amp; Ndr. Ringgade 67B (+250% regnperkolation)
             </div>
           </button>
@@ -304,7 +304,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
             <div className="font-bold text-sky-300">
               4. Blok 3 &amp; 4 → c. Under Renovering (0,45x)
             </div>
-            <div className="text-[9.5px] text-slate-300 mt-0.5">
+            <div className="text-[11px] text-slate-300 mt-0.5">
               Parallel gavludskæring, faldstammer &amp; arbejdsmiljø-/naboreceptor (H=8m)
             </div>
           </button>
@@ -313,7 +313,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
 
       {/* Category Filter Buttons (a to e) */}
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+        <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
           <span className="flex items-center gap-1">
             <Filter className="w-3 h-3 text-cyan-400" />
             <span>Filtrér synlige bygningskategorier (2D, 3D &amp; Liste):</span>
@@ -339,7 +339,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
                 key={catCode}
                 type="button"
                 onClick={() => onToggleCategoryFilter(catCode)}
-                className={`px-2 py-1 rounded text-[10px] font-mono border transition-all flex items-center gap-1.5 ${
+                className={`px-2 py-1 rounded text-[11px] font-mono border transition-all flex items-center gap-1.5 ${
                   isActive
                     ? 'bg-slate-800 text-white border-slate-500 font-bold shadow-sm'
                     : 'bg-slate-950/60 text-slate-500 border-slate-800/80 opacity-60 hover:opacity-90'
@@ -358,7 +358,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
       </div>
 
       {/* Active Physical & Legal Rule Indicators for Categories a-e */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[10px] font-mono">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] font-mono">
         {countsByCategory.e_demolished_unsecured > 0 && (
           <div className="p-2 rounded bg-amber-950/45 border border-amber-500/50 text-amber-200 space-y-0.5">
             <div className="font-bold flex items-center gap-1 text-amber-300">
@@ -367,7 +367,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
                 Kategori e Aktiv ({countsByCategory.e_demolished_unsecured} enhed): Jordnær Kilde (H=1,0m)
               </span>
             </div>
-            <div className="text-[9.5px] text-slate-300">
+            <div className="text-[11px] text-slate-300">
               {currentWeather.windSpeed10m > 5.0
                 ? `Vind > 5 m/s (${currentWeather.windSpeed10m} m/s): Resuspension ×${windResuspensionMult.toFixed(2)} ((v/5)^1.35)`
                 : `Vind ≤ 5 m/s (${currentWeather.windSpeed10m} m/s): Basal støvfrigivelse (0,65x)`}
@@ -386,7 +386,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
                 [RECEPTOR-FUND] S ≥ 0,45 ({receptorFundBuildings.length} bygninger)
               </span>
             </div>
-            <div className="text-[9.5px] text-slate-300">
+            <div className="text-[11px] text-slate-300">
               Kontrol af 4-ugers lejerunderretningspligt jf. Jordforureningslovens § 12 og § 70, stk. 4 ({receptorFundBuildings.map((b) => b.code).join(', ')})
             </div>
           </div>
@@ -409,7 +409,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
               key={dept.id}
               type="button"
               onClick={() => setDepartmentFilter(dept.id)}
-              className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-colors ${
+              className={`px-2 py-0.5 rounded text-[11px] font-mono border transition-colors ${
                 departmentFilter === dept.id
                   ? 'bg-cyan-500 text-slate-950 font-bold border-cyan-300'
                   : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
@@ -427,7 +427,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Søg blok, vej eller afd..."
-            className="w-full bg-slate-950 border border-slate-800 rounded pl-6 pr-2 py-1 text-[10px] font-mono text-slate-200 focus:outline-none focus:border-cyan-500"
+            className="w-full bg-slate-950 border border-slate-800 rounded pl-6 pr-2 py-1 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-cyan-500"
           />
         </div>
       </div>
@@ -468,23 +468,23 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
                     <span className="text-xs font-mono font-bold text-white">
                       {b.code}: {b.name}
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400">
+                    <span className="text-[11px] font-mono text-slate-400">
                       · {b.department}
                     </span>
                     {isReceptorFund && (
-                      <span className="text-[9.5px] font-mono font-extrabold text-rose-300">
+                      <span className="text-[11px] font-mono font-extrabold text-rose-300">
                         · [RECEPTOR-FUND: S={recExp.sumQuotient.toFixed(2)}]
                       </span>
                     )}
                   </div>
 
-                  <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+                  <div className="text-[11px] font-mono text-slate-400 mt-0.5">
                     {b.address}
                     {b.dwellingsCount > 0 ? ` · ${b.dwellingsCount} bol.` : ''} · {b.floors} etg. (
                     {b.constructionYear}) · 3D-Højde: {meta.buildingHeight3DMeters}m
                   </div>
 
-                  <div className="text-[10px] font-mono text-cyan-300/80 truncate">
+                  <div className="text-[11px] font-mono text-cyan-300/80 truncate">
                     {b.helhedsplanEtape}
                   </div>
                 </div>
@@ -502,7 +502,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
                         e.target.value as BuildingOperationalCategory
                       )
                     }
-                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[10px] font-mono text-slate-100 focus:outline-none focus:border-cyan-400"
+                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] font-mono text-slate-100 focus:outline-none focus:border-cyan-400"
                   >
                     {ORDERED_CATEGORIES.map((catCode) => {
                       const cMeta = BUILDING_CATEGORY_METADATA[catCode];
@@ -514,7 +514,7 @@ export const BuildingCategoryManagerPanel: React.FC<BuildingCategoryManagerPanel
                     })}
                   </select>
 
-                  <div className="flex items-center gap-1.5 text-[9.5px] font-mono text-slate-400">
+                  <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-400">
                     {meta.actsAsSource && (
                       <span className="text-rose-300">
                         Kilde ({meta.sourceEmissionFactor.toFixed(2)}x · H=

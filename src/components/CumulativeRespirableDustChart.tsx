@@ -294,7 +294,7 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
       {/* Header & Dose Metric Switcher */}
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800 pb-2.5">
         <div>
-          <div className="text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold flex items-center gap-1.5">
+          <div className="text-[11px] font-mono uppercase tracking-wider text-rose-400 font-bold flex items-center gap-1.5">
             <TrendingUp className="w-3.5 h-3.5 text-rose-400 shrink-0" />
             <span>AKKUMULERET RESPIRABEL STØVDOSIS OVER TID (TOP 4 UDSATTE RECEPTORER)</span>
           </div>
@@ -306,7 +306,7 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
         </div>
 
         {/* Metric Mode Selector Buttons */}
-        <div className="flex flex-wrap items-center gap-1 bg-slate-950 border border-slate-800 rounded p-0.5 text-[10px] font-mono">
+        <div className="flex flex-wrap items-center gap-1 bg-slate-950 border border-slate-800 rounded p-0.5 text-[11px] font-mono">
           <button
             type="button"
             onClick={() => setMetricMode('dust_ug_m2')}
@@ -360,7 +360,7 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
           return (
             <div
               key={rec.receptorId}
-              className={`p-2 rounded border transition-all flex items-center justify-between gap-2 font-mono text-[10.5px] ${
+              className={`p-2 rounded border transition-all flex items-center justify-between gap-2 font-mono text-[11px] ${
                 isHidden
                   ? 'bg-slate-950/40 border-slate-800/60 opacity-50'
                   : isSelectedOnMap
@@ -382,7 +382,7 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
                   <div className="font-bold text-white truncate">
                     #{idx + 1} {rec.receptorCode}: {rec.receptorName}
                   </div>
-                  <div className="text-[9.5px] text-slate-400 truncate">
+                  <div className="text-[11px] text-slate-400 truncate">
                     Ved kl. {currentWeather.hourLabel}:{' '}
                     <strong className="text-slate-200">
                       {cumAtSelectedHour.toLocaleString('da-DK')} {unitLabel}
@@ -395,7 +395,7 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
               <button
                 type="button"
                 onClick={() => toggleReceptorVisibility(rec.receptorId)}
-                className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[9px] text-slate-300 hover:text-white shrink-0"
+                className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[11px] text-slate-300 hover:text-white shrink-0"
                 title={isHidden ? 'Vis kurve på graf' : 'Skjul kurve på graf'}
               >
                 {isHidden ? 'Vis' : 'Aktiv'}
@@ -407,7 +407,7 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
 
       {/* Recharts 24-Hour Cumulative Dose & Hourly Influx Rate Chart */}
       <div className="p-2.5 bg-slate-950/95 border border-slate-800/90 rounded space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
           <div className="flex items-center gap-2">
             <span className="text-slate-300 font-semibold">
               Kurver: Akkumuleret Dosis ({unitLabel})
@@ -498,7 +498,7 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
                   );
 
                   return (
-                    <div className="bg-slate-950/95 border border-slate-700 rounded p-2.5 shadow-2xl font-mono text-[10px] space-y-1.5 max-w-xs">
+                    <div className="bg-slate-950/95 border border-slate-700 rounded p-2.5 shadow-2xl font-mono text-[11px] space-y-1.5 max-w-xs">
                       <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-1">
                         <span className="font-bold text-white">
                           Kl. {row.hourLabel} (Akkumuleret Dosis)
@@ -509,7 +509,7 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
                       </div>
 
                       {matchingWin && (
-                        <div className="px-1.5 py-0.5 rounded bg-rose-950/90 border border-rose-500/60 text-rose-200 font-bold text-[9.5px]">
+                        <div className="px-1.5 py-0.5 rounded bg-rose-950/90 border border-rose-500/60 text-rose-200 font-bold text-[11px]">
                           ⚠ HØJRISIKO-INTERVAL ({matchingWin.startHourLabel}–
                           {matchingWin.endHourLabel})
                         </div>
@@ -609,7 +609,7 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
           </ResponsiveContainer>
         </div>
 
-        <div className="flex items-center justify-between text-[9.5px] font-mono text-slate-400 pt-1 border-t border-slate-800/80">
+        <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-1 border-t border-slate-800/80">
           <span className="flex items-center gap-1">
             <Clock className="w-3 h-3 text-cyan-400" />
             <span>Klik på et punkt på kurven for at hoppe til klokkeslættet på kortet</span>
@@ -623,13 +623,13 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
       {/* Identified High-Risk Demolition Time Intervals List */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <h5 className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1.5">
+          <h5 className="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1.5">
             <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
             <span>
               Identificerede Tidsintervaller med Høj Miljørisiko ({highRiskWindows.length})
             </span>
           </h5>
-          <span className="text-[10px] font-mono text-slate-400">
+          <span className="text-[11px] font-mono text-slate-400">
             Klik for at inspicere interval
           </span>
         </div>
@@ -670,7 +670,7 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
                       </span>
                     </span>
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
                         win.severity === 'CRITICAL'
                           ? 'bg-rose-600 text-white'
                           : 'bg-amber-400 text-slate-950'
@@ -680,7 +680,7 @@ export const CumulativeRespirableDustChart: React.FC<CumulativeRespirableDustCha
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-1.5 font-mono text-[10px] bg-slate-950/80 p-1.5 rounded border border-slate-800/80">
+                  <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px] bg-slate-950/80 p-1.5 rounded border border-slate-800/80">
                     <div>
                       <div className="text-slate-400">Støv-Tilvækst</div>
                       <div className="font-bold text-rose-300">

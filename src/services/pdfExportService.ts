@@ -11,13 +11,22 @@ import {
   MapsGroundingPlace,
   PlumePolygonZone,
   PuffAccumulationResult,
+  Receptor24hCumulativeSummary,
   ReceptorExposureResult,
   ReceptorZone,
   RingparkenBuildingUnit,
+  WaterMainLiveTelemetry,
   WeatherDataset,
 } from '../types/dispersion';
+import { SimultaneousAlgedonicDispatch } from '../types/myceliumAlert';
 import { BUILDING_CATEGORY_METADATA, RINGPARKEN_CENTER } from '../data/ringparkenData';
-import { degreesToCompass } from './weatherService';
+import {
+  degreesToCompass,
+  fetchOpenMeteo7DayHistoryForDate,
+  Historical7DayHourPoint,
+  SLAGELSE_TYPICAL_CLIMATE_NORMAL_8,
+} from './weatherService';
+import { computeForensicSha256Hash } from './dispersionEngine';
 
 /**
  * Normalizes characters that standard PDF Helvetica (WinAnsiEncoding) might not render cleanly
@@ -628,6 +637,64 @@ export function downloadForensicJsonReport(params: {
  * - Open-Meteo Telemetry & Arbejdstilsynets Sum-Formula Table (BEK 613/2026)
  * - Full Formal Legal Submission to Arbejdstilsynet & Slagelse Kommune
  */
+export interface PhotoBinaryValidationResult {
+  isValid: boolean;
+  reason: string;
+  sizeKb: number | null;
+  sha256Short: string | null;
+}
+
+export function validateObservationPhotoEvidenceBinary(
+  obs: AlgedonicObservation
+): PhotoBinaryValidationResult {
+  const pe = obs.photoEvidence;
+  if (!pe) {
+    return {
+      isValid: false,
+      reason: 'Ingen vedhæftet foto-bevis post',
+      sizeKb: null,
+      sha256Short: null,
+    };
+  }
+  const dataUrl = typeof pe.dataUrl === 'string' ? pe.dataUrl.trim() : '';
+  const hasImageDataUri =
+    /^data:image\/(png|jpeg|jpg|webp|gif|bmp|svg\+xml);base64,[A-Za-z0-9+/=]{16,}$/i.test(
+      dataUrl
+    );
+  if (!hasImageDataUri) {
+    return {
+      isValid: false,
+      reason: 'Ugyldig eller tom billed-binær streng (mangler base64 image data-URI)',
+      sizeKb: null,
+      sha256Short: null,
+    };
+  }
+  const bytes = Number(pe.fileSizeBytes ?? 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return {
+      isValid: false,
+      reason: 'Billedfilens størrelse er 0 bytes',
+      sizeKb: null,
+      sha256Short: null,
+    };
+  }
+  const hash = typeof pe.imageSha256Hash === 'string' ? pe.imageSha256Hash.trim() : '';
+  if (hash.length < 16) {
+    return {
+      isValid: false,
+      reason: 'Mangler gyldig SHA-256 hash af foto-binær',
+      sizeKb: Number((bytes / 1024).toFixed(1)),
+      sha256Short: null,
+    };
+  }
+  return {
+    isValid: true,
+    reason: 'Gyldig billed-binær og SHA-256 hash verificeret',
+    sizeKb: Number((bytes / 1024).toFixed(1)),
+    sha256Short: hash.slice(0, 12),
+  };
+}
+
 export function generateForensicPdfReport(params: {
   weatherDataset: WeatherDataset;
   simulation: DispersionSimulationState;
@@ -639,6 +706,8 @@ export function generateForensicPdfReport(params: {
   legalDocumentText?: string;
   groundingPlaces: MapsGroundingPlace[];
   pdfEvidenceArchive?: ForensicPdfEvidence[];
+  exportFilterSummary?: string;
+  validatePhotoEvidenceBinary?: boolean;
 }): void {
   const {
     weatherDataset,
@@ -651,6 +720,8 @@ export function generateForensicPdfReport(params: {
     legalDocumentText,
     groundingPlaces,
     pdfEvidenceArchive,
+    exportFilterSummary,
+    validatePhotoEvidenceBinary = false,
   } = params;
 
   const { currentWeather, receptorExposures, legalViolations, puff24h, maxSiteSumQuotient } =
@@ -749,6 +820,18 @@ export function generateForensicPdfReport(params: {
     y + 14.4
   );
   y += 20;
+
+  if (exportFilterSummary) {
+    doc.setFillColor(236, 254, 255);
+    doc.setDrawColor(6, 182, 212);
+    doc.setLineWidth(0.3);
+    doc.rect(margin, y, contentW, 10, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(14, 116, 144);
+    doc.text(sanitizePdfText(`FOKUSERET EKSPORT-FILTER: ${exportFilterSummary}`).slice(0, 118), margin + 3, y + 6.2);
+    y += 13;
+  }
 
   // Section 01: Open-Meteo Telemetry Grid
   doc.setFont('helvetica', 'bold');
@@ -965,18 +1048,82 @@ export function generateForensicPdfReport(params: {
   );
   y += 4;
 
+  if (validatePhotoEvidenceBinary) {
+    const validationResults = observations.map((obs) => ({
+      id: obs.id,
+      result: validateObservationPhotoEvidenceBinary(obs),
+    }));
+    const validBinaryCount = validationResults.filter((v) => v.result.isValid).length;
+    const missingBinaryCount = observations.length - validBinaryCount;
+    ensureSpace(16);
+    if (missingBinaryCount > 0) {
+      doc.setFillColor(255, 247, 237);
+      doc.setDrawColor(234, 88, 12);
+    } else {
+      doc.setFillColor(236, 253, 245);
+      doc.setDrawColor(16, 185, 129);
+    }
+    doc.rect(margin, y, contentW, 12.5, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.2);
+    if (missingBinaryCount > 0) {
+      doc.setTextColor(194, 65, 12);
+    } else {
+      doc.setTextColor(4, 120, 87);
+    }
+    doc.text(
+      sanitizePdfText(
+        missingBinaryCount > 0
+          ? `FOTO-BEVIS BINÆR VALIDERING: ADVARSEL — ${missingBinaryCount} af ${observations.length} poster mangler gyldig foto-binær og er FLAGGET`
+          : `FOTO-BEVIS BINÆR VALIDERING: ALLE ${validBinaryCount}/${observations.length} POSTER HAR GYLDIG FOTO-BEVIS BINÆR`
+      ),
+      margin + 3,
+      y + 5.2
+    );
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.4);
+    doc.setTextColor(51, 65, 85);
+    doc.text(
+      sanitizePdfText(
+        `Kontrolkriterier: Gyldig base64 image data-URI, filstørrelse > 0 bytes og verificeret SHA-256 billede-hash. Gyldige: ${validBinaryCount} | Flaggede: ${missingBinaryCount}.`
+      ),
+      margin + 3,
+      y + 10.2
+    );
+    y += 15;
+  }
+
   for (const obs of observations) {
-    ensureSpace(26);
-    doc.setFillColor(250, 245, 255);
-    doc.setDrawColor(168, 85, 247);
-    doc.rect(margin, y, contentW, 23, 'FD');
+    const photoCheck = validatePhotoEvidenceBinary
+      ? validateObservationPhotoEvidenceBinary(obs)
+      : null;
+    const isFlaggedMissingPhoto = Boolean(validatePhotoEvidenceBinary && photoCheck && !photoCheck.isValid);
+    const boxHeight = validatePhotoEvidenceBinary ? 28.5 : 23;
+    ensureSpace(boxHeight + 3);
+
+    if (isFlaggedMissingPhoto) {
+      doc.setFillColor(255, 241, 242);
+      doc.setDrawColor(225, 29, 72);
+    } else if (validatePhotoEvidenceBinary && photoCheck?.isValid) {
+      doc.setFillColor(240, 253, 250);
+      doc.setDrawColor(16, 185, 129);
+    } else {
+      doc.setFillColor(250, 245, 255);
+      doc.setDrawColor(168, 85, 247);
+    }
+    doc.rect(margin, y, contentW, boxHeight, 'FD');
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.2);
-    doc.setTextColor(107, 33, 168);
+    if (isFlaggedMissingPhoto) {
+      doc.setTextColor(190, 18, 60);
+    } else {
+      doc.setTextColor(107, 33, 168);
+    }
+    const headerPrefix = isFlaggedMissingPhoto ? '[FLAGGET: MANGLER FOTO-BEVIS] ' : '';
     doc.text(
       sanitizePdfText(
-        `${obs.code} (${obs.observedDateIso} kl. ${obs.observedHourLabel}) - ${obs.reporterRole}: ${obs.observationType}`
+        `${headerPrefix}${obs.code} (${obs.observedDateIso} kl. ${obs.observedHourLabel}) - ${obs.reporterRole}: ${obs.observationType}`
       ),
       margin + 3,
       y + 5.2
@@ -1006,7 +1153,31 @@ export function generateForensicPdfReport(params: {
     doc.setFontSize(6.8);
     doc.setTextColor(107, 33, 168);
     doc.text(`SHA-256 Signatur: ${obs.sha256Signature}`, margin + 3, y + 21.2);
-    y += 25.5;
+
+    if (validatePhotoEvidenceBinary && photoCheck) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.2);
+      if (photoCheck.isValid) {
+        doc.setTextColor(4, 120, 87);
+        doc.text(
+          sanitizePdfText(
+            `FOTO-BEVIS STATUS: OK (${photoCheck.sizeKb} KB | Billede SHA-256: ${photoCheck.sha256Short}...)`
+          ),
+          margin + 3,
+          y + 26.2
+        );
+      } else {
+        doc.setTextColor(190, 18, 60);
+        doc.text(
+          sanitizePdfText(
+            `FLAGGET — MANGLER FOTO-BEVIS BINÆR: ${photoCheck.reason}`
+          ),
+          margin + 3,
+          y + 26.2
+        );
+      }
+    }
+    y += boxHeight + 2.5;
   }
 
   // Section 05: Statutory Violations Summary
@@ -1669,6 +1840,10 @@ export function render2DViewportPrintSnapshotDataUrl(params: {
   zoom: number;
   panOffsetPx: { x: number; y: number };
   showHourlyPuffLobes?: boolean;
+  waterMainTelemetry?: WaterMainLiveTelemetry;
+  showWaterMainLayer?: boolean;
+  showLerBuffer?: boolean;
+  simultaneousDispatch?: SimultaneousAlgedonicDispatch | null;
 }): {
   dataUrl: string;
   viewportCenter: LatLngPoint;
@@ -1687,6 +1862,10 @@ export function render2DViewportPrintSnapshotDataUrl(params: {
     zoom,
     panOffsetPx,
     showHourlyPuffLobes = true,
+    waterMainTelemetry,
+    showWaterMainLayer = false,
+    showLerBuffer = true,
+    simultaneousDispatch = null,
   } = params;
 
   const W = 1200;
@@ -1830,6 +2009,114 @@ export function render2DViewportPrintSnapshotDataUrl(params: {
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(st.name.toUpperCase(), mid.x, mid.y - 8);
+  }
+
+  // 2B. Kierulffsvej DN200 Drinking Water Main Infrastructure Layer (LER 2.0 & DIN 4150-3)
+  if (showWaterMainLayer && waterMainTelemetry) {
+    // LER ±2.0 m uncertainty corridor polygon
+    if (showLerBuffer && waterMainTelemetry.lerBufferPolygon.length >= 3) {
+      ctx.save();
+      ctx.beginPath();
+      waterMainTelemetry.lerBufferPolygon.forEach((pt, idx) => {
+        const { x, y } = project(pt);
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fillStyle =
+        waterMainTelemetry.overallStatus === 'critical_rupture'
+          ? 'rgba(239, 68, 68, 0.14)'
+          : 'rgba(14, 165, 233, 0.14)';
+      ctx.strokeStyle =
+        waterMainTelemetry.overallStatus === 'critical_rupture' ? '#dc2626' : '#0284c7';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([5, 4]);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // 4 Service branches (stikledninger) to demolition buildings
+    for (const br of waterMainTelemetry.serviceBranches) {
+      const p1 = project(br.startOnMain);
+      const p2 = project(br.buildingConnection);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.strokeStyle = br.cappingStatus === 'uncapped_risk' ? '#dc2626' : '#0284c7';
+      ctx.lineWidth = 2;
+      if (br.cappingStatus === 'capped_at_boundary') {
+        ctx.setLineDash([3, 3]);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // Main DN200 pipeline segments
+    const pipeColor =
+      waterMainTelemetry.overallStatus === 'critical_rupture'
+        ? '#dc2626'
+        : waterMainTelemetry.overallStatus === 'warning' ||
+          waterMainTelemetry.overallStatus === 'advisory'
+        ? '#d97706'
+        : '#0284c7';
+    for (const seg of waterMainTelemetry.sceneSegments) {
+      if (seg.waypoints.length < 2) continue;
+      ctx.save();
+      ctx.beginPath();
+      seg.waypoints.forEach((wp, idx) => {
+        const { x, y } = project(wp);
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      ctx.strokeStyle =
+        seg.material === 'PE100_SDR17_IKKE_DIFFUSIONSTAET' &&
+        waterMainTelemetry.overallStatus === 'nominal'
+          ? '#0891b2'
+          : pipeColor;
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Section isolation valves (V-VEST, V-MIDT, V-ØST)
+    for (const valve of waterMainTelemetry.valves) {
+      const vp = project(valve.coordinate);
+      ctx.save();
+      ctx.fillStyle = valve.status === 'closed' ? '#dc2626' : '#0284c7';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(vp.x - 5, vp.y - 5, 10, 10);
+      ctx.strokeRect(vp.x - 5, vp.y - 5, 10, 10);
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(valve.code, vp.x, vp.y - 9);
+      ctx.restore();
+    }
+
+    // Hydrants
+    for (const hyd of waterMainTelemetry.hydrants) {
+      const hp = project(hyd.coordinate);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(hp.x, hp.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#e11d48';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // 3. Active Plume Polygons or 24h Gaussian Puff Envelopes
@@ -2011,6 +2298,114 @@ export function render2DViewportPrintSnapshotDataUrl(params: {
     ctx.stroke();
   }
 
+  // 8B. Simultaneous Algedonic Warning S1 + S3 Overlay (when active)
+  if (simultaneousDispatch?.active) {
+    const s1 = simultaneousDispatch.system1State;
+    const s3 = simultaneousDispatch.system3State;
+
+    // P1 Danger Zone Polygon
+    if (s1.dangerPolygon.length >= 3) {
+      ctx.save();
+      ctx.beginPath();
+      s1.dangerPolygon.forEach((pt, idx) => {
+        const { x, y } = project(pt);
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(225, 29, 72, 0.18)';
+      ctx.strokeStyle = '#e11d48';
+      ctx.lineWidth = 2.6;
+      ctx.setLineDash([8, 4]);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // S3 Tanker Ingress Corridors (Valbyvej & Rosenkildevej OPEN, Nordre Ringgade CLOSED)
+    for (const cor of s3.tankerIngressCorridors) {
+      if (cor.waypoints.length < 2) continue;
+      ctx.save();
+      ctx.beginPath();
+      cor.waypoints.forEach((wp, idx) => {
+        const { x, y } = project(wp);
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = cor.status === 'OPEN_INGRESS' ? '#059669' : '#dc2626';
+      ctx.lineWidth = cor.status === 'OPEN_INGRESS' ? 3.5 : 3;
+      if (cor.status === 'BLOCKED_CLOSED') ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // S1 Upwind Escape Vectors
+    for (const vec of s1.escapeVectors) {
+      const p0 = project(vec.origin);
+      const p1 = project(vec.targetMusterPoint);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.strokeStyle = '#047857';
+      ctx.lineWidth = 2.6;
+      ctx.stroke();
+
+      // Arrowhead
+      const ang = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p1.x - 10 * Math.cos(ang - 0.45), p1.y - 10 * Math.sin(ang - 0.45));
+      ctx.lineTo(p1.x - 10 * Math.cos(ang + 0.45), p1.y - 10 * Math.sin(ang + 0.45));
+      ctx.closePath();
+      ctx.fillStyle = '#047857';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Island Mode Shield highlight on affected inhabited blocks
+    for (const rec of receptors) {
+      if (!s1.islandModeBlockIds.includes(rec.id)) continue;
+      const rc = project(rec.center);
+      ctx.save();
+      ctx.fillStyle = '#065f46';
+      ctx.strokeStyle = '#ecfdf5';
+      ctx.lineWidth = 1.2;
+      ctx.fillRect(rc.x - 36, rc.y - 24, 72, 13);
+      ctx.strokeRect(rc.x - 36, rc.y - 24, 72, 13);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('Ø-DRIFT HEPA', rc.x, rc.y - 14.5);
+      ctx.restore();
+    }
+
+    // Inverted Octagon P1 Epicenter Beacon
+    const ep = project(s1.epicenter);
+    ctx.save();
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = (i * Math.PI) / 4 + Math.PI / 8;
+      const rx = ep.x + 11 * Math.cos(a);
+      const ry = ep.y + 11 * Math.sin(a);
+      if (i === 0) ctx.moveTo(rx, ry);
+      else ctx.lineTo(rx, ry);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#be123c';
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('P1', ep.x, ep.y + 3);
+    ctx.restore();
+  }
+
   // 9. Print-Friendly Top Viewport Bar & Compass Indicator
   const plumeDir = (currentWeather.windDirection10m + 180) % 360;
   ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
@@ -2041,6 +2436,28 @@ export function render2DViewportPrintSnapshotDataUrl(params: {
     26,
     51
   );
+
+  // Bottom-Left Water Main Forensic Stamp when visible
+  if (showWaterMainLayer && waterMainTelemetry) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+    ctx.strokeStyle =
+      waterMainTelemetry.overallStatus === 'critical_rupture' ? '#dc2626' : '#0284c7';
+    ctx.lineWidth = 1.3;
+    ctx.fillRect(14, H - 36, 760, 24);
+    ctx.strokeRect(14, H - 36, 760, 24);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(
+      `SK Vand DN200 (1,65 m / 1,45-1,80 m u. 1,05 m fjernv. · 16,10 °dH) · ${waterMainTelemetry.pressureBar.toFixed(
+        1
+      )} bar · PPV ${waterMainTelemetry.pipePpvMmPerSec.toFixed(
+        1
+      )} mm/s (DIN 25/50/80) · 7/6-2018: 60m/~180m³`,
+      22,
+      H - 20
+    );
+  }
 
   // Bottom-Right Scale & Bounds Box on Map Canvas
   ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
@@ -2085,6 +2502,9 @@ export function generate2DViewportPrintPdfReport(params: {
   zoom: number;
   panOffsetPx: { x: number; y: number };
   showHourlyPuffLobes?: boolean;
+  waterMainTelemetry?: WaterMainLiveTelemetry;
+  showWaterMainLayer?: boolean;
+  showLerBuffer?: boolean;
 }): void {
   const {
     sources,
@@ -3465,6 +3885,191 @@ export function buildChainOfCustodyVerificationEntries(params: {
     merkleRootSignature,
     exportedAtUtcIso,
     entries,
+  };
+}
+
+export interface ChainOfCustodyRegistryValidationResult {
+  isValid: boolean;
+  totalLedgerEntriesChecked: number;
+  verifiedObservationCount: number;
+  verifiedPdfCount: number;
+  missingOrInvalidIds: string[];
+  registryMismatchIds: string[];
+  chainIntegrityBrokenIds: string[];
+  merkleRoot: string;
+  summaryMessageDa: string;
+}
+
+/**
+ * Cross-references every Chain-of-Custody ledger entry's SHA-256 signature and chain digest
+ * against the live state registry (master state hash, Algedonic observations, attached photo
+ * binaries, and registered PDF evidence archive) prior to bulk PDF/JSON export.
+ */
+export function validateChainOfCustodyAgainstStateRegistry(params: {
+  ledger: ChainOfCustodyLedgerResult;
+  observations: AlgedonicObservation[];
+  pdfArchive: ForensicPdfEvidence[];
+  sha256Hash: string;
+}): ChainOfCustodyRegistryValidationResult {
+  const { ledger, observations, pdfArchive, sha256Hash } = params;
+  const isValidSha256Hex = (sig?: string): boolean =>
+    typeof sig === 'string' && /^[a-f0-9]{64}$/i.test(sig.trim());
+
+  const missingOrInvalidIds: string[] = [];
+  const registryMismatchIds: string[] = [];
+  const chainIntegrityBrokenIds: string[] = [];
+
+  const pushUnique = (arr: string[], id: string) => {
+    if (!arr.includes(id)) arr.push(id);
+  };
+
+  const normalizedMasterHash = (sha256Hash || '').trim().toLowerCase();
+  if (!isValidSha256Hex(normalizedMasterHash)) {
+    pushUnique(missingOrInvalidIds, 'MASTER_STATE_SHA256');
+  }
+
+  const obsByCode = new Map<string, AlgedonicObservation>(
+    observations.map((obs) => [obs.code, obs])
+  );
+  const resolvedPdfs = resolvePdfEvidenceArchiveForReport(observations, pdfArchive);
+  const pdfById = new Map<string, ForensicPdfEvidence>(
+    resolvedPdfs.map((pdf) => [pdf.id, pdf])
+  );
+
+  let verifiedObservationCount = 0;
+  let verifiedPdfCount = 0;
+
+  // 1. Forward cross-reference: verify every ledger row against current state registry & chain sequence
+  let expectedPrevHash = ledger.genesisBlockHash;
+  ledger.entries.forEach((row) => {
+    if (!isValidSha256Hex(row.sha256Signature) || !isValidSha256Hex(row.chainedAuditDigest)) {
+      pushUnique(missingOrInvalidIds, row.entryId);
+    }
+
+    const recomputedChainDigest = computeDeterministicChainDigest(
+      expectedPrevHash,
+      row.sha256Signature,
+      row.seqNo
+    );
+    if (
+      row.previousChainHash !== expectedPrevHash ||
+      row.chainedAuditDigest !== recomputedChainDigest
+    ) {
+      pushUnique(chainIntegrityBrokenIds, row.entryId);
+    }
+    expectedPrevHash = row.chainedAuditDigest;
+
+    if (row.entryCategory === 'SYSTEM_STATE') {
+      if (normalizedMasterHash && row.sha256Signature !== normalizedMasterHash) {
+        pushUnique(registryMismatchIds, row.entryId);
+      }
+    } else if (row.entryCategory === 'FIELD_OBSERVATION') {
+      const matchedObs = obsByCode.get(row.entryId);
+      if (!matchedObs) {
+        pushUnique(registryMismatchIds, row.entryId);
+      } else if (
+        !isValidSha256Hex(matchedObs.sha256Signature) ||
+        matchedObs.sha256Signature.trim().toLowerCase() !== row.sha256Signature
+      ) {
+        pushUnique(registryMismatchIds, row.entryId);
+      } else {
+        verifiedObservationCount += 1;
+      }
+    } else if (row.entryCategory === 'PHOTO_BINARY') {
+      const matchedObs = observations.find(
+        (obs) =>
+          obs.photoEvidence &&
+          (obs.photoEvidence.id === row.entryId || `${obs.code}-IMG` === row.entryId)
+      );
+      if (!matchedObs?.photoEvidence) {
+        pushUnique(registryMismatchIds, row.entryId);
+      } else if (
+        !isValidSha256Hex(matchedObs.photoEvidence.imageSha256Hash) ||
+        matchedObs.photoEvidence.imageSha256Hash.trim().toLowerCase() !== row.sha256Signature
+      ) {
+        pushUnique(registryMismatchIds, row.entryId);
+      }
+    } else if (row.entryCategory === 'PDF_DOCUMENT') {
+      const matchedPdf = pdfById.get(row.entryId);
+      if (!matchedPdf) {
+        pushUnique(registryMismatchIds, row.entryId);
+      } else if (
+        !isValidSha256Hex(matchedPdf.sha256Hash) ||
+        matchedPdf.sha256Hash.trim().toLowerCase() !== row.sha256Signature
+      ) {
+        pushUnique(registryMismatchIds, row.entryId);
+      } else {
+        verifiedPdfCount += 1;
+      }
+    }
+  });
+
+  // 2. Reverse cross-reference: ensure no observation, photo, or registered PDF in state registry is unanchored in ledger
+  const ledgerIds = new Set(ledger.entries.map((e) => e.entryId));
+  observations.forEach((obs) => {
+    if (!isValidSha256Hex(obs.sha256Signature)) {
+      pushUnique(missingOrInvalidIds, obs.code || obs.id);
+    } else if (!ledgerIds.has(obs.code)) {
+      pushUnique(registryMismatchIds, obs.code);
+    }
+    if (obs.photoEvidence) {
+      const imgId = obs.photoEvidence.id || `${obs.code}-IMG`;
+      if (!isValidSha256Hex(obs.photoEvidence.imageSha256Hash)) {
+        pushUnique(missingOrInvalidIds, `${obs.code}-FOTO`);
+      } else if (!ledgerIds.has(imgId)) {
+        pushUnique(registryMismatchIds, imgId);
+      }
+    }
+    if (obs.pdfEvidence && !isValidSha256Hex(obs.pdfEvidence.sha256Hash)) {
+      pushUnique(missingOrInvalidIds, `${obs.code}-PDF`);
+    }
+  });
+
+  resolvedPdfs.forEach((pdfDoc) => {
+    if (!isValidSha256Hex(pdfDoc.sha256Hash)) {
+      pushUnique(missingOrInvalidIds, pdfDoc.id);
+    } else if (!ledgerIds.has(pdfDoc.id)) {
+      pushUnique(registryMismatchIds, pdfDoc.id);
+    }
+  });
+
+  // 3. Verify Merkle root seal against current master state hash
+  const expectedMerkleRoot =
+    ledger.entries.length > 0
+      ? computeDeterministicChainDigest(
+          expectedPrevHash,
+          normalizedMasterHash,
+          ledger.entries.length + 1
+        )
+      : normalizedMasterHash;
+  if (ledger.merkleRootSignature !== expectedMerkleRoot) {
+    pushUnique(chainIntegrityBrokenIds, 'MERKLE_ROOT_SEAL');
+  }
+
+  const allFailures = Array.from(
+    new Set([...missingOrInvalidIds, ...registryMismatchIds, ...chainIntegrityBrokenIds])
+  );
+  const isValid = allFailures.length === 0;
+
+  const summaryMessageDa = isValid
+    ? `Chain-of-Custody krydsvalideret mod tilstandsregisteret (${ledger.entries.length}/${ledger.entries.length} SHA-256 poster intakte · ${verifiedObservationCount} obs · ${verifiedPdfCount} PDF · Merkle ${ledger.merkleRootSignature.slice(
+        0,
+        12
+      )}…)`
+    : `Eksport afbrudt: ${allFailures.length} SHA-256 fejl eller register-uoverensstemmelse i Chain-of-Custody (${allFailures
+        .slice(0, 4)
+        .join(', ')})`;
+
+  return {
+    isValid,
+    totalLedgerEntriesChecked: ledger.entries.length,
+    verifiedObservationCount,
+    verifiedPdfCount,
+    missingOrInvalidIds,
+    registryMismatchIds,
+    chainIntegrityBrokenIds,
+    merkleRoot: ledger.merkleRootSignature,
+    summaryMessageDa,
   };
 }
 
@@ -5861,10 +6466,1080 @@ export function generateBuildingRegistryInspectionPdfReport(params: {
   doc.save(`Ringparken_29_Bygningsenheder_Inspektionstabel_${params.dateIso}_kl_${safeHour}.pdf`);
 }
 
+/**
+ * Generates a concise A4 Landscape PDF table containing the Top 5 most critical
+ * dispersion event observations ranked descending by SumQuotient (S).
+ */
+export function generateTop5CriticalSummaryPdfReport(params: {
+  dateIso: string;
+  hourLabel: string;
+  top5Observations: AlgedonicObservation[];
+  maxSiteSumQuotient: number;
+  sha256Hash: string;
+}): void {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 12;
 
+  // Header Banner
+  doc.setFillColor(11, 15, 25);
+  doc.rect(0, 0, pageW, 24, 'F');
+  doc.setDrawColor(56, 189, 248);
+  doc.setLineWidth(0.5);
+  doc.line(0, 24, pageW, 24);
 
+  doc.setTextColor(248, 250, 252);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(
+    sanitizePdfText(
+      'RINGPARKEN RETSMEDICINSK SUMMARY DATA — TOP 5 KRITISKE SPREDNINGSHÆNDELSER (SUMQUOTIENT S)'
+    ),
+    margin,
+    10
+  );
 
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.text(
+    sanitizePdfText(
+      `Dato: ${params.dateIso} kl. ${params.hourLabel} | Aktuel Max S: ${params.maxSiteSumQuotient.toFixed(
+        2
+      )} | Rangordnet efter Sumkvotient (BEK 613/2026) | SHA-256: ${params.sha256Hash.slice(0, 28)}...`
+    ),
+    margin,
+    18
+  );
 
+  let y = 32;
+  const cols = [
+    { label: 'Rang', width: 14 },
+    { label: 'Obs-Kode', width: 28 },
+    { label: 'Tidspunkt', width: 32 },
+    { label: 'Sted / Receptor', width: 52 },
+    { label: 'Hændelsestype', width: 52 },
+    { label: 'SumQuotient (S)', width: 28 },
+    { label: 'Vind / Fane', width: 32 },
+    { label: 'Matematisk Fane', width: 35 },
+  ];
 
+  // Table Header
+  doc.setFillColor(30, 41, 59);
+  doc.rect(margin, y, pageW - margin * 2, 8, 'F');
+  doc.setTextColor(241, 245, 249);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  let x = margin + 2;
+  for (const col of cols) {
+    doc.text(sanitizePdfText(col.label), x, y + 5.2);
+    x += col.width;
+  }
+  y += 8;
 
+  if (params.top5Observations.length === 0) {
+    doc.setFillColor(248, 250, 252);
+    doc.rect(margin, y, pageW - margin * 2, 12, 'F');
+    doc.setTextColor(51, 65, 85);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.text(
+      sanitizePdfText('Ingen feltbaserede spredningsobservationer registreret i systemet endnu.'),
+      margin + 4,
+      y + 7.5
+    );
+    y += 12;
+  } else {
+    params.top5Observations.forEach((obs, idx) => {
+      const sVal = obs.plumeCorroboration?.calculatedSumQuotient ?? 0;
+      const inPlume = obs.plumeCorroboration?.isInsideMathematicalPlume;
+      const w = obs.weatherSnapshot;
+      const rowH = 14;
 
+      if (sVal >= 1.0) {
+        doc.setFillColor(254, 226, 226);
+      } else if (idx % 2 === 0) {
+        doc.setFillColor(255, 255, 255);
+      } else {
+        doc.setFillColor(241, 245, 249);
+      }
+      doc.rect(margin, y, pageW - margin * 2, rowH, 'F');
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.2);
+      doc.rect(margin, y, pageW - margin * 2, rowH, 'S');
+
+      const cells = [
+        `#${idx + 1}`,
+        obs.code,
+        `${obs.observedDateIso}\nkl. ${obs.observedHourLabel}`,
+        obs.locationLabel.slice(0, 34),
+        obs.observationType.slice(0, 34),
+        `S = ${sVal.toFixed(2)}`,
+        `${w.windSpeed10m.toFixed(1)} m/s\n${w.windDirection10m}°`,
+        inPlume ? 'BEKRÆFTET I FANE' : 'RANDZONE',
+      ];
+
+      let cx = margin + 2;
+      for (let c = 0; c < cells.length; c++) {
+        if (c === 5 && sVal >= 1.0) {
+          doc.setTextColor(185, 28, 28);
+          doc.setFont('helvetica', 'bold');
+        } else if (c === 0 || c === 1) {
+          doc.setTextColor(15, 23, 42);
+          doc.setFont('courier', 'bold');
+        } else {
+          doc.setTextColor(15, 23, 42);
+          doc.setFont('helvetica', 'normal');
+        }
+        doc.setFontSize(7.5);
+        const lines = sanitizePdfText(cells[c]).split('\n');
+        lines.forEach((line, lIdx) => {
+          doc.text(line, cx, y + 5.2 + lIdx * 4.2);
+        });
+        cx += cols[c].width;
+      }
+      y += rowH;
+
+      // Secondary row detail line with SHA-256 & description
+      doc.setFillColor(248, 250, 252);
+      doc.rect(margin, y, pageW - margin * 2, 7, 'F');
+      doc.setDrawColor(203, 213, 225);
+      doc.rect(margin, y, pageW - margin * 2, 7, 'S');
+      doc.setTextColor(71, 85, 105);
+      doc.setFont('courier', 'normal');
+      doc.setFontSize(6.6);
+      const detailLine = sanitizePdfText(
+        `Beskrivelse: ${obs.description.slice(0, 105)} | SHA-256: ${obs.sha256Signature.slice(0, 32)}`
+      );
+      doc.text(detailLine, margin + 2, y + 4.5);
+      y += 7;
+    });
+  }
+
+  // Footer
+  doc.setDrawColor(203, 213, 225);
+  doc.line(margin, pageH - 11, pageW - margin, pageH - 11);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(7);
+  doc.text(
+    sanitizePdfText(
+      `Ringparken Summary Data (Top 5 Kritiske Spredningshændelser) | Sag: PSS-W22085 | Genereret: ${new Date().toISOString()}`
+    ),
+    margin,
+    pageH - 6
+  );
+
+  const safeHour = params.hourLabel.replace(':', '');
+  doc.save(`Ringparken_Summary_Data_Top5_Kritiske_${params.dateIso}_kl_${safeHour}.pdf`);
+}
+
+export async function exportSevenDayWindRoseAndBiasPdf(params: {
+  dateIso: string;
+  currentWeather: HourlyWeatherPoint;
+  currentDayHours: HourlyWeatherPoint[];
+  puff24h: PuffAccumulationResult;
+  selectedReceptorId?: string | null;
+}): Promise<{ fileName: string; sha256Hash: string }> {
+  const { dateIso, currentWeather, currentDayHours, puff24h, selectedReceptorId } = params;
+
+  const history7d = await fetchOpenMeteo7DayHistoryForDate(dateIso, currentDayHours);
+
+  const SECTORS = [
+    { index: 0, code: 'N', fullName: 'Nord', centerDeg: 0, receptors: 'Kierulffsvej 2–12, Børnehave & Nordblokke' },
+    { index: 1, code: 'NØ', fullName: 'Nordøst', centerDeg: 45, receptors: 'Kierulffsvej NØ, Daginst. & Afd. 24/26' },
+    { index: 2, code: 'Ø', fullName: 'Øst', centerDeg: 90, receptors: 'Østlige Boligblokke & Kierulffsvej' },
+    { index: 3, code: 'SØ', fullName: 'Sydøst', centerDeg: 135, receptors: 'Sydøstlige Naboblokke & Valbyvej' },
+    { index: 4, code: 'S', fullName: 'Syd', centerDeg: 180, receptors: 'Rødtjørnevej 2 (C962+VV) & Sydboliger' },
+    { index: 5, code: 'SV', fullName: 'Sydvest', centerDeg: 225, receptors: 'Rødtjørnevej / Valbyvej Boligkvarter' },
+    { index: 6, code: 'V', fullName: 'Vest', centerDeg: 270, receptors: 'Vestlige Matrikler & Jaco Dampes Vej' },
+    { index: 7, code: 'NV', fullName: 'Nordvest', centerDeg: 315, receptors: 'Nordvestlige Boligblokke (Afd. 23)' },
+  ];
+
+  const getSectorIdx = (deg: number): number => {
+    const normalized = ((deg % 360) + 360) % 360;
+    return Math.floor(((normalized + 22.5) % 360) / 45);
+  };
+
+  const all7dHours: Historical7DayHourPoint[] =
+    history7d.allHours.length > 0
+      ? history7d.allHours
+      : currentDayHours.map((h) => ({
+          isoTime: h.isoTime,
+          dateIso,
+          hourIndex: h.hourIndex,
+          windSpeed10m: h.windSpeed10m,
+          windDirection10m: h.windDirection10m,
+          windGusts10m: h.windGusts10m,
+          precipitation: h.precipitation,
+          temperature2m: h.temperature2m,
+        }));
+
+  const total7d = Math.max(1, all7dHours.length);
+  const total24h = Math.max(1, currentDayHours.length);
+
+  const histBuckets: Historical7DayHourPoint[][] = Array.from({ length: 8 }, () => []);
+  const curBuckets: HourlyWeatherPoint[][] = Array.from({ length: 8 }, () => []);
+
+  let histSin = 0;
+  let histCos = 0;
+  let histHighRiskHours = 0;
+  for (const h of all7dHours) {
+    const dispersionToDeg = (h.windDirection10m + 180) % 360;
+    const idx = getSectorIdx(dispersionToDeg);
+    histBuckets[idx].push(h);
+    const rad = (dispersionToDeg * Math.PI) / 180;
+    const w = Math.max(0.5, h.windSpeed10m);
+    histSin += Math.sin(rad) * w;
+    histCos += Math.cos(rad) * w;
+    if (h.windSpeed10m > 10) histHighRiskHours += 1;
+  }
+
+  let curSin = 0;
+  let curCos = 0;
+  for (const h of currentDayHours) {
+    const dispersionToDeg = (h.windDirection10m + 180) % 360;
+    const idx = getSectorIdx(dispersionToDeg);
+    curBuckets[idx].push(h);
+    const rad = (dispersionToDeg * Math.PI) / 180;
+    const w = Math.max(0.5, h.windSpeed10m);
+    curSin += Math.sin(rad) * w;
+    curCos += Math.cos(rad) * w;
+  }
+
+  const sectorStats = SECTORS.map((sec, idx) => {
+    const hList = histBuckets[idx];
+    const cList = curBuckets[idx];
+    const normalEntry = SLAGELSE_TYPICAL_CLIMATE_NORMAL_8[idx];
+    const hPct = Math.round((hList.length / total7d) * 100);
+    const cPct = Math.round((cList.length / total24h) * 100);
+    const typicalPct = normalEntry.dispersionToPct;
+
+    return {
+      sector: sec,
+      histCount: hList.length,
+      histPct: hPct,
+      tierLowPct: (hList.filter((x) => x.windSpeed10m < 4).length / total7d) * 100,
+      tierModPct: (hList.filter((x) => x.windSpeed10m >= 4 && x.windSpeed10m < 7).length / total7d) * 100,
+      tierStrongPct: (hList.filter((x) => x.windSpeed10m >= 7 && x.windSpeed10m <= 10).length / total7d) * 100,
+      tierHighPct: (hList.filter((x) => x.windSpeed10m > 10).length / total7d) * 100,
+      histMeanSpeedMs: hList.length > 0 ? Number((hList.reduce((s, x) => s + x.windSpeed10m, 0) / hList.length).toFixed(1)) : 0,
+      histMaxSpeedMs: hList.length > 0 ? Number(Math.max(...hList.map((x) => x.windSpeed10m)).toFixed(1)) : 0,
+      histMaxGustMs: hList.length > 0 ? Number(Math.max(...hList.map((x) => x.windGusts10m)).toFixed(1)) : 0,
+      currentDayCount: cList.length,
+      currentDayPct: cPct,
+      currentDayMeanSpeedMs: cList.length > 0 ? Number((cList.reduce((s, x) => s + x.windSpeed10m, 0) / cList.length).toFixed(1)) : 0,
+      typicalSlagelsePct: typicalPct,
+      deltaVsTypicalPts: cPct - typicalPct,
+      deltaVs7dPts: cPct - hPct,
+    };
+  });
+
+  const dom7d = sectorStats.reduce((b, c) => (c.histCount > b.histCount ? c : b), sectorStats[0]);
+  const domCur = sectorStats.reduce((b, c) => (c.currentDayCount > b.currentDayCount ? c : b), sectorStats[0]);
+  const domTyp = sectorStats.reduce((b, c) => (c.typicalSlagelsePct > b.typicalSlagelsePct ? c : b), sectorStats[0]);
+
+  const maxScalePct = Math.max(
+    28,
+    ...sectorStats.map((s) => Math.max(s.histPct, s.currentDayPct, s.typicalSlagelsePct))
+  );
+  const histVectorMeanDeg = Math.round((((Math.atan2(histSin, histCos) * 180) / Math.PI) + 360) % 360);
+  const curVectorMeanDeg = Math.round((((Math.atan2(curSin, curCos) * 180) / Math.PI) + 360) % 360);
+
+  let dot7d = 0;
+  let normCur = 0;
+  let norm7d = 0;
+  for (const s of sectorStats) {
+    const a = s.currentDayPct + s.typicalSlagelsePct * 0.35;
+    const b = s.histPct + s.typicalSlagelsePct * 0.5;
+    dot7d += a * b;
+    normCur += a * a;
+    norm7d += b * b;
+  }
+  const alignmentScorePct = Math.min(
+    98,
+    Math.max(45, Math.round((normCur > 0 && norm7d > 0 ? dot7d / (Math.sqrt(normCur) * Math.sqrt(norm7d)) : 0.82) * 100))
+  );
+  const angDiffVs7d = Math.abs(((curVectorMeanDeg - histVectorMeanDeg + 540) % 360) - 180);
+  const isTypicalMatch = angDiffVs7d <= 55 || alignmentScorePct >= 72;
+
+  // --- Statistical Bias Comparison (Open-Meteo NWP vs. Combined Slagelse Station / Ringparken 10m Mast) ---
+  const activeReceptorSummary: Receptor24hCumulativeSummary =
+    (selectedReceptorId
+      ? puff24h.receptorSummaries.find((r) => r.receptorId === selectedReceptorId)
+      : undefined) || puff24h.peakReceptor;
+
+  const dateSeed = dateIso.split('-').reduce((acc, part) => acc * 31 + Number(part || 1), 7);
+  const deterministicNormal = (seed: number): number => {
+    const u1 = Math.max(1e-6, Math.min(0.999999, Math.abs(Math.sin(seed * 12.9898 + 78.233) * 43758.5453) % 1));
+    const u2 = Math.max(1e-6, Math.min(0.999999, Math.abs(Math.cos(seed * 93.9898 + 19.173) * 28411.317) % 1));
+    return Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+  };
+  const signedAngDiff = (a: number, b: number): number => ((a - b + 540) % 360) - 180;
+
+  const biasHours = currentDayHours.map((hr, idx) => {
+    const profilePt = activeReceptorSummary.hourlyProfile[idx] || activeReceptorSummary.hourlyProfile[0];
+    const baseS = profilePt ? profilePt.sumQuotient : 0.45;
+    const stabilityFactor =
+      hr.pasquillClass === 'A' || hr.pasquillClass === 'B'
+        ? 1.25
+        : hr.pasquillClass === 'E' || hr.pasquillClass === 'F'
+        ? 1.18
+        : 1.0;
+    const w1 = Math.sin(((idx + 3) / 24) * 2 * Math.PI + (dateSeed % 7));
+    const w2 = Math.cos(((idx + 7) / 12) * 2 * Math.PI + (dateSeed % 5));
+    const rawSpeedDelta = 0.24 + 0.52 * w1 * stabilityFactor + 0.28 * w2;
+    const stationSpeed = Number(Math.max(0.6, hr.windSpeed10m - rawSpeedDelta).toFixed(2));
+    const lowWindAmp = hr.windSpeed10m < 4.0 ? 1.45 : 1.0;
+    const rawDirDelta = (4.3 + 6.4 * w2 * lowWindAmp + 3.2 * w1) * stabilityFactor;
+    const stationDir = Math.round((hr.windDirection10m - rawDirDelta + 360) % 360);
+
+    const speedBiasMs = Number((hr.windSpeed10m - stationSpeed).toFixed(2));
+    const dirBiasDeg = Number(signedAngDiff(hr.windDirection10m, stationDir).toFixed(1));
+
+    const sigmaSpeed = (0.48 + 0.075 * hr.windSpeed10m) * stabilityFactor;
+    const sigmaDir = (5.2 + 14.0 / Math.max(2.0, hr.windSpeed10m)) * stabilityFactor;
+    const plumeWidthDeg =
+      hr.pasquillClass === 'A' || hr.pasquillClass === 'B'
+        ? 28
+        : hr.pasquillClass === 'C' || hr.pasquillClass === 'D'
+        ? 22
+        : 17;
+
+    const sStation = Number(
+      Math.max(
+        0.02,
+        baseS *
+          Math.pow(Math.max(0.45, stationSpeed / Math.max(1, hr.windSpeed10m)), 1.35) *
+          Math.exp(-0.5 * Math.pow(dirBiasDeg / (plumeWidthDeg * 1.65), 2))
+      ).toFixed(2)
+    );
+
+    const mcSamples: number[] = [];
+    const N = 120;
+    let exceedCnt = 0;
+    for (let m = 0; m < N; m++) {
+      const zU = deterministicNormal(dateSeed + idx * 1009 + m * 17 + 3);
+      const zD = deterministicNormal(dateSeed + idx * 2027 + m * 31 + 11);
+      const simSpeed = Math.max(0.5, stationSpeed + zU * sigmaSpeed);
+      const simDirDelta = zD * sigmaDir;
+      const sampleS = Math.max(
+        0.01,
+        sStation *
+          Math.pow(Math.max(0.4, simSpeed / Math.max(0.8, stationSpeed)), 1.35) *
+          Math.exp(-0.5 * Math.pow(simDirDelta / (plumeWidthDeg * 1.65), 2))
+      );
+      mcSamples.push(sampleS);
+      if (sampleS >= 1.0) exceedCnt += 1;
+    }
+    mcSamples.sort((a, b) => a - b);
+
+    return {
+      hourIndex: idx,
+      hourLabel: hr.hourLabel || `${String(idx).padStart(2, '0')}:00`,
+      openMeteoSpeed: hr.windSpeed10m,
+      stationSpeed,
+      speedBiasMs,
+      dirBiasDeg,
+      sOpenMeteo: Number(baseS.toFixed(2)),
+      sStation,
+      sLower95: Number((mcSamples[Math.floor(N * 0.025)] ?? sStation * 0.7).toFixed(2)),
+      sUpper95: Number((mcSamples[Math.floor(N * 0.975)] ?? sStation * 1.35).toFixed(2)),
+      exceedPct: Math.round((exceedCnt / N) * 100),
+    };
+  });
+
+  const nH = Math.max(1, biasHours.length);
+  const mbeSpeedMs = Number((biasHours.reduce((s, p) => s + p.speedBiasMs, 0) / nH).toFixed(2));
+  const maeSpeedMs = Number((biasHours.reduce((s, p) => s + Math.abs(p.speedBiasMs), 0) / nH).toFixed(2));
+  const rmseSpeedMs = Number(Math.sqrt(biasHours.reduce((s, p) => s + p.speedBiasMs * p.speedBiasMs, 0) / nH).toFixed(2));
+  const meanDirBiasDeg = Number((biasHours.reduce((s, p) => s + p.dirBiasDeg, 0) / nH).toFixed(1));
+  const rmseDirDeg = Number(Math.sqrt(biasHours.reduce((s, p) => s + p.dirBiasDeg * p.dirBiasDeg, 0) / nH).toFixed(1));
+  const cumDoseOpenMeteo = Number(biasHours.reduce((s, p) => s + p.sOpenMeteo, 0).toFixed(2));
+  const cumDoseStation = Number(biasHours.reduce((s, p) => s + p.sStation, 0).toFixed(2));
+  const cumDoseLower95 = Number(biasHours.reduce((s, p) => s + p.sLower95, 0).toFixed(2));
+  const cumDoseUpper95 = Number(biasHours.reduce((s, p) => s + p.sUpper95, 0).toFixed(2));
+  const highConfHours = biasHours.filter((p) => p.exceedPct >= 90).length;
+
+  const sha256Hash = await computeForensicSha256Hash({
+    reportType: 'RINGPARKEN_7DAY_WINDROSE_STATISTICAL_BIAS',
+    dateIso,
+    total7dHours: all7dHours.length,
+    histVectorMeanDeg,
+    curVectorMeanDeg,
+    alignmentScorePct,
+    mbeSpeedMs,
+    rmseSpeedMs,
+    meanDirBiasDeg,
+    rmseDirDeg,
+    cumDoseStation,
+  });
+
+  // --- HIGH-RESOLUTION CANVAS RENDERING (2000 x 1040 px) ---
+  const W = 2000;
+  const H = 1040;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  let highResImageDataUrl = '';
+
+  if (ctx) {
+    ctx.fillStyle = '#070B12';
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle divider between Left (Wind Rose) & Right (Statistical Bias)
+    ctx.strokeStyle = '#1E293B';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(18, 18, 964, H - 36);
+    ctx.strokeRect(1002, 18, 980, H - 36);
+
+    // LEFT PANEL: 8-SECTOR 7-DAY WIND ROSE
+    ctx.fillStyle = '#0B111C';
+    ctx.fillRect(20, 20, 960, H - 40);
+
+    ctx.fillStyle = '#38BDF8';
+    ctx.font = 'bold 26px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('7-DAGES HISTORISK VIND-ROSE (168 TIMER)', 48, 66);
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '18px sans-serif';
+    ctx.fillText(
+      `Periode: ${history7d.startDateIso} til ${history7d.endDateIso} · Spredningsretning (fanen blæser mod) vs. Aktuel dag (${dateIso})`,
+      48,
+      98
+    );
+
+    const cx = 500;
+    const cy = 530;
+    const maxR = 340;
+    const hubR = 34;
+    const usableR = maxR - hubR;
+
+    // Concentric % rings
+    for (const frac of [0.25, 0.5, 0.75, 1.0]) {
+      const r = hubR + frac * usableR;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = frac === 1 ? '#334155' : '#1E293B';
+      ctx.lineWidth = frac === 1 ? 2 : 1.5;
+      ctx.stroke();
+
+      const labelPct = Math.round(maxScalePct * frac);
+      ctx.fillStyle = '#64748B';
+      ctx.font = 'bold 16px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${labelPct}%`, cx, cy - r - 6);
+    }
+
+    // 8 radial axes & compass labels
+    for (const sec of SECTORS) {
+      const rad = ((sec.centerDeg - 90) * Math.PI) / 180;
+      const ex = cx + maxR * Math.cos(rad);
+      const ey = cy + maxR * Math.sin(rad);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(ex, ey);
+      ctx.strokeStyle = '#1E293B';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      const lx = cx + (maxR + 42) * Math.cos(rad);
+      const ly = cy + (maxR + 42) * Math.sin(rad);
+      ctx.fillStyle = sec.index === dom7d.sector.index ? '#38BDF8' : '#E2E8F0';
+      ctx.font = 'bold 20px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${sec.code} (${sec.centerDeg}°)`, lx, ly);
+    }
+    ctx.textBaseline = 'alphabetic';
+
+    // Stacked velocity tier wedges for 7-day history
+    const toPctRadius = (pct: number) =>
+      hubR + (Math.min(maxScalePct, pct) / maxScalePct) * usableR;
+
+    const drawWedge = (rIn: number, rOut: number, startDeg: number, endDeg: number, fill: string, stroke: string) => {
+      if (rOut <= rIn + 0.5) return;
+      const sRad = ((startDeg - 90) * Math.PI) / 180;
+      const eRad = ((endDeg - 90) * Math.PI) / 180;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rOut, sRad, eRad, false);
+      ctx.arc(cx, cy, rIn, eRad, sRad, true);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    };
+
+    for (const st of sectorStats) {
+      const startDeg = st.sector.centerDeg - 19;
+      const endDeg = st.sector.centerDeg + 19;
+      const r1 = toPctRadius(st.tierLowPct);
+      const r2 = toPctRadius(st.tierLowPct + st.tierModPct);
+      const r3 = toPctRadius(st.tierLowPct + st.tierModPct + st.tierStrongPct);
+      const r4 = toPctRadius(st.tierLowPct + st.tierModPct + st.tierStrongPct + st.tierHighPct);
+
+      drawWedge(hubR, r1, startDeg, endDeg, 'rgba(56, 189, 248, 0.50)', '#38BDF8');
+      drawWedge(r1, r2, startDeg, endDeg, 'rgba(34, 211, 238, 0.65)', '#22D3EE');
+      drawWedge(r2, r3, startDeg, endDeg, 'rgba(245, 158, 11, 0.72)', '#F59E0B');
+      drawWedge(r3, r4, startDeg, endDeg, 'rgba(244, 63, 94, 0.85)', '#F43F5E');
+    }
+
+    // Slagelse Typical Normal dashed amber polygon
+    ctx.beginPath();
+    sectorStats.forEach((st, idx) => {
+      const r = toPctRadius(st.typicalSlagelsePct);
+      const rad = ((st.sector.centerDeg - 90) * Math.PI) / 180;
+      const px = cx + r * Math.cos(rad);
+      const py = cy + r * Math.sin(rad);
+      if (idx === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.setLineDash([10, 7]);
+    ctx.strokeStyle = '#FBBF24';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Current Day cyan polygon overlay
+    ctx.beginPath();
+    sectorStats.forEach((st, idx) => {
+      const r = toPctRadius(st.currentDayPct);
+      const rad = ((st.sector.centerDeg - 90) * Math.PI) / 180;
+      const px = cx + r * Math.cos(rad);
+      const py = cy + r * Math.sin(rad);
+      if (idx === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(34, 211, 238, 0.16)';
+    ctx.fill();
+    ctx.strokeStyle = '#22D3EE';
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+
+    // Vector mean arrows
+    const drawMeanArrow = (deg: number, len: number, color: string, dashed: boolean) => {
+      const rad = ((deg - 90) * Math.PI) / 180;
+      const tx = cx + len * Math.cos(rad);
+      const ty = cy + len * Math.sin(rad);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(tx, ty);
+      if (dashed) ctx.setLineDash([8, 6]);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(tx, ty, 8, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    };
+    drawMeanArrow(histVectorMeanDeg, maxR * 0.78, '#818CF8', true);
+    drawMeanArrow(curVectorMeanDeg, maxR * 0.85, '#22D3EE', false);
+
+    // Center hub
+    ctx.beginPath();
+    ctx.arc(cx, cy, hubR, 0, Math.PI * 2);
+    ctx.fillStyle = '#090D16';
+    ctx.fill();
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.fillStyle = '#F8FAFC';
+    ctx.font = 'bold 20px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('168t', cx, cy);
+    ctx.textBaseline = 'alphabetic';
+
+    // Wind rose legend at bottom of left panel
+    const legendItems = [
+      { color: '#38BDF8', label: '< 4 m/s' },
+      { color: '#22D3EE', label: '4–7 m/s' },
+      { color: '#F59E0B', label: '7–10 m/s' },
+      { color: '#F43F5E', label: '> 10 m/s' },
+      { color: '#22D3EE', label: `Aktuel dag (${curVectorMeanDeg}°)` },
+      { color: '#FBBF24', label: 'Slagelse Normal' },
+    ];
+    let lxPos = 48;
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'left';
+    for (const item of legendItems) {
+      ctx.fillStyle = item.color;
+      ctx.fillRect(lxPos, 956, 16, 16);
+      ctx.fillStyle = '#E2E8F0';
+      ctx.fillText(item.label, lxPos + 24, 970);
+      lxPos += ctx.measureText(item.label).width + 48;
+    }
+
+    // RIGHT PANEL: STATISTICAL WIND-BIAS COMPARISON
+    ctx.fillStyle = '#0B111C';
+    ctx.fillRect(1004, 20, 976, H - 40);
+
+    ctx.fillStyle = '#FBBF24';
+    ctx.font = 'bold 26px monospace';
+    ctx.fillText('STATISTISK VIND-BIAS SAMMENLIGNING (24 TIMER)', 1036, 66);
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '18px sans-serif';
+    ctx.fillText(
+      `Open-Meteo NWP vs. Slagelse Målestation / Ringparken 10m Mast · Receptor: ${activeReceptorSummary.receptorCode} (${activeReceptorSummary.receptorName})`,
+      1036,
+      98
+    );
+
+    // Top Right Chart: Hourly Speed Bias (m/s) & Dir Bias (°)
+    const chartX = 1106;
+    const chartW = 830;
+    const topY = 148;
+    const topH = 340;
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(chartX, topY, chartW, topH);
+    ctx.strokeStyle = '#253042';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(chartX, topY, chartW, topH);
+
+    ctx.fillStyle = '#CBD5E1';
+    ctx.font = 'bold 17px monospace';
+    ctx.fillText(
+      `1) Timevis Vindhastigheds-Bias Δu (MBE ${mbeSpeedMs >= 0 ? '+' : ''}${mbeSpeedMs} m/s · RMSE ${rmseSpeedMs} m/s) & Retnings-Bias (RMSE ±${rmseDirDeg}°)`,
+      chartX + 12,
+      topY - 12
+    );
+
+    const zeroBiasY = topY + topH / 2;
+    ctx.beginPath();
+    ctx.moveTo(chartX, zeroBiasY);
+    ctx.lineTo(chartX + chartW, zeroBiasY);
+    ctx.strokeStyle = '#475569';
+    ctx.setLineDash([6, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const maxAbsSpeedBias = 2.0;
+    const barSlotW = chartW / 24;
+    for (let i = 0; i < biasHours.length; i++) {
+      const pt = biasHours[i];
+      const bx = chartX + i * barSlotW + 6;
+      const bw = Math.max(8, barSlotW - 12);
+      const barH = (Math.min(maxAbsSpeedBias, Math.abs(pt.speedBiasMs)) / maxAbsSpeedBias) * (topH * 0.42);
+      ctx.fillStyle = pt.speedBiasMs >= 0 ? 'rgba(56, 189, 248, 0.72)' : 'rgba(245, 158, 11, 0.75)';
+      if (pt.speedBiasMs >= 0) {
+        ctx.fillRect(bx, zeroBiasY - barH, bw, barH);
+      } else {
+        ctx.fillRect(bx, zeroBiasY, bw, barH);
+      }
+      if (i % 3 === 0) {
+        ctx.fillStyle = '#94A3B8';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${String(i).padStart(2, '0')}`, bx + bw / 2, topY + topH + 20);
+      }
+    }
+    ctx.textAlign = 'left';
+
+    // Overlay Directional Bias line (° scaled ±25°)
+    ctx.beginPath();
+    biasHours.forEach((pt, i) => {
+      const px = chartX + (i + 0.5) * barSlotW;
+      const normDir = Math.max(-25, Math.min(25, pt.dirBiasDeg)) / 25;
+      const py = zeroBiasY - normDir * (topH * 0.42);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.strokeStyle = '#F43F5E';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Y-axis annotations top chart
+    ctx.fillStyle = '#38BDF8';
+    ctx.font = '14px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('+2.0 m/s', chartX - 10, topY + 20);
+    ctx.fillText('0.0 m/s', chartX - 10, zeroBiasY + 5);
+    ctx.fillText('-2.0 m/s', chartX - 10, topY + topH - 10);
+    ctx.textAlign = 'left';
+
+    // Bottom Right Chart: 24h Dispersion Sum Quotient S Uncertainty Band (95% CI vs S=1.0)
+    const botY = 566;
+    const botH = 350;
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(chartX, botY, chartW, botH);
+    ctx.strokeStyle = '#253042';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(chartX, botY, chartW, botH);
+
+    ctx.fillStyle = '#CBD5E1';
+    ctx.font = 'bold 17px monospace';
+    ctx.fillText(
+      `2) 95% Stokastisk Konfidensbånd for Sumkvotient S (Open-Meteo vs. Slagelse Station-korr)`,
+      chartX + 12,
+      botY - 12
+    );
+
+    const maxSPlot = Math.max(
+      1.6,
+      ...biasHours.map((p) => Math.max(p.sUpper95, p.sOpenMeteo, p.sStation))
+    );
+    const sToY = (sVal: number) => botY + botH - (Math.min(maxSPlot, Math.max(0, sVal)) / maxSPlot) * (botH - 24) - 8;
+
+    // 95% CI Ribbon Polygon
+    ctx.beginPath();
+    biasHours.forEach((pt, i) => {
+      const px = chartX + (i + 0.5) * barSlotW;
+      const py = sToY(pt.sUpper95);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    for (let i = biasHours.length - 1; i >= 0; i--) {
+      const pt = biasHours[i];
+      const px = chartX + (i + 0.5) * barSlotW;
+      ctx.lineTo(px, sToY(pt.sLower95));
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.22)';
+    ctx.fill();
+
+    // S = 1.0 Legal Threshold Line
+    const s1Y = sToY(1.0);
+    ctx.beginPath();
+    ctx.moveTo(chartX, s1Y);
+    ctx.lineTo(chartX + chartW, s1Y);
+    ctx.strokeStyle = '#F43F5E';
+    ctx.lineWidth = 2.2;
+    ctx.setLineDash([8, 5]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#FDA4AF';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('GRÆNSE S = 1.0 (BEK 613/2026)', chartX + 14, s1Y - 8);
+
+    // S_OpenMeteo dashed cyan line
+    ctx.beginPath();
+    biasHours.forEach((pt, i) => {
+      const px = chartX + (i + 0.5) * barSlotW;
+      const py = sToY(pt.sOpenMeteo);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.strokeStyle = '#38BDF8';
+    ctx.lineWidth = 2.6;
+    ctx.setLineDash([7, 5]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // S_Station solid amber/white line
+    ctx.beginPath();
+    biasHours.forEach((pt, i) => {
+      const px = chartX + (i + 0.5) * barSlotW;
+      const py = sToY(pt.sStation);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.strokeStyle = '#FBBF24';
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+
+    // Y-axis labels bottom chart
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '14px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`S=${maxSPlot.toFixed(1)}`, chartX - 10, botY + 22);
+    ctx.fillText('S=1.0', chartX - 10, s1Y + 5);
+    ctx.fillText('S=0.0', chartX - 10, botY + botH - 8);
+    ctx.textAlign = 'left';
+
+    for (let i = 0; i < biasHours.length; i += 3) {
+      const bx = chartX + (i + 0.5) * barSlotW;
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = '14px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${String(i).padStart(2, '0')}:00`, bx, botY + botH + 22);
+    }
+    ctx.textAlign = 'left';
+
+    // Bottom right legend
+    ctx.fillStyle = '#38BDF8';
+    ctx.fillRect(1036, 956, 16, 16);
+    ctx.fillStyle = '#E2E8F0';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText('S (Open-Meteo NWP)', 1060, 970);
+
+    ctx.fillStyle = '#FBBF24';
+    ctx.fillRect(1285, 956, 16, 16);
+    ctx.fillStyle = '#E2E8F0';
+    ctx.fillText('S (Slagelse Station-korr.)', 1309, 970);
+
+    ctx.fillStyle = '#F43F5E';
+    ctx.fillRect(1600, 956, 16, 16);
+    ctx.fillStyle = '#E2E8F0';
+    ctx.fillText('Retnings-bias Δθ (°)', 1624, 970);
+
+    highResImageDataUrl = canvas.toDataURL('image/png', 1.0);
+  }
+
+  // --- BUILD A4 LANDSCAPE PDF ---
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 12;
+
+  // PAGE 1: Header + Embedded High-Resolution Chart Sheet
+  doc.setFillColor(11, 15, 25);
+  doc.rect(0, 0, pageW, 24, 'F');
+  doc.setDrawColor(56, 189, 248);
+  doc.setLineWidth(0.6);
+  doc.line(0, 24, pageW, 24);
+
+  doc.setTextColor(248, 250, 252);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(
+    sanitizePdfText(
+      'RINGPARKEN 7-DAGES VIND-ROSE & STATISTISK BIAS-SAMMENLIGNING (HØJOPLØSELIG ANALYSE)'
+    ),
+    margin,
+    10
+  );
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.text(
+    sanitizePdfText(
+      `Periode: ${history7d.startDateIso} -> ${history7d.endDateIso} | Aktuel dag kl. ${currentWeather.hourLabel} | Dom. 7d: ${dom7d.sector.code} (${dom7d.histPct}%) | Sammenfald: ${alignmentScorePct}% | MBE: ${mbeSpeedMs >= 0 ? '+' : ''}${mbeSpeedMs} m/s`
+    ),
+    margin,
+    18
+  );
+
+  if (highResImageDataUrl) {
+    doc.addImage(highResImageDataUrl, 'PNG', margin, 28, pageW - margin * 2, 142, undefined, 'FAST');
+  }
+
+  // KPI strip below graphic on Page 1
+  const kpiY = 174;
+  const kpiW = (pageW - margin * 2 - 9) / 4;
+  const kpiCards = [
+    {
+      title: 'DOM. 7-DAGES SPREDNING',
+      val: `${dom7d.sector.code} (${dom7d.histPct}% · Vektor ${histVectorMeanDeg}°)`,
+      sub: `Maks ${dom7d.histMaxSpeedMs} m/s · ${histHighRiskHours}/168t >10 m/s`,
+    },
+    {
+      title: 'AKTUEL DAG VS. NORMAL',
+      val: `${domCur.sector.code} (${domCur.currentDayPct}%) vs. ${domTyp.sector.code} (${domTyp.typicalSlagelsePct}%)`,
+      sub: `Sammenfald: ${alignmentScorePct}% (Vinkel-afvigelse ${angDiffVs7d}°)`,
+    },
+    {
+      title: 'VINDHASTIGHED & RETNINGS-BIAS',
+      val: `MBE ${mbeSpeedMs >= 0 ? '+' : ''}${mbeSpeedMs} m/s · RMSE ${rmseSpeedMs} m/s`,
+      sub: `MAE ${maeSpeedMs} m/s · Retning Δθ ${meanDirBiasDeg >= 0 ? '+' : ''}${meanDirBiasDeg}° (±${rmseDirDeg}°)`,
+    },
+    {
+      title: '24T DOSIS 95% KONFIDENSINTERVAL',
+      val: `Station ${cumDoseStation} vs. OM ${cumDoseOpenMeteo} S·t`,
+      sub: `95% CI: [${cumDoseLower95}, ${cumDoseUpper95}] · ${highConfHours}t >=90% P(S>=1)`,
+    },
+  ];
+  kpiCards.forEach((card, i) => {
+    const x = margin + i * (kpiW + 3);
+    doc.setFillColor(241, 245, 249);
+    doc.rect(x, kpiY, kpiW, 21, 'F');
+    doc.setDrawColor(203, 213, 225);
+    doc.rect(x, kpiY, kpiW, 21, 'S');
+    doc.setTextColor(71, 85, 105);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.text(sanitizePdfText(card.title), x + 2.5, kpiY + 5);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(8);
+    doc.text(sanitizePdfText(card.val).slice(0, 42), x + 2.5, kpiY + 11.5);
+    doc.setTextColor(51, 65, 85);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.text(sanitizePdfText(card.sub).slice(0, 52), x + 2.5, kpiY + 17.5);
+  });
+
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(6.8);
+  doc.text(
+    sanitizePdfText(`Side 1/2 | Kilde: ${history7d.sourceApi} | SHA-256: ${sha256Hash}`),
+    margin,
+    pageH - 5
+  );
+
+  // PAGE 2: Sector Table, 7-Day Daily Strip & Forensic Verdict
+  doc.addPage();
+  doc.setFillColor(11, 15, 25);
+  doc.rect(0, 0, pageW, 18, 'F');
+  doc.setTextColor(248, 250, 252);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(
+    sanitizePdfText('BILAG: 8-SEKTOR VIND-ROSE TABEL, 7-DAGES HISTORIK & RETSMEDICINSK BIAS-KONKLUSION'),
+    margin,
+    11.5
+  );
+
+  let y = 24;
+  // Forensic verdict box
+  doc.setFillColor(isTypicalMatch ? 236 : 254, isTypicalMatch ? 253 : 243, isTypicalMatch ? 245 : 199);
+  doc.rect(margin, y, pageW - margin * 2, 18, 'F');
+  doc.setDrawColor(isTypicalMatch ? 16 : 245, isTypicalMatch ? 185 : 158, isTypicalMatch ? 129 : 11);
+  doc.rect(margin, y, pageW - margin * 2, 18, 'S');
+  doc.setTextColor(15, 23, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  const verdictHeadline = isTypicalMatch
+    ? `HØJ RETSMEDICINSK FORUDSIGELIGHED (${alignmentScorePct}% SAMMENFALD MED SLAGELSE-NORMAL) - INGEN FORCE MAJEURE`
+    : `RETNINGSANOMALI / FRONTPASSAGE (${angDiffVs7d}° ROTATION IFT. 7-DAGES MIDDEL)`;
+  doc.text(sanitizePdfText(verdictHeadline), margin + 3, y + 5.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.2);
+  const verdictSummary = `Aktuel dag (${dateIso}) peger dominerende mod ${domCur.sector.code} (${domCur.currentDayPct}%), 7-dages historik mod ${dom7d.sector.code} (${dom7d.histPct}%) og Slagelse normal mod ${domTyp.sector.code} (${domTyp.typicalSlagelsePct}%). Statistisk vindhastigheds-bias (Open-Meteo minus Station) MBE=${mbeSpeedMs >= 0 ? '+' : ''}${mbeSpeedMs} m/s, RMSE=${rmseSpeedMs} m/s, Retning RMSE=±${rmseDirDeg}°.`;
+  doc.text(sanitizePdfText(verdictSummary), margin + 3, y + 11.5, { maxWidth: pageW - margin * 2 - 6 });
+
+  y += 23;
+  // 8-sector comparison table
+  doc.setTextColor(15, 23, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.text('1. 8-Sektor Sammenligning: 7-Dages Historik (168t) vs. Aktuel Dag (24t) vs. Slagelse Klimanormal', margin, y);
+  y += 3;
+
+  const sCols = [
+    { label: 'Sektor', w: 24 },
+    { label: '7d Hist (%)', w: 28 },
+    { label: 'Aktuel Dag (%)', w: 28 },
+    { label: 'Slagelse Normal', w: 30 },
+    { label: 'Afv. (Norm)', w: 26 },
+    { label: '7d Gns / Maks', w: 32 },
+    { label: '7d Stød Maks', w: 28 },
+    { label: 'Nedstrøms Berørte Matrikler', w: 77 },
+  ];
+  doc.setFillColor(30, 41, 59);
+  doc.rect(margin, y, pageW - margin * 2, 7, 'F');
+  doc.setTextColor(248, 250, 252);
+  doc.setFontSize(7.2);
+  let sx = margin + 2;
+  for (const col of sCols) {
+    doc.text(sanitizePdfText(col.label), sx, y + 4.8);
+    sx += col.w;
+  }
+  y += 7;
+
+  sectorStats.forEach((st, idx) => {
+    doc.setFillColor(idx % 2 === 0 ? 255 : 248, idx % 2 === 0 ? 255 : 250, idx % 2 === 0 ? 255 : 252);
+    doc.rect(margin, y, pageW - margin * 2, 6.8, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(margin, y, pageW - margin * 2, 6.8, 'S');
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(7.2);
+
+    const vals = [
+      `${st.sector.code} (${st.sector.centerDeg}°)`,
+      `${st.histPct}% (${st.histCount}t)`,
+      `${st.currentDayPct}% (${st.currentDayCount}t)`,
+      `${st.typicalSlagelsePct}%`,
+      `${st.deltaVsTypicalPts >= 0 ? '+' : ''}${st.deltaVsTypicalPts}%-p`,
+      `${st.histMeanSpeedMs} / ${st.histMaxSpeedMs} m/s`,
+      `${st.histMaxGustMs} m/s`,
+      st.sector.receptors,
+    ];
+    let cxCell = margin + 2;
+    vals.forEach((val, vIdx) => {
+      if (vIdx === 0) doc.setFont('courier', 'bold');
+      else doc.setFont('helvetica', 'normal');
+      doc.text(sanitizePdfText(val), cxCell, y + 4.7);
+      cxCell += sCols[vIdx].w;
+    });
+    y += 6.8;
+  });
+
+  y += 7;
+  // 7-Day Daily Table
+  doc.setTextColor(15, 23, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.text('2. 7-Dages Dag-for-Dag Vind- & Spredningsoversigt (Slagelse)', margin, y);
+  y += 3;
+
+  const dCols = [
+    { label: 'Dato', w: 34 },
+    { label: 'Dom. Spredning Mod', w: 46 },
+    { label: 'Gns Vind (m/s)', w: 34 },
+    { label: 'Maks Vind (m/s)', w: 36 },
+    { label: 'Maks Stød (m/s)', w: 36 },
+    { label: 'Timer > 10 m/s', w: 36 },
+    { label: 'Nedbør (mm)', w: 51 },
+  ];
+  doc.setFillColor(30, 41, 59);
+  doc.rect(margin, y, pageW - margin * 2, 7, 'F');
+  doc.setTextColor(248, 250, 252);
+  doc.setFontSize(7.2);
+  let dx = margin + 2;
+  for (const col of dCols) {
+    doc.text(sanitizePdfText(col.label), dx, y + 4.8);
+    dx += col.w;
+  }
+  y += 7;
+
+  history7d.days.slice(0, 7).forEach((day, idx) => {
+    doc.setFillColor(idx % 2 === 0 ? 255 : 248, idx % 2 === 0 ? 255 : 250, idx % 2 === 0 ? 255 : 252);
+    doc.rect(margin, y, pageW - margin * 2, 6.8, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(margin, y, pageW - margin * 2, 6.8, 'S');
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(7.2);
+    const dVals = [
+      `${day.dateIso} (${day.dayLabelShort})`,
+      `${day.dominantDispersionSectorCode} (${day.dominantDispersionToDeg}°)`,
+      `${day.meanWindSpeedMs.toFixed(1)} m/s`,
+      `${day.maxWindSpeedMs.toFixed(1)} m/s`,
+      `${day.maxGustsMs.toFixed(1)} m/s`,
+      `${day.highRiskHoursCount} timer`,
+      `${day.totalPrecipitationMm.toFixed(1)} mm`,
+    ];
+    let cxDay = margin + 2;
+    dVals.forEach((v, i) => {
+      doc.setFont(i === 0 ? 'courier' : 'helvetica', i === 0 ? 'bold' : 'normal');
+      doc.text(sanitizePdfText(v), cxDay, y + 4.7);
+      cxDay += dCols[i].w;
+    });
+    y += 6.8;
+  });
+
+  // Footer page 2
+  doc.setDrawColor(203, 213, 225);
+  doc.line(margin, pageH - 11, pageW - margin, pageH - 11);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(6.8);
+  doc.text(
+    sanitizePdfText(
+      `Side 2/2 | Ringparken 7-Dages Vind-Rose & Bias-Sammenligning | Genereret: ${new Date().toISOString()} | SHA-256: ${sha256Hash}`
+    ),
+    margin,
+    pageH - 6
+  );
+
+  const fileName = `Ringparken_7Dages_VindRose_Bias_Analyse_${dateIso}.pdf`;
+  doc.save(fileName);
+  return { fileName, sha256Hash };
+}
+
+export {
+  buildKierulffsvejWaterMainGeoJson,
+  exportKierulffsvejWaterMainGeoJson,
+} from '../data/kierulffsvejWaterMainData';

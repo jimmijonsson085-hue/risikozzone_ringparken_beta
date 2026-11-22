@@ -7,6 +7,7 @@ import {
   Crosshair,
   Droplets,
   Loader2,
+  MapPin,
   PauseCircle,
   PlayCircle,
   RefreshCw,
@@ -386,22 +387,22 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
 
   return (
     <div
-      className={`rounded-md border transition-all ${
+      className={`rounded-md border transition-colors ${
         isUrgent
-          ? 'bg-gradient-to-br from-slate-950 via-indigo-950/35 to-rose-950/30 border-amber-400/75 shadow-[0_0_24px_rgba(245,158,11,0.18)]'
-          : 'bg-slate-900/90 border-cyan-500/50'
+          ? 'bg-[var(--surface-card)] border-[var(--border-subtle)] border-l-4 border-l-amber-400'
+          : 'bg-[var(--surface-card)] border-[var(--border-subtle)]'
       } ${compact ? 'p-3 space-y-2.5' : 'p-3.5 space-y-3'}`}
     >
       {/* Top Header: Proactive AI-Agent Badge & Re-Analyze Button */}
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800/90 pb-2.5">
         <div className="space-y-0.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-mono text-[10px] font-extrabold uppercase tracking-wider">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-mono text-[11px] font-extrabold uppercase tracking-wider">
               <Bot className="w-3.5 h-3.5 shrink-0" />
               <span>PROAKTIV AI-AGENT · KLAGE &amp; VEJR-SYNTESE</span>
             </span>
             <span
-              className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${
+              className={`px-2 py-0.5 rounded font-mono text-[11px] font-bold border ${
                 isUrgent
                   ? 'bg-rose-600/30 border-rose-400 text-rose-200'
                   : 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200'
@@ -410,7 +411,7 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
               {isUrgent ? '⚠ AKUT FOREBYGGENDE TILTAG PÅKRÆVET' : '✓ PROAKTIV OVERVÅGNING'}
             </span>
             {(isCannonAligned || isCrushingPaused) && (
-              <span className="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-mono text-[10px] font-extrabold">
+              <span className="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-mono text-[11px] font-extrabold">
                 ✓ TILTAG AKTIVERET ({appliedTimestamp || 'Nu'})
               </span>
             )}
@@ -438,7 +439,7 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
 
       {/* AI Weather + 3 Latest Complaints Correlation Summary */}
       <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 text-xs text-slate-200 leading-relaxed space-y-1.5">
-        <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] text-cyan-300">
+        <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[11px] text-cyan-300">
           <span className="flex items-center gap-1 font-bold uppercase">
             <Sparkles className="w-3 h-3 text-amber-300 shrink-0" />
             <span>
@@ -457,7 +458,7 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
 
       {/* Matrix of the Latest 3 Neighbor Complaints (Støj / Støv) & Specific Fix per Complaint */}
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
+        <div className="flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
           <span>
             De 3 Seneste Naboklager (Støj &amp; Støv) Koblet med Vejrmønster
           </span>
@@ -483,30 +484,41 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
                 className="p-2.5 rounded bg-slate-950/90 border border-slate-800 hover:border-amber-400/70 transition-colors cursor-pointer flex flex-col justify-between gap-2"
               >
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between gap-1 font-mono text-[10px]">
+                  <div className="flex items-center justify-between gap-1 font-mono text-[11px]">
                     <span className="px-1.5 py-0.5 rounded bg-fuchsia-500/20 border border-fuchsia-400/50 text-fuchsia-200 font-bold">
                       #{idx + 1} · {obs.code} (kl. {obs.observedHourLabel})
                     </span>
                     <span
-                      className={`px-1.5 py-0.5 rounded font-bold ${
+                      className={`px-1.5 py-0.5 rounded font-bold inline-flex items-center gap-1 ${
                         isNoiseComplaint
                           ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                           : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
                       }`}
                     >
-                      {isNoiseComplaint ? '🔊 STØJ + STØV' : '💨 STØV / FIBER'}
+                      {isNoiseComplaint ? (
+                        <>
+                          <Volume2 className="w-3 h-3 shrink-0" />
+                          <span>STØJ + STØV</span>
+                        </>
+                      ) : (
+                        <>
+                          <Wind className="w-3 h-3 shrink-0" />
+                          <span>STØV / FIBER</span>
+                        </>
+                      )}
                     </span>
                   </div>
 
                   <div className="text-xs font-bold text-white leading-snug line-clamp-2">
                     {obs.observationType}
                   </div>
-                  <div className="text-[10.5px] font-mono text-slate-400 truncate">
-                    📍 {obs.locationLabel}
+                  <div className="text-[11px] font-mono text-slate-400 truncate flex items-center gap-1">
+                    <MapPin className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{obs.locationLabel}</span>
                   </div>
                 </div>
 
-                <div className="pt-1.5 border-t border-slate-800/90 space-y-1 font-mono text-[10px]">
+                <div className="pt-1.5 border-t border-slate-800/90 space-y-1 font-mono text-[11px]">
                   <div className="text-slate-300">
                     <span className="text-cyan-400 font-semibold">Vejr ved klage:</span>{' '}
                     {obs.weatherSnapshot.windSpeed10m} m/s (stød{' '}
@@ -540,7 +552,7 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
         {/* Left 7 cols: Specific Operational Instruction & Parameters */}
         <div className="lg:col-span-7 p-3 rounded-md bg-slate-950/95 border border-amber-500/50 space-y-2.5 flex flex-col justify-between">
           <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center justify-between gap-1.5 font-mono text-[10px]">
+            <div className="flex flex-wrap items-center justify-between gap-1.5 font-mono text-[11px]">
               <span className="text-amber-400 font-extrabold uppercase tracking-wider flex items-center gap-1">
                 <Sliders className="w-3.5 h-3.5 shrink-0" />
                 <span>PRIMÆRT SPECIFIKT FOREBYGGENDE TILTAG (PSS SAG W22085 PKT. 7)</span>
@@ -562,41 +574,41 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
           {/* 4 Concrete Technical Parameter Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-xs pt-1">
             <div className="p-2 rounded bg-slate-900 border border-cyan-500/40">
-              <div className="text-[9.5px] text-slate-400 uppercase">VANDKANON AZIMUT</div>
+              <div className="text-[11px] text-slate-400 uppercase">VANDKANON AZIMUT</div>
               <div className="text-sm font-extrabold text-cyan-300">
                 {cannonAzimuthDeg}° ({degreesToCompass(cannonAzimuthDeg)})
               </div>
-              <div className="text-[9.5px] text-slate-400">
+              <div className="text-[11px] text-slate-400">
                 AI-mål: {activeData.primaryAction.waterCannonAzimuthDeg}°
               </div>
             </div>
 
             <div className="p-2 rounded bg-slate-900 border border-cyan-500/40">
-              <div className="text-[9.5px] text-slate-400 uppercase">KANON-HÆLDNING</div>
+              <div className="text-[11px] text-slate-400 uppercase">KANON-HÆLDNING</div>
               <div className="text-sm font-extrabold text-cyan-300">
                 {cannonElevationDeg}° pitch
               </div>
-              <div className="text-[9.5px] text-slate-400">
+              <div className="text-[11px] text-slate-400">
                 Kastehøjde: 8–12 m
               </div>
             </div>
 
             <div className="p-2 rounded bg-slate-900 border border-indigo-500/40">
-              <div className="text-[9.5px] text-slate-400 uppercase">DYSE-VANDFLOW</div>
+              <div className="text-[11px] text-slate-400 uppercase">DYSE-VANDFLOW</div>
               <div className="text-sm font-extrabold text-indigo-300">
                 {cannonFlowLpm} L/min
               </div>
-              <div className="text-[9.5px] text-slate-400">
+              <div className="text-[11px] text-slate-400">
                 Dråber: 50–120 µm
               </div>
             </div>
 
             <div className="p-2 rounded bg-slate-900 border border-amber-500/40">
-              <div className="text-[9.5px] text-slate-400 uppercase">KNUSE-STOP VINDUE</div>
+              <div className="text-[11px] text-slate-400 uppercase">KNUSE-STOP VINDUE</div>
               <div className="text-sm font-extrabold text-amber-300">
                 {activeData.primaryAction.crusherPauseDurationMinutes} min.
               </div>
-              <div className="text-[9.5px] text-slate-400">
+              <div className="text-[11px] text-slate-400">
                 Ved stød &gt; 10 m/s
               </div>
             </div>
@@ -605,7 +617,7 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
           {/* Secondary Actions List */}
           {!compact && activeData.secondaryActions.length > 0 && (
             <div className="space-y-1 pt-1 border-t border-slate-800/80">
-              <div className="text-[10px] font-mono uppercase text-slate-400 font-semibold">
+              <div className="text-[11px] font-mono uppercase text-slate-400 font-semibold">
                 Supplerende Forebyggende Tiltag:
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
@@ -615,7 +627,7 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
                     className="p-2 rounded bg-slate-900/75 border border-slate-800 text-[11px] space-y-0.5"
                   >
                     <div className="font-bold text-slate-200">{sec.title}</div>
-                    <div className="text-[10px] font-mono text-emerald-300">
+                    <div className="text-[11px] font-mono text-emerald-300">
                       Effekt: {sec.expectedEffect}
                     </div>
                   </div>
@@ -627,7 +639,7 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
 
         {/* Right 5 cols: Interactive Water Cannon Azimuth Dial + One-Click Action Controls */}
         <div className="lg:col-span-5 p-3 rounded-md bg-slate-950/95 border border-slate-800 flex flex-col justify-between space-y-2.5">
-          <div className="flex items-center justify-between font-mono text-[10px]">
+          <div className="flex items-center justify-between font-mono text-[11px]">
             <span className="text-cyan-400 font-bold uppercase flex items-center gap-1">
               <Compass className="w-3.5 h-3.5" />
               <span>INTERAKTIV VANDKANON-VINKEL &amp; KNUSESTOP</span>
@@ -667,16 +679,16 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
                 strokeDasharray="2 2"
                 strokeWidth="1"
               />
-              <text x="60" y="10" textAnchor="middle" fill="#94A3B8" fontSize="8" fontFamily="monospace">
+              <text x="60" y="10" textAnchor="middle" fill="#94A3B8" fontSize="9.5" fontFamily="monospace">
                 N
               </text>
-              <text x="112" y="63" textAnchor="middle" fill="#94A3B8" fontSize="8" fontFamily="monospace">
+              <text x="112" y="63" textAnchor="middle" fill="#94A3B8" fontSize="9.5" fontFamily="monospace">
                 Ø
               </text>
-              <text x="60" y="116" textAnchor="middle" fill="#94A3B8" fontSize="8" fontFamily="monospace">
+              <text x="60" y="116" textAnchor="middle" fill="#94A3B8" fontSize="9.5" fontFamily="monospace">
                 S
               </text>
-              <text x="8" y="63" textAnchor="middle" fill="#94A3B8" fontSize="8" fontFamily="monospace">
+              <text x="8" y="63" textAnchor="middle" fill="#94A3B8" fontSize="9.5" fontFamily="monospace">
                 V
               </text>
 
@@ -726,7 +738,7 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
               <circle cx="60" cy="60" r="4" fill="#F8FAFC" />
             </svg>
 
-            <div className="flex-1 space-y-1.5 font-mono text-[10.5px]">
+            <div className="flex-1 space-y-1.5 font-mono text-[11px]">
               <div>
                 <div className="flex items-center justify-between text-slate-300">
                   <span>Vandkanon-vinkel:</span>
@@ -766,7 +778,7 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
                 />
               </div>
 
-              <div className="text-[10px] text-slate-400 flex items-center justify-between pt-0.5">
+              <div className="text-[11px] text-slate-400 flex items-center justify-between pt-0.5">
                 <span className="text-rose-400">● Støvfane: {plumeDirectionDeg}°</span>
                 <span className="text-cyan-300">▲ Kanon: {cannonAzimuthDeg}°</span>
               </div>
@@ -826,7 +838,7 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
                     onToggleSourceActive(activeData.primaryAction.targetSourceId);
                   }
                 }}
-                className={`py-1.5 px-2 rounded font-mono text-[10.5px] font-bold border transition-colors flex items-center justify-center gap-1 ${
+                className={`py-1.5 px-2 rounded font-mono text-[11px] font-bold border transition-colors flex items-center justify-center gap-1 ${
                   isCrushingPaused
                     ? 'bg-emerald-500/25 border-emerald-400 text-emerald-200'
                     : 'bg-rose-950/60 border-rose-500/50 text-rose-200 hover:bg-rose-900/60'
@@ -850,7 +862,7 @@ export const ProactiveComplaintMitigationAgentWidget: React.FC<
                 type="button"
                 onClick={handleResetAction}
                 disabled={!isCannonAligned && !isCrushingPaused}
-                className="py-1.5 px-2 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[10.5px] transition-colors disabled:opacity-40"
+                className="py-1.5 px-2 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[11px] transition-colors disabled:opacity-40"
               >
                 Nulstil Simulering
               </button>

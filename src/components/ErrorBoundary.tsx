@@ -42,14 +42,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   render(): ReactNode {
     if (this.state.hasError) {
       return (
-        <div className="p-6 my-4 bg-slate-950/95 border-2 border-red-500/70 rounded-xl text-slate-100 shadow-2xl max-w-3xl mx-auto">
+        <div className="p-6 my-4 bg-[var(--surface-overlay)] border border-[var(--border-subtle)] border-l-4 border-l-rose-500 rounded-xl text-[var(--text-primary)] shadow-lg max-w-3xl mx-auto">
           <div className="flex items-start gap-3.5">
             <div className="p-2.5 rounded-lg bg-red-950/80 border border-red-500/50 text-red-400 shrink-0">
               <ShieldAlert className="w-6 h-6" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider bg-red-500/20 text-red-300 border border-red-500/40 rounded">
+                <span className="px-2 py-0.5 text-[11px] font-mono font-bold uppercase tracking-wider bg-red-500/20 text-red-300 border border-red-500/40 rounded">
                   Runtime Sikkerhedslås · ErrorBoundary
                 </span>
                 <span className="text-[11px] font-mono text-slate-400">
@@ -70,7 +70,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                     <span>{this.state.error.name}: {this.state.error.message}</span>
                   </div>
                   {this.state.errorInfo?.componentStack && (
-                    <pre className="text-[10px] text-slate-400 mt-1.5 max-h-32 overflow-y-auto whitespace-pre-wrap">
+                    <pre className="text-[11px] text-slate-400 mt-1.5 max-h-32 overflow-y-auto whitespace-pre-wrap">
                       {this.state.errorInfo.componentStack.trim()}
                     </pre>
                   )}

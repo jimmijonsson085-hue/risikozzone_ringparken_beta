@@ -456,12 +456,12 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800 pb-2.5">
         <div className="space-y-0.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-500 text-white font-mono text-[10px] font-extrabold uppercase tracking-wider">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-500 text-white font-mono text-[11px] font-extrabold uppercase tracking-wider">
               <Scale className="w-3 h-3 shrink-0" />
               <span>STOKASTISK VIND-BIAS ANALYSE · N=6.000 MONTE CARLO</span>
             </span>
             <span
-              className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${
+              className={`px-2 py-0.5 rounded font-mono text-[11px] font-bold border ${
                 isBeyondReasonableDoubt
                   ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
                   : isProbableViolation
@@ -491,7 +491,7 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
         </div>
 
         {/* Station Reference Selector & Receptor Switcher */}
-        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10.5px]">
+        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
           <select
             value={stationReferenceSource}
             onChange={(e) =>
@@ -536,49 +536,49 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
       {/* 4 Key Forensic Bias & Uncertainty KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 font-mono text-xs">
         <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-          <div className="text-[10px] text-slate-400 uppercase flex items-center justify-between">
+          <div className="text-[11px] text-slate-400 uppercase flex items-center justify-between">
             <span>VINDHASTIGHEDS-BIAS (24T)</span>
             <Wind className="w-3.5 h-3.5 text-cyan-400" />
           </div>
           <div className="text-sm font-extrabold text-white">
             MBE: {mbeSpeedMs >= 0 ? `+${mbeSpeedMs}` : mbeSpeedMs} m/s · RMSE: {rmseSpeedMs} m/s
           </div>
-          <div className="text-[10px] text-slate-400">
+          <div className="text-[11px] text-slate-400">
             Open-Meteo vs. Slagelse måling (kl. {currentWeather.hourLabel}:{' '}
             {currentHourPoint.openMeteoSpeedMs} vs. {currentHourPoint.stationMeasuredSpeedMs} m/s)
           </div>
         </div>
 
         <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-          <div className="text-[10px] text-slate-400 uppercase flex items-center justify-between">
+          <div className="text-[11px] text-slate-400 uppercase flex items-center justify-between">
             <span>RETNINGS-AFVIGELSE (Δθ)</span>
             <Compass className="w-3.5 h-3.5 text-amber-400" />
           </div>
           <div className="text-sm font-extrabold text-amber-300">
             Bias: {meanSignedDirBiasDeg >= 0 ? `+${meanSignedDirBiasDeg}` : meanSignedDirBiasDeg}° · σ_θ: ±{rmseDirDeg}°
           </div>
-          <div className="text-[10px] text-slate-400">
+          <div className="text-[11px] text-slate-400">
             Urban kanalisering langs Kierulffsvej ({currentHourPoint.openMeteoDirDeg}° vs.{' '}
             {currentHourPoint.stationMeasuredDirDeg}°)
           </div>
         </div>
 
         <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-          <div className="text-[10px] text-slate-400 uppercase flex items-center justify-between">
+          <div className="text-[11px] text-slate-400 uppercase flex items-center justify-between">
             <span>95% KONFIDENSINTERVAL (SPIDS)</span>
             <Activity className="w-3.5 h-3.5 text-rose-400" />
           </div>
           <div className="text-sm font-extrabold text-rose-300">
             S = {peakPoint.sMedianP50.toFixed(2)} [{peakPoint.sLowerP2_5.toFixed(2)} – {peakPoint.sUpperP97_5.toFixed(2)}]
           </div>
-          <div className="text-[10px] text-slate-400">
+          <div className="text-[11px] text-slate-400">
             Spids kl. {peakPoint.hourLabel} · Nedre 95% grænse (P5):{' '}
             <strong className="text-white">{peakPoint.sLowerP5.toFixed(2)}</strong>
           </div>
         </div>
 
         <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-          <div className="text-[10px] text-slate-400 uppercase flex items-center justify-between">
+          <div className="text-[11px] text-slate-400 uppercase flex items-center justify-between">
             <span>BEVISVÆRDI P(S ≥ 1,0)</span>
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
           </div>
@@ -593,7 +593,7 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
           >
             {peakPoint.exceedanceProbabilityPct}% sandsynlighed (Spids)
           </div>
-          <div className="text-[10px] text-slate-400">
+          <div className="text-[11px] text-slate-400">
             {highConfidenceViolationHours} timer med ≥90% sikkerhed for S ≥ 1,0
           </div>
         </div>
@@ -637,7 +637,7 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
           </button>
         </div>
 
-        <div className="flex items-center gap-2 font-mono text-[10.5px] text-slate-300">
+        <div className="flex items-center gap-2 font-mono text-[11px] text-slate-300">
           <Sliders className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
           <span>Usikkerhedsfaktor (σ):</span>
           {[
@@ -649,7 +649,7 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
               key={opt.val}
               type="button"
               onClick={() => setUncertaintyMultiplier(opt.val)}
-              className={`px-1.5 py-0.5 rounded border text-[10px] ${
+              className={`px-1.5 py-0.5 rounded border text-[11px] ${
                 uncertaintyMultiplier === opt.val
                   ? 'bg-indigo-500/30 border-indigo-400 text-white font-bold'
                   : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
@@ -663,7 +663,7 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
 
       {/* 24-Hour Interactive Recharts Visualization */}
       <div className="p-2.5 bg-slate-950/95 border border-slate-800 rounded space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[10.5px] font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
           {chartMode === 'confidence_band_s' ? (
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-1 text-indigo-300">
@@ -977,7 +977,7 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5">
         {/* Left 6 cols: Selected Hour Detailed Bias Inspection */}
         <div className="lg:col-span-6 p-2.5 rounded bg-slate-950/90 border border-slate-800 font-mono text-xs space-y-1.5">
-          <div className="flex items-center justify-between text-[10px] text-indigo-300 font-bold uppercase border-b border-slate-800 pb-1">
+          <div className="flex items-center justify-between text-[11px] text-indigo-300 font-bold uppercase border-b border-slate-800 pb-1">
             <span>
               VALGT TIME-INSPEKTION (KL. {currentHourPoint.hourLabel})
             </span>
@@ -997,7 +997,7 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
 
           <div className="grid grid-cols-3 gap-1.5 text-[11px]">
             <div className="p-1.5 rounded bg-slate-900/90 border border-slate-800">
-              <div className="text-[9.5px] text-slate-400">PARAMETER</div>
+              <div className="text-[11px] text-slate-400">PARAMETER</div>
               <div className="text-slate-200 font-semibold mt-0.5">Vindhastighed</div>
               <div className="text-slate-200 font-semibold">Vindretning</div>
               <div className="text-slate-200 font-semibold">Sumkvotient S</div>
@@ -1005,7 +1005,7 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
             </div>
 
             <div className="p-1.5 rounded bg-slate-900/90 border border-cyan-500/30">
-              <div className="text-[9.5px] text-cyan-400">OPEN-METEO</div>
+              <div className="text-[11px] text-cyan-400">OPEN-METEO</div>
               <div className="text-white font-bold mt-0.5">
                 {currentHourPoint.openMeteoSpeedMs} m/s
               </div>
@@ -1019,7 +1019,7 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
             </div>
 
             <div className="p-1.5 rounded bg-slate-900/90 border border-amber-500/30">
-              <div className="text-[9.5px] text-amber-400">SLAGELSE STATION (95% CI)</div>
+              <div className="text-[11px] text-amber-400">SLAGELSE STATION (95% CI)</div>
               <div className="text-white font-bold mt-0.5">
                 {currentHourPoint.stationMeasuredSpeedMs} m/s (±{currentHourPoint.sigmaSpeedMs})
               </div>
@@ -1044,7 +1044,7 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
               : 'bg-indigo-950/25 border-indigo-500/50 text-slate-200'
           }`}
         >
-          <div className="flex items-center justify-between text-[10px] font-bold uppercase">
+          <div className="flex items-center justify-between text-[11px] font-bold uppercase">
             <span className="flex items-center gap-1 text-emerald-300">
               <FileCheck2 className="w-3.5 h-3.5 shrink-0" />
               <span>RETSMEDICINSK BEVISVÆRDI &amp; USIKKERHEDS-KONKLUSION</span>
@@ -1082,7 +1082,7 @@ export const StochasticWindBiasWidget: React.FC<StochasticWindBiasWidgetProps> =
             )}
           </p>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[10px] text-slate-400">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px] text-slate-400">
             <span>
               Metode: Gaussisk Fejlpropagering + N=250 Monte Carlo pr. time (24t = 6.000 simuleringer)
             </span>

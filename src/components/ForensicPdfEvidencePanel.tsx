@@ -364,6 +364,28 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
   }, [pdfArchive]);
 
   useEffect(() => {
+    const handleExternalPdfAppended = (evt: Event) => {
+      const customEvt = evt as CustomEvent<ForensicPdfEvidence>;
+      const incoming = customEvt.detail;
+      if (!incoming || !incoming.id) return;
+      setPdfArchive((prev) => {
+        if (prev.some((item) => item.id === incoming.id)) {
+          return prev;
+        }
+        return [incoming, ...prev];
+      });
+      setSelectedArchiveId(incoming.id);
+      setStatusBanner(
+        `SHA-256 PDF-bevis tilføjet til arkivet: ${incoming.fileName}`
+      );
+    };
+    window.addEventListener('ringparken-pdf-evidence-appended', handleExternalPdfAppended);
+    return () => {
+      window.removeEventListener('ringparken-pdf-evidence-appended', handleExternalPdfAppended);
+    };
+  }, []);
+
+  useEffect(() => {
     if (legalViolations.length > 0 && markedViolationIds.length === 0) {
       setMarkedViolationIds(legalViolations.map((v) => v.id));
     }
@@ -933,9 +955,9 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
   const pdfLinkedObservationsCount = observations.filter((o) => Boolean(o.pdfEvidence)).length;
 
   return (
-    <div className="bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+    <div className="bg-[var(--surface-panel)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
       {/* Header Banner */}
-      <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950/50 to-slate-900 border-b border-slate-800 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="p-4 sm:p-5 bg-[var(--surface-card)] border-b border-[var(--border-subtle)] flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-mono uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
@@ -1345,7 +1367,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                         <Scale className="w-3.5 h-3.5 text-amber-400" />
                         Kortfattet 3-Punkts Resumé: Juridiske Implikationer (Ringparken PSS W22085)
                       </span>
-                      <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/40">
+                      <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/40">
                         {
                           conciseLegalSummaryMap[
                             `pending_${pendingSha256 || pendingFileName || 'doc'}`
@@ -1367,7 +1389,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                           <p className="text-[11px] text-slate-200 leading-relaxed">
                             {pt.legalImplication}
                           </p>
-                          <div className="text-[10px] font-mono text-indigo-300">
+                          <div className="text-[11px] font-mono text-indigo-300">
                             Hjemmel: {pt.statutoryBasis}
                           </div>
                         </div>
@@ -1378,7 +1400,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
               </div>
 
               <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1.5">
-                <div className="text-[10px] font-mono uppercase text-indigo-300 font-semibold">
+                <div className="text-[11px] font-mono uppercase text-indigo-300 font-semibold">
                   Tilknyt specifik bevis-kategori (vises i Bevis-Tidslinjen):
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -1395,7 +1417,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                       key={cat}
                       type="button"
                       onClick={() => setSelectedEvidenceCategory(cat)}
-                      className={`px-2.5 py-1 rounded text-[10px] font-mono border transition-colors cursor-pointer ${
+                      className={`px-2.5 py-1 rounded text-[11px] font-mono border transition-colors cursor-pointer ${
                         selectedEvidenceCategory === cat
                           ? 'bg-indigo-500 text-white border-indigo-300 font-bold'
                           : 'bg-slate-950 text-slate-300 border-slate-700 hover:border-slate-500'
@@ -1428,7 +1450,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
           <div className="p-4 rounded-xl bg-slate-950/90 border border-rose-500/40 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-rose-300 font-bold flex items-center gap-1.5">
+                <div className="text-[11px] font-mono uppercase tracking-wider text-rose-300 font-bold flex items-center gap-1.5">
                   <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
                   <span>SAMLET PDF-EKSPORT AF MARKEREDE LOVOVERTRÆDELSER &amp; SHA-256 SIGNATURER</span>
                 </div>
@@ -1440,7 +1462,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                 <button
                   type="button"
                   onClick={() => setMarkedViolationIds(legalViolations.map((v) => v.id))}
-                  className="text-[10px] font-mono text-rose-300 hover:text-white underline cursor-pointer"
+                  className="text-[11px] font-mono text-rose-300 hover:text-white underline cursor-pointer"
                 >
                   Markér alle
                 </button>
@@ -1504,7 +1526,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                         className="mt-0.5 accent-rose-500"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2 font-mono text-[10.5px]">
+                        <div className="flex items-center justify-between gap-2 font-mono text-[11px]">
                           <span className="font-bold text-rose-300 truncate">
                             {v.statuteTitle} ({v.statuteReference})
                           </span>
@@ -1512,7 +1534,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                             S = {v.sumQuotient.toFixed(2)}
                           </span>
                         </div>
-                        <div className="text-[10.5px] text-slate-300 truncate mt-0.5">
+                        <div className="text-[11px] text-slate-300 truncate mt-0.5">
                           Receptor: {v.receptorName} ({v.receptorAddress}) — {v.legalConsequence}
                         </div>
                       </div>
@@ -1540,7 +1562,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                 <button
                   type="button"
                   onClick={() => setCategoryFilter('ALL')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer ${
                     categoryFilter === 'ALL'
                       ? 'bg-indigo-600 text-white'
                       : 'bg-slate-900 text-slate-400 hover:text-slate-200'
@@ -1551,7 +1573,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                 <button
                   type="button"
                   onClick={() => setCategoryFilter('aktindsigt_svar')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer ${
                     categoryFilter === 'aktindsigt_svar'
                       ? 'bg-amber-600 text-white'
                       : 'bg-slate-900 text-slate-400 hover:text-slate-200'
@@ -1562,7 +1584,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                 <button
                   type="button"
                   onClick={() => setCategoryFilter('mail_korrespondance')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer ${
                     categoryFilter === 'mail_korrespondance'
                       ? 'bg-sky-600 text-white'
                       : 'bg-slate-900 text-slate-400 hover:text-slate-200'
@@ -1573,7 +1595,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                 <button
                   type="button"
                   onClick={() => setCategoryFilter('myndighedshenvendelse')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer ${
                     categoryFilter === 'myndighedshenvendelse'
                       ? 'bg-rose-600 text-white'
                       : 'bg-slate-900 text-slate-400 hover:text-slate-200'
@@ -1639,15 +1661,15 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                         />
                         <div className="space-y-1 min-w-0">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[10px] font-mono font-bold text-indigo-300">
+                            <span className="text-[11px] font-mono font-bold text-indigo-300">
                               {item.id}
                             </span>
                             <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${meta.badgeClass}`}
+                              className={`px-1.5 py-0.5 rounded text-[11px] font-mono border ${meta.badgeClass}`}
                             >
                               {meta.shortLabel}
                             </span>
-                            <span className="text-[10px] font-mono text-slate-400">
+                            <span className="text-[11px] font-mono text-slate-400">
                               {item.aiAnalysis.documentDateDetected}
                             </span>
                           </div>
@@ -1696,7 +1718,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
               <button
                 type="button"
                 onClick={handleExportChainOfCustodyPdf}
-                className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer border border-emerald-300/60"
+                className="w-full py-2.5 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer border border-emerald-300/60"
                 title="Eksportér en 'Chain-of-Custody' rapport som PDF, hvor alle SHA-256 signaturer er samlet i en verificerbar log-tabel"
               >
                 <Hash className="w-4 h-4 text-slate-950 shrink-0" />
@@ -1708,9 +1730,9 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
               <button
                 type="button"
                 onClick={() => handleGenerateDedicatedPdfReportPage('full_report')}
-                className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer border border-indigo-400/40"
+                className="w-full py-2.5 px-3 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer border border-sky-300/60"
               >
-                <FileCheck2 className="w-4 h-4 text-white shrink-0" />
+                <FileCheck2 className="w-4 h-4 text-slate-950 shrink-0" />
                 <span>
                   Generér Dedikeret Side i PDF-Rapporten: Oversigtstabel ({pdfArchive.length} PDF-Bilag, SHA-256 & AI-Konklusion)
                 </span>
@@ -1720,7 +1742,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                 type="button"
                 onClick={handleGenerateMunicipalComplaintDraft}
                 disabled={isGeneratingComplaint}
-                className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer disabled:opacity-60"
+                className="w-full py-2.5 px-3 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-60"
               >
                 {isGeneratingComplaint ? (
                   <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
@@ -1817,7 +1839,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                     type="button"
                     onClick={() => handleGenerateConciseLegalSummary('inspected')}
                     disabled={loadingConciseKey === inspectedDocument.id}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10.5px] font-mono font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-200 shadow-sm transition-all cursor-pointer disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-200 shadow-sm transition-all cursor-pointer disabled:opacity-60"
                     title="Brug Gemini til at generere et kortfattet 3-punkts-resumé af dette dokument, fokuseret udelukkende på juridiske implikationer for Ringparken-nedrivningen"
                   >
                     {loadingConciseKey === inspectedDocument.id ? (
@@ -1840,7 +1862,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                   {inspectedDocument.aiAnalysis.statutoryReferences.map((ref, idx) => (
                     <span
                       key={idx}
-                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-900 text-slate-300 border border-slate-800"
+                      className="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-900 text-slate-300 border border-slate-800"
                     >
                       {ref}
                     </span>
@@ -1851,11 +1873,11 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                 {conciseLegalSummaryMap[inspectedDocument.id] && (
                   <div className="mt-2.5 pt-2.5 border-t border-amber-500/40 bg-slate-900/95 rounded-lg p-3 space-y-2">
                     <div className="flex flex-wrap items-center justify-between gap-1.5">
-                      <span className="text-[10.5px] font-mono font-bold uppercase text-amber-300 flex items-center gap-1">
+                      <span className="text-[11px] font-mono font-bold uppercase text-amber-300 flex items-center gap-1">
                         <Scale className="w-3.5 h-3.5 text-amber-400" />
                         Kortfattet 3-Punkts Resumé (Juridiske Implikationer · Ringparken)
                       </span>
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/40">
+                      <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/40">
                         Gemini 3-Punkt
                       </span>
                     </div>
@@ -1869,10 +1891,10 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                             <div className="text-[11px] font-bold text-amber-200">
                               {pt.headline}
                             </div>
-                            <p className="text-[10.5px] text-slate-200 leading-relaxed">
+                            <p className="text-[11px] text-slate-200 leading-relaxed">
                               {pt.legalImplication}
                             </p>
-                            <div className="text-[9.5px] font-mono text-indigo-300">
+                            <div className="text-[11px] font-mono text-indigo-300">
                               Hjemmel: {pt.statutoryBasis}
                             </div>
                           </div>
@@ -1883,7 +1905,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                 )}
               </div>
 
-              <div className="pt-2 border-t border-slate-800 text-[10px] font-mono text-slate-400 break-all">
+              <div className="pt-2 border-t border-slate-800 text-[11px] font-mono text-slate-400 break-all">
                 SHA-256 Chain-of-Custody: {inspectedDocument.sha256Hash}
               </div>
             </div>
@@ -1893,7 +1915,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
 
       {/* GENERATED FORMAL COMPLAINT DRAFT TO SLAGELSE KOMMUNE */}
       {complaintDraft && (
-        <div className="mx-4 mb-5 p-4 sm:p-5 rounded-xl bg-gradient-to-b from-amber-950/35 via-slate-950 to-slate-950 border-2 border-amber-500/60 space-y-4 shadow-2xl">
+        <div className="mx-4 mb-5 p-4 sm:p-5 rounded-xl bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-amber-400 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-500/30 pb-3">
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -2017,7 +2039,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
       {showDedicatedPdfReportPage && (
         <div
           ref={dedicatedOverviewRef}
-          className="mx-4 mb-5 p-4 sm:p-5 rounded-xl bg-gradient-to-b from-indigo-950/40 via-slate-950 to-slate-950 border-2 border-indigo-500/60 space-y-4 shadow-2xl"
+          className="mx-4 mb-5 p-4 sm:p-5 rounded-xl bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-indigo-400 space-y-4"
         >
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 border-b border-indigo-500/30 pb-3.5">
             <div className="space-y-1">
@@ -2093,7 +2115,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                         </div>
                         <div>
                           <span
-                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono border ${meta.badgeClass}`}
+                            className={`inline-block px-2 py-0.5 rounded text-[11px] font-mono border ${meta.badgeClass}`}
                           >
                             {meta.shortLabel}
                           </span>
@@ -2103,7 +2125,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                         </div>
                         <div className="flex items-center gap-1.5 pt-0.5">
                           <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                            className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-bold ${
                               item.aiAnalysis.severityAssessment === 'KRITISK'
                                 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
                                 : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
@@ -2111,7 +2133,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                           >
                             {item.aiAnalysis.severityAssessment}
                           </span>
-                          <span className="text-[10px] font-mono text-slate-400">
+                          <span className="text-[11px] font-mono text-slate-400">
                             {item.aiAnalysis.confidencePct}% AI
                           </span>
                         </div>
@@ -2131,7 +2153,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                         <div className="text-[11px] text-slate-300">
                           <span className="text-slate-400">Til:</span> {item.aiAnalysis.recipientEntity}
                         </div>
-                        <div className="text-[10px] font-mono text-slate-500">
+                        <div className="text-[11px] font-mono text-slate-500">
                           {(item.fileSizeBytes / 1024).toFixed(1)} KB • ca. {item.pageCountEstimate} side(r)
                         </div>
                       </td>
@@ -2140,7 +2162,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                       <td className="p-3 align-top">
                         <div className="p-2 rounded bg-slate-900 border border-cyan-500/30 space-y-1.5">
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-[10px] font-mono uppercase text-cyan-400 flex items-center gap-1">
+                            <span className="text-[11px] font-mono uppercase text-cyan-400 flex items-center gap-1">
                               <Hash className="w-3 h-3" />
                               SHA-256 (64-Hex)
                             </span>
@@ -2150,7 +2172,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                                 e.stopPropagation();
                                 handleCopySha256(item.id, item.sha256Hash);
                               }}
-                              className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono text-slate-300 flex items-center gap-1 cursor-pointer"
+                              className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-mono text-slate-300 flex items-center gap-1 cursor-pointer"
                             >
                               {copiedShaId === item.id ? (
                                 <>
@@ -2174,7 +2196,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                       {/* Col 4: AI Analysis Conclusion & Evidentiary Significance */}
                       <td className="p-3 align-top space-y-2">
                         <div>
-                          <div className="text-[10px] font-mono uppercase text-indigo-300 font-semibold">
+                          <div className="text-[11px] font-mono uppercase text-indigo-300 font-semibold">
                             AI-Analyse-Konklusion (Resumé):
                           </div>
                           <p className="text-xs text-slate-200 leading-relaxed">
@@ -2184,7 +2206,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
 
                         {item.aiAnalysis.contradictionsWithTelemetry?.length > 0 && (
                           <div className="p-2 rounded bg-rose-950/30 border border-rose-500/30">
-                            <div className="text-[10px] font-mono uppercase text-rose-300 font-semibold">
+                            <div className="text-[11px] font-mono uppercase text-rose-300 font-semibold">
                               Modsigelse mod Målt Spredningstelemetri (S = {maxSumQuotient.toFixed(2)}):
                             </div>
                             <p className="text-[11px] text-rose-200/95 leading-snug">
@@ -2194,7 +2216,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                         )}
 
                         <div className="p-2 rounded bg-indigo-950/30 border border-indigo-500/30">
-                          <div className="text-[10px] font-mono uppercase text-amber-300 font-semibold">
+                          <div className="text-[11px] font-mono uppercase text-amber-300 font-semibold">
                             Juridisk Bevisværdi ("The Liability Bomb"):
                           </div>
                           <p className="text-[11px] text-slate-300 leading-snug">
@@ -2215,7 +2237,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
       {showChainOfCustodyTable && (
         <div
           ref={chainOfCustodyRef}
-          className="mx-4 mb-5 p-4 sm:p-5 rounded-xl bg-gradient-to-b from-emerald-950/35 via-slate-950 to-slate-950 border-2 border-emerald-500/60 space-y-4 shadow-2xl"
+          className="mx-4 mb-5 p-4 sm:p-5 rounded-xl bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-emerald-400 space-y-4"
         >
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 border-b border-emerald-500/30 pb-3.5">
             <div className="space-y-1">
@@ -2255,13 +2277,13 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-[11px] font-mono">
             <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
-              <div className="text-slate-400 uppercase text-[10px]">Genesis Seed Block</div>
+              <div className="text-slate-400 uppercase text-[11px]">Genesis Seed Block</div>
               <div className="text-slate-300 truncate select-all mt-0.5">
                 {chainOfCustodyLedger.genesisBlockHash}
               </div>
             </div>
             <div className="p-2.5 rounded-lg bg-slate-900/90 border border-emerald-500/40">
-              <div className="text-emerald-400 uppercase text-[10px] font-bold">
+              <div className="text-emerald-400 uppercase text-[11px] font-bold">
                 Kædet Merkle-Root SHA-256
               </div>
               <div className="text-emerald-200 truncate select-all mt-0.5">
@@ -2270,7 +2292,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
             </div>
             <div className="p-2.5 rounded-lg bg-slate-900/90 border border-cyan-500/40 flex items-center justify-between">
               <div>
-                <div className="text-cyan-400 uppercase text-[10px] font-bold">
+                <div className="text-cyan-400 uppercase text-[11px] font-bold">
                   Beviskæde-Integritet
                 </div>
                 <div className="text-white font-bold mt-0.5">
@@ -2282,7 +2304,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                 onClick={() =>
                   handleCopySha256('MERKLE-ROOT', chainOfCustodyLedger.merkleRootSignature)
                 }
-                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-200 border border-cyan-500/40 text-[10px] cursor-pointer"
+                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-200 border border-cyan-500/40 text-[11px] cursor-pointer"
               >
                 {copiedShaId === 'MERKLE-ROOT' ? '✓ Kopieret' : 'Kopiér Root'}
               </button>
@@ -2313,7 +2335,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                     </td>
                     <td className="p-2.5 align-top space-y-1">
                       <span
-                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono border ${
+                        className={`inline-block px-2 py-0.5 rounded text-[11px] font-mono border ${
                           entry.entryCategory === 'PDF_DOCUMENT'
                             ? 'bg-indigo-950/80 text-indigo-300 border-indigo-500/40'
                             : entry.entryCategory === 'SYSTEM_STATE'
@@ -2336,7 +2358,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                     <td className="p-2.5 align-top">
                       <div className="p-2 rounded bg-slate-900 border border-emerald-500/30 space-y-1">
                         <div className="flex items-center justify-between gap-1">
-                          <span className="text-[10px] font-mono text-emerald-400 uppercase">
+                          <span className="text-[11px] font-mono text-emerald-400 uppercase">
                             SHA-256 (64-Hex)
                           </span>
                           <button
@@ -2347,7 +2369,7 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                                 entry.sha256Signature
                               )
                             }
-                            className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono text-slate-300 cursor-pointer"
+                            className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-mono text-slate-300 cursor-pointer"
                           >
                             {copiedShaId === `COC-${entry.seqNo}` ? '✓ Kopieret' : 'Kopiér'}
                           </button>
@@ -2358,10 +2380,10 @@ export const ForensicPdfEvidencePanel: React.FC<ForensicPdfEvidencePanelProps> =
                       </div>
                     </td>
                     <td className="p-2.5 align-top font-mono space-y-1">
-                      <div className="text-[10px] text-slate-400 break-all">
+                      <div className="text-[11px] text-slate-400 break-all">
                         Chain: {entry.chainedAuditDigest.slice(0, 24)}...
                       </div>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold">
                         <CheckCircle2 className="w-3 h-3" />
                         {entry.verificationStatus}
                       </span>

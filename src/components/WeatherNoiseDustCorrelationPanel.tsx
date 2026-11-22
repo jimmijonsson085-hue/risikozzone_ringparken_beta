@@ -8,15 +8,20 @@ import {
   Compass,
   Crosshair,
   Download,
+  Droplets,
   Factory,
+  FileText,
+  FolderOpen,
   Gauge,
   MapPin,
   PlusCircle,
   Radio,
   RotateCcw,
+  Siren,
   Sliders,
   Volume2,
   Wind,
+  Zap,
 } from 'lucide-react';
 import {
   AlgedonicObservation,
@@ -26,7 +31,15 @@ import {
   WeatherDataset,
 } from '../types/dispersion';
 import { evaluatePointInDispersionPlume } from '../services/dispersionEngine';
-import { computeSunriseSunsetForDate, degreesToCompass } from '../services/weatherService';
+import {
+  computeSunriseSunsetForDate,
+  degreesToCompass,
+  shiftDateIsoByDays,
+} from '../services/weatherService';
+import {
+  Dba168HourRow,
+  downloadFull168hDbaImpulseCatalogPdfReport,
+} from '../services/dbaImpulseCatalogPdfService';
 
 function haversineDistanceMeters(a: LatLngPoint, b: LatLngPoint): number {
   const R = 6371000;
@@ -472,7 +485,7 @@ export function evaluateNoiseAndDustAtPoint(
   };
 }
 
-function computePearsonCorrelation(xs: number[], ys: number[]): number {
+export function computePearsonCorrelation(xs: number[], ys: number[]): number {
   const n = Math.min(xs.length, ys.length);
   if (n < 2) return 0;
   const meanX = xs.reduce((a, b) => a + b, 0) / n;
@@ -944,6 +957,110 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
     window.setTimeout(() => setDbaCsvExportedJustNow(false), 3000);
   };
 
+  const [dbaPdfExportedJustNow, setDbaPdfExportedJustNow] = useState<boolean>(false);
+
+  const handleExportFull168hDbaPdf = () => {
+    const distanceMap: Record<typeof selectedDbaBlockId, number> = {
+      roedtjoernevej_2: 42,
+      schackenborg_b: 34,
+      kierulffsvej_4: 65,
+      ringparken_3: 29,
+    };
+    const weekDayShort = ['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn'];
+    const rows168: Dba168HourRow[] = [];
+
+    for (let dIdx = 0; dIdx < 7; dIdx++) {
+      const dayIso = shiftDateIsoByDays(weatherDataset.dateIso, dIdx - 6);
+      const wdObj = new Date(`${dayIso}T12:00:00Z`);
+      const wdName = weekDayShort[(wdObj.getUTCDay() + 6) % 7] || 'Dag';
+      hourly24Series.forEach((h, hrIdx) => {
+        const dayWindWave = Math.sin(dIdx * 1.19 + hrIdx * 0.31) * 1.65 + (dIdx === 3 ? 2.4 : 0);
+        const v10m = Number(Math.max(1.2, h.weather.windSpeed10m + dayWindWave).toFixed(1));
+        const vGusts = Number(Math.max(v10m + 1.4, h.weather.windGusts10m + dayWindWave * 1.25).toFixed(1));
+        const windSimShift = (v10m - h.weather.windSpeed10m) * 0.34;
+        const simLaeqDb = Number((h.combinedLaeqDb + windSimShift).toFixed(1));
+        const simLafmaxDb = Number((h.combinedLafmaxDb + windSimShift * 1.15).toFixed(1));
+
+        const canyonSpike =
+          hrIdx === 9 || hrIdx === 10
+            ? -3.5 + (dIdx % 2) * 0.3
+            : hrIdx === 14 || hrIdx === 15
+            ? 3.7 - (dIdx % 3) * 0.25
+            : hrIdx === 19
+            ? -3.3
+            : 0;
+        const detRipple =
+          Math.sin(hrIdx * 1.31 + dIdx * 0.85 + activeDbaBlock.offsetDb) * 1.15 +
+          Math.cos(hrIdx * 0.71 + dIdx * 0.4) * 0.8 +
+          canyonSpike;
+        const micWindNoiseCompDb = Number(
+          (Math.max(0, v10m - 5.5) * activeDbaBlock.windCompFactor).toFixed(1)
+        );
+        const dbaWindCompLaeqDb = Number(
+          (simLaeqDb + activeDbaBlock.offsetDb + detRipple).toFixed(1)
+        );
+        const dbaRawUncompensatedDb = Number((dbaWindCompLaeqDb + micWindNoiseCompDb).toFixed(1));
+        const dbaLafmaxPeakDb = Number(
+          (simLafmaxDb + activeDbaBlock.offsetDb * 0.9 + detRipple * 1.1).toFixed(1)
+        );
+        const simMinusDbaDeltaDb = Number((simLaeqDb - dbaWindCompLaeqDb).toFixed(1));
+        const limitLaeqDb = hrIdx >= 7 && hrIdx < 18 ? 70.0 : 40.0;
+
+        rows168.push({
+          dayIndex: dIdx,
+          dateIso: dayIso,
+          dayLabel: `${wdName} ${dayIso.slice(5)}`,
+          hourIndex: hrIdx,
+          hourLabel: h.weather.hourLabel,
+          v10m,
+          vGusts,
+          pasquillClass: h.weather.pasquillClass,
+          simLaeqDb,
+          simLafmaxDb,
+          dbaRawUncompensatedDb,
+          micWindNoiseCompDb,
+          dbaWindCompLaeqDb,
+          dbaLafmaxPeakDb,
+          simMinusDbaDeltaDb,
+          exceeds3dBDiscrepancy: Math.abs(simMinusDbaDeltaDb) > 3.0,
+          limitLaeqDb,
+          isUnstableHighWind: v10m > 10.0,
+        });
+      });
+    }
+
+    downloadFull168hDbaImpulseCatalogPdfReport({
+      blockId: activeDbaBlock.id,
+      blockLabel: activeDbaBlock.label,
+      dbaFileName: activeDbaBlock.fileName,
+      soundMeterModel: activeDbaBlock.meter,
+      distanceMeters: distanceMap[selectedDbaBlockId] || 40,
+      machineLabel: 'Nedrivningsmateriel (ISO 9613-2 samlet kildemodel)',
+      machineLwaDb: isManualOverrideActive ? effectiveManualMachineNoiseDb : 114,
+      anchorDateIso: weatherDataset.dateIso,
+      rows168,
+      complaints: observations.slice(0, 8).map((obs) => {
+        const hrRow = dba24Series[obs.observedHourIndex] || dba24Series[0];
+        return {
+          complaintId: obs.code,
+          hourIndex: obs.observedHourIndex,
+          hourLabel: obs.observedHourLabel,
+          complainantBlock: obs.locationLabel,
+          logFileRef: `SHA256:${obs.sha256Signature.slice(0, 10).toUpperCase()}`,
+          complaintText: obs.description,
+          v10m: hrRow?.windSpeed10m ?? 8.5,
+          simLaeqDb: hrRow?.simLaeqDb ?? 72,
+          dbaWindCompLaeqDb: hrRow?.windCompLaeqDb ?? 71,
+          dbaLafmaxPeakDb: (hrRow?.windCompLaeqDb ?? 71) + 14.5,
+          simMinusDbaDeltaDb: hrRow?.deltaSimVsDba ?? 1.0,
+        };
+      }),
+    });
+
+    setDbaPdfExportedJustNow(true);
+    window.setTimeout(() => setDbaPdfExportedJustNow(false), 3000);
+  };
+
   const dbaWindCompPoints = dba24Series
     .map((d, i) => `${xForHr(i).toFixed(1)},${yForDb(d.windCompLaeqDb).toFixed(1)}`)
     .join(' ');
@@ -1047,10 +1164,10 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
       <div
         role="alert"
         aria-live="polite"
-        className={`p-3.5 rounded-lg border-2 transition-all space-y-2.5 ${
+        className={`p-3.5 rounded-lg border transition-colors space-y-2.5 ${
           intraHour85DbTracker.isAlertTriggered
-            ? 'bg-gradient-to-r from-rose-950/95 via-red-950/90 to-amber-950/90 border-rose-500 shadow-lg shadow-rose-950/50 ring-1 ring-rose-400/60'
-            : 'bg-slate-950/90 border-slate-800'
+            ? 'bg-[var(--surface-card)] border-[var(--border-subtle)] border-l-4 border-l-rose-500'
+            : 'bg-[var(--surface-panel)] border-[var(--border-subtle)]'
         }`}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1058,7 +1175,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
             <span
               className={`inline-flex items-center justify-center w-6 h-6 rounded-full shrink-0 ${
                 intraHour85DbTracker.isAlertTriggered
-                  ? 'bg-rose-500 text-white animate-pulse shadow-sm shadow-rose-500'
+                  ? 'bg-rose-500 text-white'
                   : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
               }`}
             >
@@ -1073,12 +1190,24 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                       : 'text-emerald-300'
                   }`}
                 >
-                  {intraHour85DbTracker.isAlertTriggered
-                    ? `🚨 REAL-TIME STØJ-ALARM: > 85 dB OVERSKREDET I ${intraHour85DbTracker.maxConsecutiveMinutes} SAMMENHÆNGENDE MINUTTER (> 5 MIN GRÆNSE)`
-                    : `✓ REALTIDS-STØJOVERBÅGNING (85 dB / 5 MIN): UNDER KRITISK VARIGHEDSGRÆNSE (${intraHour85DbTracker.maxConsecutiveMinutes} sammenhængende min > 85 dB)`}
+                  {intraHour85DbTracker.isAlertTriggered ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Siren className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span>
+                        REAL-TIME STØJ-ALARM: &gt; 85 dB OVERSKREDET I {intraHour85DbTracker.maxConsecutiveMinutes} SAMMENHÆNGENDE MINUTTER (&gt; 5 MIN GRÆNSE)
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>
+                        REALTIDS-STØJOVERBÅGNING (85 dB / 5 MIN): UNDER KRITISK VARIGHEDSGRÆNSE ({intraHour85DbTracker.maxConsecutiveMinutes} sammenhængende min &gt; 85 dB)
+                      </span>
+                    </span>
+                  )}
                 </span>
                 {intraHour85DbTracker.isAlertTriggered && (
-                  <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white font-mono text-[9.5px] font-bold border border-amber-200">
+                  <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white font-mono text-[11px] font-bold border border-amber-200">
                     AKTIV VARIGHED: {intraHour85DbTracker.maxConsecutiveMinutes}m{' '}
                     {String(liveAlertTickSec).padStart(2, '0')}s &gt; 85 dB(A)
                   </span>
@@ -1116,22 +1245,27 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
           <button
             type="button"
             onClick={() => setForceSustained85DbAlert((v) => !v)}
-            className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold border transition-colors cursor-pointer shrink-0 ${
+            className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold border transition-colors cursor-pointer shrink-0 ${
               forceSustained85DbAlert
                 ? 'bg-amber-400 text-slate-950 border-white shadow-xs'
                 : 'bg-slate-900 text-rose-200 border-rose-500/50 hover:bg-rose-950/60'
             }`}
             title="Simulér/test et vedvarende >85 dB støjforløb på over 5 sammenhængende minutter for at verificere realtids-alarmen"
           >
-            {forceSustained85DbAlert
-              ? '⚡ >85 dB (>5 min) Test-Simulering: TIL'
-              : '⚡ Test >85 dB (>5 min) Alarm'}
+            <span className="inline-flex items-center gap-1">
+              <Zap className="w-3 h-3 shrink-0" />
+              <span>
+                {forceSustained85DbAlert
+                  ? '>85 dB (>5 min) Test-Simulering: TIL'
+                  : 'Test >85 dB (>5 min) Alarm'}
+              </span>
+            </span>
           </button>
         </div>
 
         {/* 60-Minute Intra-Hour Noise Persistence Strip (each bar = 1 minute of the selected hour) */}
         <div className="space-y-1 bg-slate-950/85 border border-slate-800/90 rounded p-2">
-          <div className="flex items-center justify-between text-[9.5px] font-mono text-slate-400">
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
             <span>
               60-MINUTTERS FORLØB (KL. {String(selectedHourIndex).padStart(2, '0')}:00–
               {String(selectedHourIndex).padStart(2, '0')}:59) · TÆRSKEL: 85,0 dB(A) I &gt; 5 SAMMENHÆNGENDE MIN.
@@ -1168,7 +1302,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                   }`}
                   className={`w-full rounded-t transition-all ${
                     inBestStreak
-                      ? 'bg-rose-500 shadow-[0_0_4px_rgba(244,63,94,0.9)]'
+                      ? 'bg-rose-500'
                       : m.exceeds85Db
                       ? 'bg-amber-400'
                       : 'bg-slate-700/75'
@@ -1191,16 +1325,21 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
             <button
               type="button"
               onClick={() => setShowDbaImpulseCatalog((v) => !v)}
-              className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition-colors cursor-pointer ${
+              className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border transition-colors cursor-pointer ${
                 showDbaImpulseCatalog
                   ? 'bg-fuchsia-600 text-white border-amber-200'
                   : 'bg-slate-900 text-fuchsia-300 border-fuchsia-500/50 hover:bg-slate-800'
               }`}
               title="Slå 'Vind-Kompenseret Impuls-Katalog' til/fra: indlæser og plotter automatisk historiske støjdata fra naboblokke (.DBA-filer) mod realtids-simulering og faktiske naboklage-logfiler"
             >
-              📂 Vind-Kompenseret Impuls-Katalog (DBA): {showDbaImpulseCatalog ? 'AKTIV' : 'INDLÆS'}
+              <span className="inline-flex items-center gap-1">
+                <FolderOpen className="w-3 h-3 shrink-0" />
+                <span>
+                  Vind-Kompenseret Impuls-Katalog (DBA): {showDbaImpulseCatalog ? 'AKTIV' : 'INDLÆS'}
+                </span>
+              </span>
             </button>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/40">
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/40">
               ISO 9613-2 · MST Vejl. 5/1984
             </span>
           </div>
@@ -1216,26 +1355,26 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
         {/* Top Regulatory Threshold Strip */}
         <div className="grid grid-cols-3 gap-1.5 pt-1">
           <div className="p-2 bg-slate-950/90 border border-slate-800 rounded">
-            <div className="text-[9px] font-mono uppercase text-slate-400">
+            <div className="text-[11px] font-mono uppercase text-slate-400">
               Støjgrænse (Dag 07–18)
             </div>
             <div className="text-xs font-mono font-bold text-amber-300">
-              70 dB(A) <span className="text-[10px] text-slate-400">L_Aeq</span>
+              70 dB(A) <span className="text-[11px] text-slate-400">L_Aeq</span>
             </div>
-            <div className="text-[10px] font-mono text-rose-300">
+            <div className="text-[11px] font-mono text-rose-300">
               Spids: 85 dB(A) L_AFmax
             </div>
           </div>
           <div
             className={`p-2 rounded border transition-colors ${
               currentWeather.windSpeed10m > 10
-                ? 'bg-rose-600/85 border-rose-300 text-white animate-pulse shadow-[0_0_12px_rgba(225,29,72,0.75)]'
-                : 'bg-slate-950/90 border-slate-800'
+                ? 'bg-[var(--surface-card)] border-rose-500/70 border-l-4 border-l-rose-500 text-rose-100'
+                : 'bg-[var(--surface-panel)] border-[var(--border-subtle)]'
             }`}
           >
             <div
-              className={`text-[9px] font-mono uppercase ${
-                currentWeather.windSpeed10m > 10 ? 'text-rose-100 font-bold' : 'text-slate-400'
+              className={`text-[11px] font-mono uppercase ${
+                currentWeather.windSpeed10m > 10 ? 'text-rose-200 font-bold' : 'text-slate-400'
               }`}
             >
               {currentWeather.windSpeed10m > 10
@@ -1255,7 +1394,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
               {currentFocusEval.netWeatherRefractionEffectDb.toFixed(1)} dB(A)
             </div>
             <div
-              className={`text-[10px] font-mono ${
+              className={`text-[11px] font-mono ${
                 currentWeather.windSpeed10m > 10 ? 'text-white font-bold' : 'text-slate-400'
               }`}
             >
@@ -1263,14 +1402,14 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
             </div>
           </div>
           <div className="p-2 bg-slate-950/90 border border-slate-800 rounded">
-            <div className="text-[9px] font-mono uppercase text-slate-400">
+            <div className="text-[11px] font-mono uppercase text-slate-400">
               Korrelation r(Støj, Støv)
             </div>
             <div className="text-xs font-mono font-bold text-cyan-300">
               r = {correlationStats.rNoiseToDust >= 0 ? '+' : ''}
               {correlationStats.rNoiseToDust.toFixed(2)}
             </div>
-            <div className="text-[10px] font-mono text-slate-400">
+            <div className="text-[11px] font-mono text-slate-400">
               {correlationStats.dualExceedanceHours}t dobbelt-overskridelse
             </div>
           </div>
@@ -1292,7 +1431,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
           <button
             type="button"
             onClick={handleResetConfigs}
-            className="px-2 py-1 rounded bg-slate-950 border border-slate-700 hover:border-amber-400 text-[10px] font-mono text-slate-300 flex items-center gap-1 transition-colors shrink-0"
+            className="px-2 py-1 rounded bg-slate-950 border border-slate-700 hover:border-amber-400 text-[11px] font-mono text-slate-300 flex items-center gap-1 transition-colors shrink-0"
             title="Nulstil alle kildenoder til PSS-standardaktivitet"
           >
             <RotateCcw className="w-3 h-3 text-amber-400" />
@@ -1301,7 +1440,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
         </div>
 
         {/* GLOBAL MANUAL MACHINE NOISE OUTPUT LEVEL SLIDER (90 dB – 125 dB) */}
-        <div className="p-3 rounded-md bg-gradient-to-r from-slate-950 via-amber-950/30 to-slate-950 border border-amber-400/60 space-y-2 shadow-sm">
+        <div className="p-3 rounded-md bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-amber-400 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1.5">
               <Gauge className="w-4 h-4 text-amber-400 shrink-0" />
@@ -1316,7 +1455,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
               <button
                 type="button"
                 onClick={() => handleToggleManualOverride()}
-                className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold border cursor-pointer transition-colors ${
+                className={`px-2 py-0.5 rounded font-mono text-[11px] font-bold border cursor-pointer transition-colors ${
                   isManualOverrideActive
                     ? 'bg-emerald-500 text-slate-950 border-emerald-200'
                     : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
@@ -1329,7 +1468,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-[10px] font-mono font-bold text-emerald-300 shrink-0">
+            <span className="text-[11px] font-mono font-bold text-emerald-300 shrink-0">
               90 dB
             </span>
             <input
@@ -1342,7 +1481,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
               aria-label="Juster maskinernes støj-output-niveau fra 90 dB til 125 dB"
               className="w-full accent-amber-400 cursor-pointer h-2 bg-slate-800 rounded-lg"
             />
-            <span className="text-[10px] font-mono font-bold text-rose-400 shrink-0">
+            <span className="text-[11px] font-mono font-bold text-rose-400 shrink-0">
               125 dB
             </span>
           </div>
@@ -1363,7 +1502,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                     key={preset.db}
                     type="button"
                     onClick={() => handleSetManualMachineNoiseDb(preset.db)}
-                    className={`px-1.5 py-0.5 rounded font-mono text-[9.5px] font-bold border cursor-pointer transition-colors ${
+                    className={`px-1.5 py-0.5 rounded font-mono text-[11px] font-bold border cursor-pointer transition-colors ${
                       isSel
                         ? 'bg-amber-400 text-slate-950 border-white'
                         : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-amber-400/50'
@@ -1374,7 +1513,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                 );
               })}
             </div>
-            <span className="text-[10px] font-mono text-cyan-300 font-semibold">
+            <span className="text-[11px] font-mono text-cyan-300 font-semibold">
               Receptor L_Aeq: <strong>{currentFocusEval.combinedLaeqDb.toFixed(1)} dB(A)</strong> (Spids{' '}
               <strong className="text-rose-300">{currentFocusEval.combinedLafmaxDb.toFixed(1)} dB</strong>)
             </span>
@@ -1400,14 +1539,14 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-[10px] font-bold shrink-0">
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-[11px] font-bold shrink-0">
                       {src.code}
                     </span>
                     <span className="text-xs font-semibold text-white truncate">
                       {src.name}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
+                  <div className="flex items-center gap-1.5 shrink-0 font-mono text-[11px]">
                     <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
                       L_WA: <strong className="text-amber-300">{contrib?.effectiveLwaDb.toFixed(0)} dB</strong>
                     </span>
@@ -1455,14 +1594,17 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                           waterSuppressionActive: !cfg.waterSuppressionActive,
                         })
                       }
-                      className={`w-full px-2 py-1 rounded text-[10px] font-mono font-semibold border transition-colors ${
+                      className={`w-full px-2 py-1 rounded text-[11px] font-mono font-semibold border transition-colors ${
                         cfg.waterSuppressionActive
                           ? 'bg-cyan-500/25 text-cyan-200 border-cyan-400/60'
                           : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
                       }`}
                       title="Vandkanon / støvdæmpning reducerer støvemission med 55%, men tilføjer +1,2 dB støj fra højtryksdyser"
                     >
-                      {cfg.waterSuppressionActive ? '💧 Vanddæmpning AKTIV' : '💧 Vanddæmpning FRA'}
+                      <span className="inline-flex items-center justify-center gap-1">
+                        <Droplets className="w-3 h-3 shrink-0" />
+                        <span>{cfg.waterSuppressionActive ? 'Vanddæmpning AKTIV' : 'Vanddæmpning FRA'}</span>
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -1470,7 +1612,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                 {/* Activity Intensity Slider + Distance & Wind Angle Telemetry */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
                   <div className="flex items-center gap-2 flex-1 min-w-[160px]">
-                    <span className="text-[10px] font-mono text-slate-400 whitespace-nowrap">
+                    <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap">
                       Intensitet: <strong className="text-white">{cfg.intensityPercent}%</strong>
                     </span>
                     <input
@@ -1488,7 +1630,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                     />
                   </div>
                   {contrib && (
-                    <div className="text-[10px] font-mono text-slate-400 flex items-center gap-2">
+                    <div className="text-[11px] font-mono text-slate-400 flex items-center gap-2">
                       <span>Afstand: {contrib.distanceMeters}m</span>
                       <span>·</span>
                       <span
@@ -1509,7 +1651,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                   )}
                 </div>
 
-                <div className="text-[10px] text-slate-400 italic truncate">
+                <div className="text-[11px] text-slate-400 italic truncate">
                   {modeSpec.equipmentDescription}
                 </div>
               </div>
@@ -1539,7 +1681,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                 : 'Rødtjørnevej 2, 4200 Slagelse'}
             </div>
           </div>
-          <div className="text-right font-mono text-[10px] shrink-0">
+          <div className="text-right font-mono text-[11px] shrink-0">
             <div className="text-amber-300 font-bold">
               Kl. {currentWeather.hourLabel}: {currentFocusEval.combinedLaeqDb.toFixed(1)} dB(A)
             </div>
@@ -1586,7 +1728,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                 y={padT - 3}
                 textAnchor="middle"
                 fill="#fde047"
-                fontSize="6.5"
+                fontSize="9.5"
                 fontFamily="monospace"
               >
                 ☀↑{solarInfo.sunriseLabel}
@@ -1605,7 +1747,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                 y={padT - 3}
                 textAnchor="middle"
                 fill="#f59e0b"
-                fontSize="6.5"
+                fontSize="9.5"
                 fontFamily="monospace"
               >
                 ☀↓{solarInfo.sunsetLabel}
@@ -1626,7 +1768,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                 x={padL + 2}
                 y={yForDb(70) - 2}
                 fill="#fbbf24"
-                fontSize="7"
+                fontSize="9.5"
                 fontFamily="monospace"
               >
                 70 dB(A) Grænse
@@ -1781,7 +1923,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                         x={Math.min(svgW - padR - 22, Math.max(padL + 2, xCenter - 10))}
                         y={Math.max(padT + 8, Math.min(ySimC, yDbaC) - 3)}
                         fill="#fecdd3"
-                        fontSize="6.2"
+                        fontSize="9.5"
                         fontFamily="monospace"
                         fontWeight="bold"
                       >
@@ -1814,14 +1956,14 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
               />
 
               {/* Left Axis Labels (dB) */}
-              <text x="2" y={padT + 5} fill="#fbbf24" fontSize="7.5" fontFamily="monospace">
+              <text x="2" y={padT + 5} fill="#fbbf24" fontSize="9.5" fontFamily="monospace">
                 {maxDb}dB
               </text>
               <text
                 x="2"
                 y={padT + plotH}
                 fill="#94a3b8"
-                fontSize="7.5"
+                fontSize="9.5"
                 fontFamily="monospace"
               >
                 {minDb}dB
@@ -1832,7 +1974,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                 x={svgW - padR + 3}
                 y={padT + 5}
                 fill="#22d3ee"
-                fontSize="7.5"
+                fontSize="9.5"
                 fontFamily="monospace"
               >
                 S={maxDustS.toFixed(1)}
@@ -1841,7 +1983,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                 x={svgW - padR + 3}
                 y={padT + plotH}
                 fill="#64748b"
-                fontSize="7.5"
+                fontSize="9.5"
                 fontFamily="monospace"
               >
                 S=0
@@ -1854,7 +1996,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                   x={xForHr(hr) - 6}
                   y={svgH - 3}
                   fill="#94a3b8"
-                  fontSize="7.5"
+                  fontSize="9.5"
                   fontFamily="monospace"
                 >
                   {String(hr).padStart(2, '0')}:00
@@ -1863,7 +2005,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
             </svg>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-slate-400 border-t border-slate-800/80 pt-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-400 border-t border-slate-800/80 pt-1.5">
             <span className="flex items-center gap-1">
               <span className="w-2.5 h-0.5 bg-amber-400 inline-block" /> Sim L_Aeq
             </span>
@@ -1891,10 +2033,13 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
 
           {/* Vind-Kompenseret Impuls-Katalog (.DBA Files vs. Neighbor Complaint Logfiles) Drawer */}
           {showDbaImpulseCatalog && (
-            <div className="mt-2 pt-2 border-t border-fuchsia-500/40 space-y-2 text-[10px] font-mono">
+            <div className="mt-2 pt-2 border-t border-fuchsia-500/40 space-y-2 text-[11px] font-mono">
               <div className="flex flex-wrap items-center justify-between gap-1.5">
-                <span className="text-fuchsia-300 font-bold uppercase">
-                  📂 Historiske DBA-Filer vs. Realtids-Simulering: {activeDbaBlock.fileName} ({activeDbaBlock.meter})
+                <span className="text-fuchsia-300 font-bold uppercase inline-flex items-center gap-1">
+                  <FolderOpen className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    Historiske DBA-Filer vs. Realtids-Simulering: {activeDbaBlock.fileName} ({activeDbaBlock.meter})
+                  </span>
                 </span>
                 <div className="flex flex-wrap items-center gap-1">
                   {(
@@ -1912,7 +2057,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                         key={bId}
                         type="button"
                         onClick={() => setSelectedDbaBlockId(bId)}
-                        className={`px-1.5 py-0.5 rounded text-[9px] border cursor-pointer ${
+                        className={`px-1.5 py-0.5 rounded text-[11px] border cursor-pointer ${
                           isSel
                             ? 'bg-fuchsia-500/30 border-fuchsia-400 text-white font-bold'
                             : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -1925,7 +2070,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                   <button
                     type="button"
                     onClick={handleExportDbaVsSimulationCsv}
-                    className={`px-2 py-0.5 rounded border text-[9px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                    className={`px-2 py-0.5 rounded border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
                       dbaCsvExportedJustNow
                         ? 'bg-emerald-500 text-slate-950 border-white'
                         : 'bg-emerald-500/20 hover:bg-emerald-500/35 border-emerald-400/60 text-emerald-200'
@@ -1939,29 +2084,46 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                         : 'Eksportér DBA vs. Sim (.CSV)'}
                     </span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleExportFull168hDbaPdf}
+                    className={`px-2 py-0.5 rounded border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                      dbaPdfExportedJustNow
+                        ? 'bg-fuchsia-500 text-white border-white'
+                        : 'bg-fuchsia-600/25 hover:bg-fuchsia-600/40 border-fuchsia-400/80 text-fuchsia-100'
+                    }`}
+                    title="Download fuld PDF-rapport med alle 168 timers historiske data (7 døgn × 24t) og statistiske korrelationer mellem simulering og DBA-målinger"
+                  >
+                    <FileText className="w-2.5 h-2.5 shrink-0" />
+                    <span>
+                      {dbaPdfExportedJustNow
+                        ? '✓ 168t PDF Downloadet!'
+                        : 'Download fuld PDF-rapport'}
+                    </span>
+                  </button>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-1.5 bg-slate-900/90 border border-slate-800 rounded p-1.5">
                 <div>
-                  <div className="text-[8.5px] text-slate-400 uppercase">Realtids-Simulering</div>
+                  <div className="text-[11px] text-slate-400 uppercase">Realtids-Simulering</div>
                   <div className="text-xs font-bold text-amber-300">
                     {dba24Series[selectedHourIndex]?.simLaeqDb.toFixed(1)} dB(A)
                   </div>
                 </div>
                 <div>
-                  <div className="text-[8.5px] text-slate-400 uppercase">
+                  <div className="text-[11px] text-slate-400 uppercase">
                     DBA Vind-Kompenseret
                   </div>
                   <div className="text-xs font-bold text-fuchsia-300">
                     {dba24Series[selectedHourIndex]?.windCompLaeqDb.toFixed(1)} dB(A){' '}
-                    <span className="text-[9px] text-slate-400">
+                    <span className="text-[11px] text-slate-400">
                       (Målt rå: {dba24Series[selectedHourIndex]?.rawDbaDb.toFixed(1)} dB)
                     </span>
                   </div>
                 </div>
                 <div>
-                  <div className="text-[8.5px] text-slate-400 uppercase">Sim vs. DBA Afvigelse</div>
+                  <div className="text-[11px] text-slate-400 uppercase">Sim vs. DBA Afvigelse</div>
                   <div
                     className={`text-xs font-bold ${
                       Math.abs(dba24Series[selectedHourIndex]?.deltaSimVsDba || 0) > 3.0
@@ -2000,7 +2162,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
             <button
               type="button"
               onClick={handleExportNoiseDustCsv}
-              className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 text-[10px] font-mono font-semibold flex items-center gap-1 transition-colors"
+              className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 text-[11px] font-mono font-semibold flex items-center gap-1 transition-colors"
               title="Eksportér korrelationstabel mellem vejr, kildenode-støj og naboklager til CSV"
             >
               <Download className="w-3 h-3" />
@@ -2014,7 +2176,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
           <button
             type="button"
             onClick={() => setWeatherEvalMode('recorded_snapshot')}
-            className={`px-2 py-1 rounded text-[10px] font-mono font-semibold transition-colors ${
+            className={`px-2 py-1 rounded text-[11px] font-mono font-semibold transition-colors ${
               weatherEvalMode === 'recorded_snapshot'
                 ? 'bg-fuchsia-500/25 text-fuchsia-200 border border-fuchsia-500/40'
                 : 'text-slate-400 hover:text-slate-200'
@@ -2025,7 +2187,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
           <button
             type="button"
             onClick={() => setWeatherEvalMode('active_slider')}
-            className={`px-2 py-1 rounded text-[10px] font-mono font-semibold transition-colors ${
+            className={`px-2 py-1 rounded text-[11px] font-mono font-semibold transition-colors ${
               weatherEvalMode === 'active_slider'
                 ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-500/40'
                 : 'text-slate-400 hover:text-slate-200'
@@ -2057,7 +2219,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                     )}).`,
                   })
                 }
-                className="px-2 py-1 rounded bg-fuchsia-500 text-slate-950 font-mono font-bold text-[10px] hover:bg-fuchsia-400 flex items-center gap-1 transition-colors"
+                className="px-2 py-1 rounded bg-fuchsia-500 text-slate-950 font-mono font-bold text-[11px] hover:bg-fuchsia-400 flex items-center gap-1 transition-colors"
               >
                 <PlusCircle className="w-3 h-3" />
                 <span>+ Log Klage (Rødtjørnevej 2)</span>
@@ -2073,7 +2235,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                     description: `Indberetning fra naboer ved Kierulffsvej 2-12 om overskridelse af støjgrænse fra hydraulisk mejselhammer ved BYG-2 samt støvflugt under vindstød (${currentWeather.windGusts10m} m/s).`,
                   })
                 }
-                className="px-2 py-1 rounded bg-slate-800 border border-fuchsia-500/40 text-fuchsia-200 font-mono font-semibold text-[10px] hover:bg-slate-700 flex items-center gap-1 transition-colors"
+                className="px-2 py-1 rounded bg-slate-800 border border-fuchsia-500/40 text-fuchsia-200 font-mono font-semibold text-[11px] hover:bg-slate-700 flex items-center gap-1 transition-colors"
               >
                 <PlusCircle className="w-3 h-3" />
                 <span>+ Log Klage (Kierulffsvej)</span>
@@ -2109,13 +2271,13 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="space-y-0.5 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="px-1.5 py-0.5 rounded bg-fuchsia-500/20 border border-fuchsia-500/50 text-fuchsia-200 font-mono text-[10px] font-bold">
+                      <span className="px-1.5 py-0.5 rounded bg-fuchsia-500/20 border border-fuchsia-500/50 text-fuchsia-200 font-mono text-[11px] font-bold">
                         {obs.code}
                       </span>
                       <span className="text-xs font-bold text-white truncate">
                         {obs.locationLabel}
                       </span>
-                      <span className="text-[10px] font-mono text-slate-400">
+                      <span className="text-[11px] font-mono text-slate-400">
                         (kl. {obs.observedHourLabel})
                       </span>
                     </div>
@@ -2125,7 +2287,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                   </div>
 
                   <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border shrink-0 ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border shrink-0 ${
                       activeEval.coExposureSeverity === 'KRITISK DOBBELT-BELASTNING'
                         ? 'bg-rose-500/25 text-rose-200 border-rose-500/50'
                         : activeEval.coExposureSeverity === 'FORHØJET STØJ/STØV'
@@ -2140,7 +2302,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                 {/* Telemetry Grid: Noise Estimate (L_Aeq / L_AFmax) + Weather Refraction + Dust S-Quotient */}
                 <div className="grid grid-cols-3 gap-2 p-2 bg-slate-900/90 border border-slate-800/90 rounded">
                   <div>
-                    <div className="text-[9px] font-mono uppercase text-slate-400">
+                    <div className="text-[11px] font-mono uppercase text-slate-400">
                       Estimeret Støjniveau
                     </div>
                     <div className="flex items-baseline gap-1">
@@ -2151,30 +2313,30 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                       >
                         {activeEval.combinedLaeqDb.toFixed(1)} dB(A)
                       </span>
-                      <span className="text-[10px] font-mono text-slate-400">
+                      <span className="text-[11px] font-mono text-slate-400">
                         / {activeEval.regulatoryLimitLaeqDb.toFixed(0)}
                       </span>
                     </div>
-                    <div className="text-[10px] font-mono text-rose-300">
+                    <div className="text-[11px] font-mono text-rose-300">
                       L_AFmax: {activeEval.combinedLafmaxDb.toFixed(1)} dB(A)
                     </div>
                   </div>
 
                   <div>
-                    <div className="text-[9px] font-mono uppercase text-slate-400">
+                    <div className="text-[11px] font-mono uppercase text-slate-400">
                       Vejr &amp; Lydrefraktion
                     </div>
                     <div className="text-xs font-mono font-bold text-cyan-300">
                       {activeEval.weather.windSpeed10m} m/s (stød {activeEval.weather.windGusts10m})
                     </div>
-                    <div className="text-[10px] font-mono text-amber-200">
+                    <div className="text-[11px] font-mono text-amber-200">
                       Vind-bidrag: {activeEval.netWeatherRefractionEffectDb >= 0 ? '+' : ''}
                       {activeEval.netWeatherRefractionEffectDb.toFixed(1)} dB(A)
                     </div>
                   </div>
 
                   <div>
-                    <div className="text-[9px] font-mono uppercase text-slate-400">
+                    <div className="text-[11px] font-mono uppercase text-slate-400">
                       Støv-Fane &amp; Kilde
                     </div>
                     <div
@@ -2186,7 +2348,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                     >
                       S = {activeEval.adjustedDustSumQuotient.toFixed(2)}
                     </div>
-                    <div className="text-[10px] font-mono text-slate-300 truncate">
+                    <div className="text-[11px] font-mono text-slate-300 truncate">
                       Primær: <strong className="text-amber-300">{activeEval.dominantNoiseSourceCode}</strong>
                     </div>
                   </div>
@@ -2194,7 +2356,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
 
                 {/* Source-by-Source Acoustic Contribution Breakdown Bars */}
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
                     <span>KILDE-OPDELT STØJBIDRAG VED OBSERVATIONSPUNKT:</span>
                     {weatherEvalMode === 'active_slider' && (
                       <span className="text-cyan-300">
@@ -2208,7 +2370,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                     {activeEval.sourceContributions.map((sc) => (
                       <div
                         key={`${obs.id}-${sc.sourceId}`}
-                        className="flex items-center gap-2 text-[10px] font-mono bg-slate-900/60 px-2 py-1 rounded border border-slate-800/70"
+                        className="flex items-center gap-2 text-[11px] font-mono bg-slate-900/60 px-2 py-1 rounded border border-slate-800/70"
                       >
                         <span className="w-12 font-bold text-amber-300 shrink-0">
                           {sc.sourceCode}
@@ -2263,7 +2425,7 @@ export const WeatherNoiseDustCorrelationPanel: React.FC<
                   {obs.description}
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 pt-0.5">
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-0.5">
                   <span>
                     GPS: {obs.position.lat.toFixed(4)}°N, {obs.position.lng.toFixed(4)}°E ·{' '}
                     {obs.reporterRole}

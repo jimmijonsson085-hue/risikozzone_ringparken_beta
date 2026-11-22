@@ -1488,24 +1488,49 @@ export function evaluateLegalViolations(
   const getSourceLwaAndImpulse = (
     src: DemolitionSourceNode
   ): { lwaDb: number; impulseDb: number; activityName: string } => {
+    const defaultDayLwa =
+      src.buildingCategory === 'b_vacant'
+        ? 68.0
+        : src.buildingCategory === 'e_demolished_unsecured'
+        ? 98.5
+        : src.buildingCategory === 'c_under_renovation'
+        ? 108.5
+        : src.id === 'src-blok-1'
+        ? 118.5
+        : src.id === 'src-bygning-2'
+        ? 115.0
+        : src.id === 'src-bygning-3'
+        ? 112.0
+        : 114.0;
+
+    const lwaOverrideDelta =
+      typeof src.baseSoundPowerLwaDb === 'number'
+        ? Number((src.baseSoundPowerLwaDb - defaultDayLwa).toFixed(1))
+        : 0;
+    const impulseAdj = Math.max(-4, Math.min(4, lwaOverrideDelta * 0.25));
+    const applyOverride = (baseLwa: number, baseImp: number) => ({
+      lwaDb: Number(Math.max(52, Math.min(138, baseLwa + lwaOverrideDelta)).toFixed(1)),
+      impulseDb: Number(Math.max(3, Math.min(20, baseImp + impulseAdj)).toFixed(1)),
+    });
+
     if (src.buildingCategory === 'b_vacant') {
+      const adj = applyOverride(68.0, 4.0);
       return {
-        lwaDb: 68.0,
-        impulseDb: 4.0,
+        ...adj,
         activityName: 'Tom bygning (kun passiv udsivning / vindstøj i afspærring)',
       };
     }
     if (src.buildingCategory === 'e_demolished_unsecured') {
+      const adj = applyOverride(isDaytimeWorkHours ? 98.5 : 88.0, 8.5);
       return {
-        lwaDb: isDaytimeWorkHours ? 98.5 : 88.0,
-        impulseDb: 8.5,
+        ...adj,
         activityName: 'Åben uforseglet byggegrube/krybekælder (grundvandspumper & vindresuspension uden bygningsafskærmning)',
       };
     }
     if (src.buildingCategory === 'c_under_renovation') {
+      const adj = applyOverride(isDaytimeWorkHours ? 108.5 : 86.0, 12.0);
       return {
-        lwaDb: isDaytimeWorkHours ? 108.5 : 86.0,
-        impulseDb: 12.0,
+        ...adj,
         activityName: 'Gavludskæring til franske altaner, faldstammer & badeværelsesnedbrydning (Etape 1)',
       };
     }
@@ -1513,45 +1538,45 @@ export function evaluateLegalViolations(
     if (!isDaytimeWorkHours) {
       const windRattleBoost = Math.min(7.5, Math.max(0, weather.windGusts10m - 6) * 0.65);
       if (src.id === 'src-blok-1') {
+        const adj = applyOverride(96.5 + windRattleBoost, 12.5);
         return {
-          lwaDb: 96.5 + windRattleBoost,
-          impulseDb: 12.5,
+          ...adj,
           activityName:
             'Kontinuerlig HEPA-undertryksventilator, grundvandspumpe & løst inddækningsstillads i vindstød',
         };
       }
+      const adj = applyOverride(93.0 + windRattleBoost, 10.5);
       return {
-        lwaDb: 93.0 + windRattleBoost,
-        impulseDb: 10.5,
+        ...adj,
         activityName: 'Natdrift af miljøsanerings-ventilatorer & vindslag i uafstivede byggepladshegn',
       };
     }
 
     if (src.id === 'src-blok-1') {
+      const adj = applyOverride(118.5, 15.0);
       return {
-        lwaDb: 118.5,
-        impulseDb: 15.0,
+        ...adj,
         activityName:
           'Tung hydraulisk betonknusning (45t Long-Reach betonsaks & nedstyrtning af dækelementer)',
       };
     }
     if (src.id === 'src-bygning-2') {
+      const adj = applyOverride(115.0, 16.0);
       return {
-        lwaDb: 115.0,
-        impulseDb: 16.0,
+        ...adj,
         activityName: 'Hydraulisk mejselhammer & stål-/kanalklipning ved Skovbrynet',
       };
     }
     if (src.id === 'src-bygning-3') {
+      const adj = applyOverride(112.0, 12.5);
       return {
-        lwaDb: 112.0,
-        impulseDb: 12.5,
+        ...adj,
         activityName: 'Mekanisk tag-/facadenedbrydning & teleskoplæsser mod Kierulffsvej',
       };
     }
+    const adj = applyOverride(114.0, 14.0);
     return {
-      lwaDb: 114.0,
-      impulseDb: 14.0,
+      ...adj,
       activityName: 'Aktiv mekanisk betonnedbrydning & hydraulisk mejselhammer (>85 dB(A), K_I = +5,0 dB)',
     };
   };

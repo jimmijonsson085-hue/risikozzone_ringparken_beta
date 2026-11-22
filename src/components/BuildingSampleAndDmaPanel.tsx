@@ -166,7 +166,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800 pb-2.5">
         <div>
-          <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-amber-300 font-bold">
+          <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-amber-300 font-bold">
             <ClipboardCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span>
               WISSENBERG PSS W22085 · MILJØRAPPORTER 2021-2791 &amp; RING_K18_C08.7 · DMA ANBEFALINGER
@@ -177,7 +177,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
           </h3>
         </div>
 
-        <div className="flex items-center gap-1.5 text-[10px] font-mono">
+        <div className="flex items-center gap-1.5 text-[11px] font-mono">
           <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-200 font-bold">
             29 Bygninger Kortlagt
           </span>
@@ -195,7 +195,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
 
       {/* Quick-Select Buttons for the 5 Core Report Groups */}
       <div className="space-y-1.5">
-        <div className="text-[10px] font-mono uppercase text-slate-400 font-semibold">
+        <div className="text-[11px] font-mono uppercase text-slate-400 font-semibold">
           Hurtigvalg af Rapport-Verificerede Bygningsgrupper (1–5):
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
@@ -217,10 +217,10 @@ export const BuildingSampleAndDmaPanel: React.FC<
                     : 'bg-slate-950/85 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
                 }`}
               >
-                <div className="text-[10.5px] font-bold truncate">
+                <div className="text-[11px] font-bold truncate">
                   {btn.shortLabel}
                 </div>
-                <div className="text-[9.5px] text-slate-400 truncate">
+                <div className="text-[11px] text-slate-400 truncate">
                   {btn.subtitle}
                 </div>
               </button>
@@ -232,7 +232,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
       {/* Full 29-Building Selector Dropdown + Operational Category Switcher */}
       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-950/90 p-2.5 rounded border border-slate-800">
         <div className="sm:col-span-7">
-          <label className="block text-[9.5px] font-mono uppercase text-slate-400 mb-1">
+          <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">
             Vælg blandt samtlige 29 bygninger/blokke i Ringparken:
           </label>
           <select
@@ -253,7 +253,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
         </div>
 
         <div className="sm:col-span-5">
-          <label className="block text-[9.5px] font-mono uppercase text-slate-400 mb-1">
+          <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">
             Operationel Kategori (a–e):
           </label>
           {onChangeBuildingCategory && activeBuildingUnit ? (
@@ -291,7 +291,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
       <div className="p-2.5 rounded bg-slate-950/95 border border-slate-800 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div className="text-[10px] font-mono text-cyan-300 font-bold">
+            <div className="text-[11px] font-mono text-cyan-300 font-bold">
               {activeProfile.profileGroupLabelDa}
             </div>
             <div className="text-xs font-bold text-white flex items-center gap-1.5 mt-0.5">
@@ -304,7 +304,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
           </div>
 
           {activeBuildingUnit && (
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300">
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300">
               {activeBuildingUnit.helhedsplanEtape}
             </span>
           )}
@@ -312,13 +312,13 @@ export const BuildingSampleAndDmaPanel: React.FC<
 
         {/* Report IDs */}
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
-          <span className="text-[9.5px] font-mono uppercase text-slate-400">
+          <span className="text-[11px] font-mono uppercase text-slate-400">
             Verificerede Miljørapporter:
           </span>
           {activeProfile.reportIds.map((repId) => (
             <span
               key={repId}
-              className="px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-500/40 text-[10px] font-mono text-cyan-200 font-semibold flex items-center gap-1"
+              className="px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-500/40 text-[11px] font-mono text-cyan-200 font-semibold flex items-center gap-1"
             >
               <FileText className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
               <span>{repId}</span>
@@ -332,12 +332,12 @@ export const BuildingSampleAndDmaPanel: React.FC<
 
         {/* DMA & PSS Primary Recommendation Callout */}
         <div className="p-2.5 rounded bg-amber-950/40 border border-amber-400/60 space-y-1.5">
-          <div className="flex items-center justify-between gap-2 text-[10.5px] font-mono font-bold uppercase text-amber-300">
+          <div className="flex items-center justify-between gap-2 text-[11px] font-mono font-bold uppercase text-amber-300">
             <span className="flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span>DMA &amp; Wissenberg PSS W22085 Kerne-Anbefaling:</span>
             </span>
-            <span className="px-1.5 py-0.2 rounded bg-slate-950 text-amber-200 border border-amber-500/40 text-[9.5px]">
+            <span className="px-1.5 py-0.2 rounded bg-slate-950 text-amber-200 border border-amber-500/40 text-[11px]">
               Bindende Sikkerhedskrav
             </span>
           </div>
@@ -345,12 +345,12 @@ export const BuildingSampleAndDmaPanel: React.FC<
             {activeProfile.dmaAndPssHeadlineRecommendationDa}
           </p>
           {activeProfile.encapsulationVsRemediationPolicyDa && (
-            <div className="text-[10.5px] font-mono text-cyan-200 pt-1 border-t border-amber-500/30">
+            <div className="text-[11px] font-mono text-cyan-200 pt-1 border-t border-amber-500/30">
               <strong>Sanering vs. Indkapsling:</strong>{' '}
               {activeProfile.encapsulationVsRemediationPolicyDa}
             </div>
           )}
-          <div className="text-[10.5px] font-mono text-rose-200 pt-1 border-t border-amber-500/30 flex items-center gap-1.5">
+          <div className="text-[11px] font-mono text-rose-200 pt-1 border-t border-amber-500/30 flex items-center gap-1.5">
             <Wrench className="w-3 h-3 text-rose-400 shrink-0" />
             <span>{activeProfile.mandatoryCourseRequirement2025Da}</span>
           </div>
@@ -362,7 +362,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
         <button
           type="button"
           onClick={() => setActiveSubView('samples')}
-          className={`py-1.5 px-2 rounded text-[10.5px] font-mono font-bold transition-colors flex items-center justify-center gap-1.5 ${
+          className={`py-1.5 px-2 rounded text-[11px] font-mono font-bold transition-colors flex items-center justify-center gap-1.5 ${
             activeSubView === 'samples'
               ? 'bg-amber-400 text-slate-950 shadow-xs'
               : 'text-slate-300 hover:bg-slate-900'
@@ -375,7 +375,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
         <button
           type="button"
           onClick={() => setActiveSubView('dma_checklist')}
-          className={`py-1.5 px-2 rounded text-[10.5px] font-mono font-bold transition-colors flex items-center justify-center gap-1.5 ${
+          className={`py-1.5 px-2 rounded text-[11px] font-mono font-bold transition-colors flex items-center justify-center gap-1.5 ${
             activeSubView === 'dma_checklist'
               ? 'bg-emerald-400 text-slate-950 shadow-xs'
               : 'text-slate-300 hover:bg-slate-900'
@@ -390,7 +390,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
         <button
           type="button"
           onClick={() => setActiveSubView('statutes')}
-          className={`py-1.5 px-2 rounded text-[10.5px] font-mono font-bold transition-colors flex items-center justify-center gap-1.5 ${
+          className={`py-1.5 px-2 rounded text-[11px] font-mono font-bold transition-colors flex items-center justify-center gap-1.5 ${
             activeSubView === 'statutes'
               ? 'bg-cyan-400 text-slate-950 shadow-xs'
               : 'text-slate-300 hover:bg-slate-900'
@@ -423,7 +423,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
                     </span>
                   </div>
                   <span
-                    className={`px-2 py-0.5 rounded text-[9.5px] font-mono font-bold border ${style.badge}`}
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border ${style.badge}`}
                   >
                     {sample.confirmedStatus === 'KONSTATERET_PRØVE'
                       ? '✓ KONSTATERET I PRØVE'
@@ -435,14 +435,14 @@ export const BuildingSampleAndDmaPanel: React.FC<
 
                 {/* Exact Building Components List */}
                 <div className="space-y-1">
-                  <div className="text-[10px] font-mono uppercase text-slate-300 font-semibold">
+                  <div className="text-[11px] font-mono uppercase text-slate-300 font-semibold">
                     Eksakte Bygningsdele i {activeProfile.buildingCode}:
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {sample.exactBuildingComponents.map((comp, idx) => (
                       <span
                         key={idx}
-                        className="px-2 py-0.5 rounded bg-slate-950/90 border border-slate-700 text-[10.5px] font-mono text-white font-semibold"
+                        className="px-2 py-0.5 rounded bg-slate-950/90 border border-slate-700 text-[11px] font-mono text-white font-semibold"
                       >
                         • {comp}
                       </span>
@@ -455,7 +455,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
                 </p>
 
                 {!compactMode && (
-                  <p className="text-[10.5px] text-slate-300 leading-snug">
+                  <p className="text-[11px] text-slate-300 leading-snug">
                     <strong className="text-amber-300">Sprednings- &amp; Arbejdsmiljørisiko:</strong>{' '}
                     {sample.toxicologicalAndPhysicalRiskDa}
                   </p>
@@ -465,7 +465,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
                   {sample.statutoryReferences.map((ref, idx) => (
                     <span
                       key={idx}
-                      className="px-1.5 py-0.2 rounded bg-slate-950 text-slate-400 text-[9.5px] font-mono border border-slate-800"
+                      className="px-1.5 py-0.2 rounded bg-slate-950 text-slate-400 text-[11px] font-mono border border-slate-800"
                     >
                       ⚖ {ref}
                     </span>
@@ -520,7 +520,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
                         [{item.code}] {item.titleDa}
                       </span>
                       <span
-                        className={`px-1.5 py-0.2 rounded text-[9.5px] font-mono font-bold border ${
+                        className={`px-1.5 py-0.2 rounded text-[11px] font-mono font-bold border ${
                           isChecked
                             ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/50'
                             : 'bg-rose-500/25 text-rose-200 border-rose-400/50'
@@ -532,7 +532,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
                     <p className="text-[11px] text-slate-200 leading-relaxed">
                       {item.requirementDetailDa}
                     </p>
-                    <div className="text-[10px] font-mono text-cyan-300">
+                    <div className="text-[11px] font-mono text-cyan-300">
                       Kilde: {item.sourceReference} · Fase: {item.mandatoryBeforePhase}
                     </div>
                   </div>
@@ -547,7 +547,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
       {activeSubView === 'statutes' && (
         <div className="space-y-2">
           <div className="p-2.5 rounded bg-slate-950 border border-slate-800 space-y-1">
-            <div className="text-[10px] font-mono uppercase text-cyan-300 font-bold flex items-center gap-1.5">
+            <div className="text-[11px] font-mono uppercase text-cyan-300 font-bold flex items-center gap-1.5">
               <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
               <span>Krybekælder, Kælder &amp; Terrænforhold:</span>
             </div>
@@ -557,7 +557,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
           </div>
 
           <div className="p-2.5 rounded bg-slate-950 border border-slate-800 space-y-1.5">
-            <div className="text-[10px] font-mono uppercase text-amber-300 font-bold">
+            <div className="text-[11px] font-mono uppercase text-amber-300 font-bold">
               Gældende Lovhjemler, Bekendtgørelser &amp; Vejledninger:
             </div>
             <ul className="space-y-1 text-[11px] font-mono text-slate-200 list-disc list-inside">
@@ -572,7 +572,7 @@ export const BuildingSampleAndDmaPanel: React.FC<
       {/* Action Footer: Send Building Sample Profile to AI Expert */}
       {onAskAiAboutProfile && (
         <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[10px] font-mono text-slate-400">
+          <span className="text-[11px] font-mono text-slate-400">
             Citerer eksakte bygningsdele fra {activeProfile.reportIds[0]}
           </span>
           <button

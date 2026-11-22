@@ -239,7 +239,7 @@ export const LegalObjectionGeneratorModal: React.FC<
               onClick={() => setSelectedDocType(opt.id)}
               className={`p-3 rounded-md border text-left transition-all cursor-pointer space-y-1 ${
                 isSelected
-                  ? `${opt.accentColor} border-2 shadow-md`
+                  ? `${opt.accentColor} border border-l-4`
                   : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700'
               }`}
             >
@@ -273,7 +273,7 @@ export const LegalObjectionGeneratorModal: React.FC<
                 key={val}
                 type="button"
                 onClick={() => setEconomicSavingDkk(val)}
-                className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer ${
+                className={`px-2 py-0.5 rounded border text-[11px] cursor-pointer ${
                   economicSavingDkk === val
                     ? 'bg-rose-500 text-slate-950 border-rose-300 font-bold'
                     : 'bg-slate-950 text-slate-300 border-slate-800'
@@ -295,12 +295,12 @@ export const LegalObjectionGeneratorModal: React.FC<
               {generatedDoc.recipientAuthoritiesDa.join(' · ')}
             </strong>
           </div>
-          <div className="font-mono text-[10px] text-emerald-300">
+          <div className="font-mono text-[11px] text-emerald-300">
             ZKP Right-to-Opacity: AKTIV · SHA-256: {sha256Hash.slice(0, 20)}...
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-amber-300">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-amber-300">
           {generatedDoc.legalBasisBadges.map((b, i) => (
             <React.Fragment key={b}>
               {i > 0 && <span className="text-slate-600">·</span>}

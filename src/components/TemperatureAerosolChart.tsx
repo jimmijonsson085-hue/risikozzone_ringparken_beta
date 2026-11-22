@@ -236,7 +236,7 @@ export const TemperatureAerosolChart: React.FC<TemperatureAerosolChartProps> = (
         <button
           type="button"
           onClick={onToggleExpandInline}
-          className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-semibold transition-colors flex items-center gap-1 border ${
+          className={`px-1.5 py-0.5 rounded font-mono text-[11px] font-semibold transition-colors flex items-center gap-1 border ${
             isInlineExpanded
               ? 'bg-amber-400 text-slate-950 border-amber-200 font-bold'
               : 'bg-slate-900 text-amber-300 border-amber-500/40 hover:border-amber-400'
@@ -246,7 +246,7 @@ export const TemperatureAerosolChart: React.FC<TemperatureAerosolChartProps> = (
           <span>
             Aerosol: {currentDatum.aerosolFormationIndex}%
           </span>
-          <span className="text-[9px] opacity-80">
+          <span className="text-[11px] opacity-80">
             ({isInlineExpanded ? 'Skjul' : '24t Graf'})
           </span>
         </button>
@@ -259,7 +259,7 @@ export const TemperatureAerosolChart: React.FC<TemperatureAerosolChartProps> = (
     <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-md space-y-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
         <div>
-          <div className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-semibold flex items-center gap-1.5">
+          <div className="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-semibold flex items-center gap-1.5">
             <Thermometer className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span>24-TIMERS TEMPERATURUDVIKLING &amp; AEROSOL-KORRELATION ({dateIso})</span>
           </div>
@@ -268,7 +268,7 @@ export const TemperatureAerosolChart: React.FC<TemperatureAerosolChartProps> = (
           </h4>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px]">
+        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
           <span className="px-2 py-0.5 rounded bg-fuchsia-950/70 border border-fuchsia-500/50 text-fuchsia-200 font-semibold">
             Korrelation r = +{correlationCoolingToAerosol.toFixed(2)}
           </span>
@@ -280,7 +280,7 @@ export const TemperatureAerosolChart: React.FC<TemperatureAerosolChartProps> = (
 
       {/* Recharts 24-Hour Dual-Axis ComposedChart */}
       <div className="bg-slate-950/90 border border-slate-800/90 rounded p-2.5 space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
           <div className="flex flex-wrap items-center gap-3">
             <span className="flex items-center gap-1 text-amber-300 font-semibold">
               <span className="w-2.5 h-0.5 bg-amber-400 inline-block" />
@@ -361,7 +361,7 @@ export const TemperatureAerosolChart: React.FC<TemperatureAerosolChartProps> = (
                   if (!active || !payload || !payload.length) return null;
                   const pt = payload[0].payload as HourlyTempAerosolDatum;
                   return (
-                    <div className="bg-slate-950/95 border border-slate-700 rounded p-2 shadow-xl font-mono text-[10.5px] space-y-1">
+                    <div className="bg-slate-950/95 border border-slate-700 rounded p-2 shadow-xl font-mono text-[11px] space-y-1">
                       <div className="font-bold text-white flex items-center justify-between gap-3 border-b border-slate-800 pb-1">
                         <span>Kl. {pt.hourLabel}</span>
                         <span className="text-cyan-300">Pasquill {pt.pasquillClass}</span>
@@ -379,7 +379,7 @@ export const TemperatureAerosolChart: React.FC<TemperatureAerosolChartProps> = (
                         {pt.estimatedBioAerosolCfuM3} CFU/m³)
                       </div>
                       {pt.tempDropRateC > 0 && (
-                        <div className="text-rose-300 text-[9.5px]">
+                        <div className="text-rose-300 text-[11px]">
                           ▼ Temperaturfald (-{pt.tempDropRateC} °C/t) fremmer kondensation &amp;
                           aerosol-fastholdelse
                         </div>
@@ -459,16 +459,16 @@ export const TemperatureAerosolChart: React.FC<TemperatureAerosolChartProps> = (
         </div>
 
         {/* Summary Metrics & Interactive Quick-Jump Buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1.5 border-t border-slate-800/80 font-mono text-[10.5px]">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1.5 border-t border-slate-800/80 font-mono text-[11px]">
           <div className="p-2 bg-slate-900/90 border border-slate-800 rounded flex flex-col justify-between">
-            <div className="text-[9.5px] text-slate-400">AKTUEL TIME (KL. {currentDatum.hourLabel})</div>
+            <div className="text-[11px] text-slate-400">AKTUEL TIME (KL. {currentDatum.hourLabel})</div>
             <div className="text-xs font-bold text-amber-300 mt-0.5">
               {currentDatum.temperature2m} °C{' '}
-              <span className="text-[10px] text-cyan-300">
+              <span className="text-[11px] text-cyan-300">
                 (Dugpkt {currentDatum.dewPointC} °C)
               </span>
             </div>
-            <div className="text-[10px] text-fuchsia-300">
+            <div className="text-[11px] text-fuchsia-300">
               Aerosol-indeks: <strong>{currentDatum.aerosolFormationIndex}%</strong> (
               {currentDatum.estimatedBioAerosolCfuM3} CFU/m³)
             </div>
@@ -480,14 +480,14 @@ export const TemperatureAerosolChart: React.FC<TemperatureAerosolChartProps> = (
             className="p-2 bg-slate-900/90 hover:bg-slate-800/90 border border-amber-500/40 rounded text-left transition-colors flex flex-col justify-between"
             title="Klik for at hoppe til timen med det kraftigste temperaturfald"
           >
-            <div className="text-[9.5px] text-amber-300 font-semibold flex items-center justify-between">
+            <div className="text-[11px] text-amber-300 font-semibold flex items-center justify-between">
               <span>▼ STØRSTE TEMPERATURFALD</span>
               <span className="underline">kl. {maxDropHour.hourLabel}</span>
             </div>
             <div className="text-xs font-bold text-white mt-0.5">
               -{maxDropHour.tempDropRateC.toFixed(1)} °C/t → {maxDropHour.temperature2m} °C
             </div>
-            <div className="text-[10px] text-slate-300">
+            <div className="text-[11px] text-slate-300">
               Udløser kondensation &amp; {maxDropHour.aerosolFormationIndex}% aerosol-rate
             </div>
           </button>
@@ -498,7 +498,7 @@ export const TemperatureAerosolChart: React.FC<TemperatureAerosolChartProps> = (
             className="p-2 bg-fuchsia-950/30 hover:bg-fuchsia-950/50 border border-fuchsia-500/50 rounded text-left transition-colors flex flex-col justify-between"
             title="Klik for at hoppe til timen med højest aerosol-dannelse"
           >
-            <div className="text-[9.5px] text-fuchsia-300 font-semibold flex items-center justify-between">
+            <div className="text-[11px] text-fuchsia-300 font-semibold flex items-center justify-between">
               <span className="flex items-center gap-1">
                 <Droplets className="w-3 h-3 text-fuchsia-400" />
                 <span>MAKS AEROSOL-DANNELSE</span>
@@ -509,7 +509,7 @@ export const TemperatureAerosolChart: React.FC<TemperatureAerosolChartProps> = (
               {peakAerosolHour.aerosolFormationIndex}% ({peakAerosolHour.estimatedBioAerosolCfuM3}{' '}
               CFU/m³)
             </div>
-            <div className="text-[10px] text-slate-300">
+            <div className="text-[11px] text-slate-300">
               Ved {peakAerosolHour.temperature2m} °C · {peakAerosolHour.relativeHumidity2m}% RH (Kl.{' '}
               {peakAerosolHour.pasquillClass})
             </div>

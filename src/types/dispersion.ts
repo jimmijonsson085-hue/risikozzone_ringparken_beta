@@ -98,6 +98,7 @@ export interface DemolitionSourceNode {
   buildingCategory?: BuildingOperationalCategory;
   sourceEmissionFactor?: number;
   buildingHeight3DMeters?: number;
+  baseSoundPowerLwaDb?: number;
   isCustom?: boolean;
   active: boolean;
 }
@@ -416,6 +417,39 @@ export interface ZkpVerificationMetadata {
   physicalToDigitalProofOfState: PhysicalToDigitalProofOfState;
 }
 
+export interface ForensicAudioAnalysis {
+  identifiedToolOrMachine: string;
+  machineryCategoryKey: 'hydraulic_hammer' | 'concrete_crusher' | 'steel_shear_impact';
+  confidencePct: number;
+  dominantFrequencyHz: number;
+  estimatedSourceLwaDb: number;
+  crestFactorDb: number;
+  impulseRatePerSec: number;
+  hasAudibleImpulses: boolean;
+  hasDistinctTonalComponent: boolean;
+  statutoryPenaltyDb: number; // +5 dB(A) per MST Vejl. 5/1984 when impulses or tones are clearly audible
+  octaveBandProfileDb: Record<string, number>;
+  acousticSignatureSummary: string;
+  statutoryReferences: string[];
+  forensicConclusion: string;
+  analyzedAtIso: string;
+  modelUsed: string;
+}
+
+export interface ForensicAudioEvidence {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  durationSec: number;
+  sampleRateHz: number;
+  audioDataUrl?: string;
+  audioSha256Hash: string;
+  recordedAtIso: string;
+  evidenceCategory?: ForensicEvidenceCategoryTag;
+  analysis: ForensicAudioAnalysis;
+}
+
 export interface AlgedonicObservation {
   id: string;
   code: string;
@@ -437,6 +471,7 @@ export interface AlgedonicObservation {
   zkpVerification?: ZkpVerificationMetadata;
   photoEvidence?: ForensicPhotoEvidence;
   pdfEvidence?: ForensicPdfEvidence;
+  audioEvidence?: ForensicAudioEvidence;
   mapSnapshot?: ForensicMapSnapshotMetadata;
 }
 
@@ -767,4 +802,234 @@ export interface IndoorClimateTelemetryResult extends IndoorReceptorClimateExpos
   moldCfuPerM3?: number;
   br18Section443Compliant?: boolean;
 }
+
+export interface ExportFilterCriteria {
+  enabled: boolean;
+  startDateIso: string;
+  endDateIso: string;
+  receptorIds: string[];
+  substances: SubstanceKey[];
+}
+
+export type WaterMainCoordinateMode = 'scene_calibrated' | 'dar_verified_wgs84';
+
+export type WaterMainPipeMaterial =
+  | 'ETERNIT_ASBESTCEMENT_1964'
+  | 'PE100_SDR17_IKKE_DIFFUSIONSTAET';
+
+export type WaterMainRiskStatus =
+  | 'nominal'
+  | 'advisory'
+  | 'warning'
+  | 'critical_rupture';
+
+export interface Epsg25832Coordinate {
+  eastingM: number;
+  northingM: number;
+}
+
+export interface KierulffsvejWaterMainPoint {
+  lat: number;
+  lng: number;
+  elevationMoh?: number;
+  groundwaterDepthM?: number;
+  groundwaterRangeM?: [number, number];
+  label?: string;
+  epsg25832?: Epsg25832Coordinate;
+}
+
+export interface KierulffsvejWaterMainSegment {
+  id: string;
+  code: string;
+  name: string;
+  ownerName: string;
+  waterHardnessDh: number;
+  dimension: 'DN200' | 'DN150';
+  material: WaterMainPipeMaterial;
+  installYear: number;
+  burialDepthMeters: number;
+  depthIntervalMeters: [number, number];
+  overlyingDistrictHeatingDepthMeters: number;
+  lerUncertaintyBufferMeters: number;
+  nominalPressureBar: number;
+  nominalFlowLs: number;
+  coordinateMode: WaterMainCoordinateMode;
+  waypoints: KierulffsvejWaterMainPoint[];
+  lengthMeters: number;
+  notesDa: string;
+  historicalIncidentDa?: string;
+}
+
+export interface WaterMainValveNode {
+  id: string;
+  code: 'V-VEST' | 'V-MIDT' | 'V-ØST';
+  name: string;
+  address: string;
+  coordinate: LatLngPoint;
+  darCoordinate: LatLngPoint;
+  epsg25832: Epsg25832Coordinate;
+  status: 'open' | 'throttled' | 'closed';
+  isSectionIsolationValve: boolean;
+  notesDa: string;
+}
+
+export interface WaterMainHydrantNode {
+  id: string;
+  code: string;
+  name: string;
+  address: string;
+  coordinate: LatLngPoint;
+  darCoordinate: LatLngPoint;
+  epsg25832: Epsg25832Coordinate;
+  flowCapacityLs: number;
+}
+
+export interface WaterMainServiceBranch {
+  id: string;
+  code: string;
+  targetBuildingId: string;
+  targetBuildingCode: string;
+  address: string;
+  material: WaterMainPipeMaterial | 'GALVANISERET_STÅL_1964';
+  dimension: 'DN32' | 'DN40' | 'DN50';
+  startOnMain: LatLngPoint;
+  buildingConnection: LatLngPoint;
+  darStartOnMain: LatLngPoint;
+  darBuildingConnection: LatLngPoint;
+  lengthMeters: number;
+  cappingStatus: 'capped_at_boundary' | 'isolated_valve' | 'uncapped_risk';
+  legalStandard: string;
+  notesDa: string;
+}
+
+export interface WaterMainLegalAlert {
+  code: string;
+  statute: string;
+  title: string;
+  severity: 'advisory' | 'warning' | 'critical';
+  thresholdText: string;
+  measuredText: string;
+  descriptionDa: string;
+}
+
+export interface WaterMainLiveTelemetry {
+  layerId: 'Infrastruktur_Drikkevand_Hovedroer_Kierulffsvej';
+  coordinateMode: WaterMainCoordinateMode;
+  ownerName: string;
+  waterHardnessDh: number;
+  dimension: string;
+  primaryMaterial: WaterMainPipeMaterial;
+  burialDepthMeters: number;
+  depthIntervalMeters: [number, number];
+  districtHeatingDepthMeters: number;
+  lerUncertaintyMeters: number;
+  pressureBar: number;
+  nominalPressureBar: number;
+  flowLs: number;
+  nominalFlowLs: number;
+  hydraulicPowerWatts: number; // CiK 2.0 (J/s): p [Pa] * Q [m³/s]
+  hydraulicEnergyPerHourKj: number;
+  pipePpvMmPerSec: number;
+  nearestBranchPpvMmPerSec: number;
+  nearestSourceId: string;
+  nearestSourceCode: string;
+  nearestSourceDistanceMeters: number;
+  ppvThresholdStatus: 'under_15' | 'advisory_15' | 'warning_25' | 'critical_50';
+  crownStressKpa: number;
+  crownStressWithoutPlatesKpa: number;
+  crownStressWithPlatesKpa: number;
+  hasSteelRoadPlates: boolean;
+  simulatedPipeRuptureActive: boolean;
+  effectivePrecipitationMmH: number;
+  effectiveGroundwaterDepthMeters: number;
+  groundwaterAbovePipeCrownMeters: number;
+  intrusionRiskLevel: 'none' | 'moderate' | 'high' | 'active_backsiphonage';
+  intrusionContaminants: string[];
+  estimatedLeadIntrusionUgL: number;
+  estimatedPah4SumUgL: number;
+  estimatedPcbIntrusionUgL?: number;
+  pePermeationRiskScore: number; // 0..100
+  overallStatus: WaterMainRiskStatus;
+  statusLabelDa: string;
+  inspectionCenter: LatLngPoint;
+  lerBufferPolygon: LatLngPoint[];
+  sceneSegments: KierulffsvejWaterMainSegment[];
+  darSegments: KierulffsvejWaterMainSegment[];
+  valves: WaterMainValveNode[];
+  hydrants: WaterMainHydrantNode[];
+  serviceBranches: WaterMainServiceBranch[];
+  legalAlerts: WaterMainLegalAlert[];
+}
+
+export interface VirtualLeakSaturationZone {
+  tier: 'core_saturated' | 'capillary_front' | 'clay_wetting_fringe';
+  radiusMeters: number;
+  saturationPct: number;
+  labelDa: string;
+  colorHex: string;
+}
+
+export interface VirtualLeakBuildingImpact {
+  buildingId: string;
+  buildingCode: string;
+  buildingName: string;
+  address: string;
+  center: LatLngPoint;
+  distanceMeters: number;
+  arrivalMinutes: number;
+  intrusionRateLh: number;
+  foundationDepthExposureM: number;
+  severity: 'critical' | 'high' | 'moderate';
+  summaryDa: string;
+}
+
+export interface VirtualLeakPinImpact {
+  pinPoint: LatLngPoint;
+  snappedSegmentId: string;
+  snappedSegmentName: string;
+  pressureDropBar: number;
+  dischargeLs: number;
+  immediatePercolationDepthM: number;
+  saturationZones: VirtualLeakSaturationZone[];
+  impactedBuildings: VirtualLeakBuildingImpact[];
+}
+
+export interface PssMachineInterlockItem {
+  id: string;
+  code: string;
+  titleDa: string;
+  ruleRefDa: string;
+  severity: 'critical' | 'warning';
+  machineLabelDa: string;
+  mitigationHintDa: string;
+  isActive: boolean;
+  isAcknowledged: boolean;
+}
+
+export interface System3InterlockLogEntry {
+  id: string;
+  observationCode: string;
+  eventId: string;
+  scenarioTitleDa: string;
+  timestampIso: string;
+  dispatchedTimeLabel: string;
+  lockedValveCodes: Array<'V-VEST' | 'V-MIDT'>;
+  haltedMachines: Array<{ id: string; nameDa: string; interlockRuleDa: string }>;
+  sha256Signature: string;
+  triggerSummaryDa: string;
+}
+
+export type {
+  AlgedonicScenarioSpec,
+  AlgedonicTestScenarioId,
+  Gate1ConsensusValidationSummary,
+  SimultaneousAlgedonicDispatch,
+  SimultaneousAlgedonicEscapeVector,
+  SimultaneousAlgedonicHaltedMachine,
+  SimultaneousAlgedonicStatutoryNotice,
+  SimultaneousAlgedonicSystem1State,
+  SimultaneousAlgedonicSystem3State,
+  SimultaneousAlgedonicTankerCorridor,
+  SimultaneousAlgedonicTriggerConditions,
+} from './myceliumAlert';
 

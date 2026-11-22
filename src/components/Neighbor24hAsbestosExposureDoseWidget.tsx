@@ -14,9 +14,11 @@ import {
 import {
   Activity,
   AlertTriangle,
+  Biohazard,
   Building2,
   Clock,
   Flame,
+  FlaskConical,
   Layers,
   ShieldAlert,
   TrendingUp,
@@ -332,19 +334,75 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
     return rows;
   }, [top5Neighbors]);
 
+  const demolitionActivityComparison = useMemo(() => {
+    const activeSources = sources.filter((s) => s.active);
+    const totalSources = Math.max(1, sources.length);
+    const avgFiberIdx =
+      activeSources.length > 0
+        ? activeSources.reduce((acc, s) => acc + (s.fiberReleaseIndex ?? 0.78), 0) /
+          activeSources.length
+        : 0;
+    const scheduleIntensityPct =
+      activityScheduleMode === 'intensive_dry_08_16'
+        ? 135
+        : activityScheduleMode === 'full_24h_unmitigated'
+        ? 100
+        : 68;
+    const siteDemolitionActivityPct = Math.round(
+      Math.min(
+        135,
+        (activeSources.length / totalSources) * scheduleIntensityPct * Math.max(0.55, avgFiberIdx)
+      )
+    );
+
+    const rows = report.neighborSummaries.slice(0, 8).map((n) => {
+      const domSrc =
+        sources.find((s) => s.code === n.dominantSourceCode) ||
+        activeSources[0] ||
+        sources[0];
+      const srcEmissionScale = domSrc?.active
+        ? (domSrc.sourceEmissionFactor ?? 1.0) * (domSrc.fiberReleaseIndex ?? 0.82)
+        : 0.12;
+      const receptorActivityImpactPct = Math.round(
+        Math.min(135, Math.max(8, srcEmissionScale * scheduleIntensityPct * (165 / Math.max(35, n.distanceToDominantSourceMeters))))
+      );
+      return {
+        receptorId: n.receptorId,
+        code: n.receptorCode,
+        name: n.receptorName,
+        totalRespirableFibers24h: n.totalInhaledFibersPerResident24h,
+        total24hDoseFibersCm3H: n.total24hDoseFibersCm3H,
+        demolitionActivityPct: receptorActivityImpactPct,
+        siteBaselineActivityPct: siteDemolitionActivityPct,
+        dominantSourceCode: n.dominantSourceCode,
+      };
+    });
+
+    return {
+      activeCount: activeSources.length,
+      totalSources: sources.length,
+      siteDemolitionActivityPct,
+      totalRespirableAcrossZones: rows.reduce(
+        (acc, r) => acc + r.totalRespirableFibers24h,
+        0
+      ),
+      rows,
+    };
+  }, [report.neighborSummaries, sources, activityScheduleMode]);
+
   const mostExposed = report.mostExposedNeighbor;
 
   return (
-    <div className="p-3.5 bg-slate-900/95 border-2 border-rose-500/50 rounded-md space-y-3.5 shadow-xl">
+    <div className="p-3.5 bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-rose-500 rounded-md space-y-3.5">
       {/* Header Banner */}
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800 pb-2.5">
         <div className="space-y-0.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/50 text-[10px] font-mono font-extrabold uppercase text-rose-200 flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/50 text-[11px] font-mono font-extrabold uppercase text-rose-200 flex items-center gap-1">
               <Flame className="w-3 h-3 text-rose-400 shrink-0" />
               <span>24-TIMERS SAMLET ASBEST-EKSPONERINGS-DOSIS (NABOBLOKKE)</span>
             </span>
-            <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-[10px] font-mono text-amber-300">
+            <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-[11px] font-mono text-amber-300">
               BEK 613/2026 GV: 0,003 fibre/cm³ • Døgn-tærskel: 0,0240 f/cm³·t
             </span>
           </div>
@@ -360,7 +418,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
           <button
             type="button"
             onClick={onActivate3DTemporalAsbestosHeatmap}
-            className="px-2.5 py-1.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-mono text-[10.5px] font-extrabold flex items-center gap-1.5 shadow-md transition-colors cursor-pointer shrink-0"
+            className="px-2.5 py-1.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-mono text-[11px] font-extrabold flex items-center gap-1.5 shadow-md transition-colors cursor-pointer shrink-0"
             title="Vis 24-timers Tidsmæssig Asbest-Akkumulering direkte på 3D Digital Tvilling-scenen"
           >
             <Layers className="w-3.5 h-3.5 text-slate-950 shrink-0" />
@@ -371,7 +429,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
 
       {/* Interactive Source Activity Control Panel */}
       <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-2.5">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[10.5px] font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
           <span className="text-cyan-300 font-bold uppercase flex items-center gap-1.5">
             <Activity className="w-3.5 h-3.5 text-cyan-400" />
             <span>1. Vælg Kilde-Aktivitet (Aktive Nedrivningskilder &amp; Driftstid):</span>
@@ -380,7 +438,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
             <button
               type="button"
               onClick={() => onChangeAsbestosSourceScope('all_active')}
-              className={`px-2 py-0.5 rounded border text-[10px] transition-colors cursor-pointer ${
+              className={`px-2 py-0.5 rounded border text-[11px] transition-colors cursor-pointer ${
                 asbestosSourceScope === 'all_active'
                   ? 'bg-rose-600 text-white font-bold border-rose-300'
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
@@ -391,7 +449,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
             <button
               type="button"
               onClick={() => onChangeAsbestosSourceScope('selected_source')}
-              className={`px-2 py-0.5 rounded border text-[10px] transition-colors cursor-pointer ${
+              className={`px-2 py-0.5 rounded border text-[11px] transition-colors cursor-pointer ${
                 asbestosSourceScope === 'selected_source'
                   ? 'bg-rose-600 text-white font-bold border-rose-300'
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
@@ -403,7 +461,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
         </div>
 
         {/* Direct Source Activity Toggles (BYG-1, BYG-2, BYG-3, BLOK-1) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono text-[10px]">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono text-[11px]">
           {sources.map((src) => {
             const isSel = selectedSourceId === src.id;
             const fiberPct = Math.round((src.fiberReleaseIndex ?? 0.75) * 100);
@@ -434,7 +492,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
                       e.stopPropagation();
                       onToggleSourceActive(src.id);
                     }}
-                    className={`px-1.5 py-0.2 rounded text-[9px] font-bold cursor-pointer ${
+                    className={`px-1.5 py-0.2 rounded text-[11px] font-bold cursor-pointer ${
                       src.active
                         ? 'bg-rose-500/25 text-rose-200 border border-rose-500/50'
                         : 'bg-slate-800 text-slate-400'
@@ -443,7 +501,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
                     {src.active ? 'AKTIV' : 'FRA'}
                   </button>
                 </div>
-                <div className="text-[9px] text-slate-400 flex items-center justify-between">
+                <div className="text-[11px] text-slate-400 flex items-center justify-between">
                   <span>H={src.releaseHeightMeters}m</span>
                   <span className="text-emerald-300 font-semibold">Fiber {fiberPct}%</span>
                 </div>
@@ -453,7 +511,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
         </div>
 
         {/* 24-Hour Demolition Activity Schedule Profile Selector */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-800/80 text-[10px] font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-800/80 text-[11px] font-mono">
           <div className="flex flex-wrap items-center gap-1">
             <span className="text-slate-400 mr-1">Driftsprofil:</span>
             <button
@@ -503,7 +561,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
         </div>
 
         {/* 29-Bygnings Dropdown grupperet efter aktuel kategori (a–e) */}
-        <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
+        <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
           <label
             htmlFor="neighbor-29-building-select"
             className="text-amber-300 font-bold uppercase flex items-center gap-1.5"
@@ -519,7 +577,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
                 onSelectReceptor(e.target.value);
               }
             }}
-            className="bg-slate-900 border border-amber-500/50 hover:border-amber-400 text-white rounded px-2.5 py-1 text-[10.5px] font-mono font-bold focus:outline-none focus:ring-1 focus:ring-amber-400 max-w-full sm:max-w-md cursor-pointer"
+            className="bg-slate-900 border border-amber-500/50 hover:border-amber-400 text-white rounded px-2.5 py-1 text-[11px] font-mono font-bold focus:outline-none focus:ring-1 focus:ring-amber-400 max-w-full sm:max-w-md cursor-pointer"
           >
             {buildingsGroupedByCategory.map((grp) => (
               <optgroup
@@ -546,10 +604,10 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
 
       {/* Selected Building / Receptor 24h Asbestos Dose + Heavy Metal & PCB Dust Deposition (d, c, e) Breakdown */}
       {selectedNeighborSummary && (
-        <div className="p-3 rounded-md bg-gradient-to-r from-slate-950 via-rose-950/25 to-slate-950 border border-amber-500/50 space-y-2.5 font-mono">
+        <div className="p-3 rounded-md bg-[var(--surface-panel)] border border-[var(--border-subtle)] border-l-4 border-l-amber-400 space-y-2.5 font-mono">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[9.5px] font-extrabold uppercase">
+              <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[11px] font-extrabold uppercase">
                 VALGT BYGNING / RECEPTOR-PROFIL
               </span>
               <span className="text-xs font-extrabold text-white">
@@ -557,7 +615,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
               </span>
               {selectedReceptorCategoryDeposition.buildingUnit && (
                 <span
-                  className="px-1.5 py-0.5 rounded text-[9.5px] font-bold border"
+                  className="px-1.5 py-0.5 rounded text-[11px] font-bold border"
                   style={{
                     borderColor:
                       BUILDING_CATEGORY_METADATA[
@@ -577,17 +635,20 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
                 </span>
               )}
             </div>
-            <span className="text-[10px] text-slate-300">
+            <span className="text-[11px] text-slate-300">
               2026-GV Asbest: <strong className="text-rose-300">0,003 fibre/cm³</strong> • 24t GV-dosis:{' '}
               <strong className="text-amber-300">0,0240 fibre/cm³·t</strong>
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-[10px]">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-[11px]">
             {/* Left Box: Cumulative 24h Asbestos Dose vs 2026-GV */}
             <div className="p-2.5 rounded bg-slate-900/90 border border-rose-500/40 space-y-1">
-              <div className="flex items-center justify-between text-rose-300 font-bold uppercase text-[9.5px]">
-                <span>☣ Kumulativ 24-Timers Asbestdosis (mod 2026-GV = 0,003 f/cm³)</span>
+              <div className="flex items-center justify-between text-rose-300 font-bold uppercase text-[11px]">
+                <span className="inline-flex items-center gap-1">
+                  <Biohazard className="w-3.5 h-3.5 shrink-0" />
+                  <span>Kumulativ 24-Timers Asbestdosis (mod 2026-GV = 0,003 f/cm³)</span>
+                </span>
                 <span>{(selectedNeighborSummary.dailyDoseQuotient * 100).toFixed(0)}% af 24t-GV</span>
               </div>
               <div className="flex items-baseline justify-between pt-0.5">
@@ -599,7 +660,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
                   {selectedNeighborSummary.peakHourLabel})
                 </span>
               </div>
-              <div className="text-[9.5px] text-slate-300 flex items-center justify-between pt-1 border-t border-slate-800">
+              <div className="text-[11px] text-slate-300 flex items-center justify-between pt-1 border-t border-slate-800">
                 <span>
                   Timer ≥ 0,003 f/cm³:{' '}
                   <strong className="text-rose-300">
@@ -620,8 +681,11 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
 
             {/* Right Box: Accumulated Heavy Metal & PCB Dust Deposition (µg/m²) from d, c, e */}
             <div className="p-2.5 rounded bg-slate-900/90 border border-cyan-500/40 space-y-1">
-              <div className="flex items-center justify-between text-cyan-300 font-bold uppercase text-[9.5px]">
-                <span>🧪 Akkumuleret Tungmetal- &amp; PCB-Støvdeponering (24t)</span>
+              <div className="flex items-center justify-between text-cyan-300 font-bold uppercase text-[11px]">
+                <span className="inline-flex items-center gap-1">
+                  <FlaskConical className="w-3.5 h-3.5 shrink-0" />
+                  <span>Akkumuleret Tungmetal- &amp; PCB-Støvdeponering (24t)</span>
+                </span>
                 <span className="text-amber-300">
                   Pb/Cd/Zn: {selectedReceptorCategoryDeposition.heavyMetalsUgM2} + PCB:{' '}
                   {selectedReceptorCategoryDeposition.pcbUgM2} µg/m²
@@ -635,7 +699,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
                   )}{' '}
                   µg/m²
                 </span>
-                <span className="text-[9.5px] text-slate-300">
+                <span className="text-[11px] text-slate-300">
                   Vind &gt; 5 m/s i{' '}
                   <strong className="text-amber-300">
                     {selectedReceptorCategoryDeposition.resuspensionActiveHours}t
@@ -643,7 +707,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
                   (kat. e resusp.)
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-1 pt-1 border-t border-slate-800 text-[9px]">
+              <div className="grid grid-cols-3 gap-1 pt-1 border-t border-slate-800 text-[11px]">
                 <div className="px-1.5 py-0.5 rounded bg-rose-950/60 border border-rose-500/40 text-rose-200">
                   <strong>Kat. d (Nedriv.):</strong>{' '}
                   {selectedReceptorCategoryDeposition.fromCategoryDUgM2} µg/m² (
@@ -669,17 +733,17 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
       {mostExposed && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
           <div className="p-2.5 rounded bg-slate-950/90 border border-rose-500/40">
-            <div className="text-[9.5px] text-slate-400 uppercase">Mest Udsatte Naboblok</div>
+            <div className="text-[11px] text-slate-400 uppercase">Mest Udsatte Naboblok</div>
             <div className="text-xs font-extrabold text-white truncate mt-0.5">
               {mostExposed.receptorCode}: {mostExposed.receptorName}
             </div>
-            <div className="text-[10px] text-rose-300 mt-0.5">
+            <div className="text-[11px] text-rose-300 mt-0.5">
               Spids kl. {mostExposed.peakHourLabel} ({mostExposed.peakConcentrationFibersCm3.toFixed(4)} f/cm³)
             </div>
           </div>
 
           <div className="p-2.5 rounded bg-slate-950/90 border border-amber-500/40">
-            <div className="text-[9.5px] text-slate-400 uppercase">Samlet 24t Asbest-Dosis</div>
+            <div className="text-[11px] text-slate-400 uppercase">Samlet 24t Asbest-Dosis</div>
             <div
               className={`text-sm font-extrabold mt-0.5 ${
                 mostExposed.dailyDoseQuotient >= 1.0 ? 'text-rose-400' : 'text-amber-300'
@@ -687,7 +751,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
             >
               {mostExposed.total24hDoseFibersCm3H.toFixed(4)} f/cm³·t
             </div>
-            <div className="text-[10px] text-slate-300">
+            <div className="text-[11px] text-slate-300">
               Døgn-kvotient:{' '}
               <strong className="text-white">
                 {(mostExposed.dailyDoseQuotient * 100).toFixed(0)}%
@@ -697,17 +761,17 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
           </div>
 
           <div className="p-2.5 rounded bg-slate-950/90 border border-cyan-500/40">
-            <div className="text-[9.5px] text-slate-400 uppercase">Inhalerede Fibre / Beboer</div>
+            <div className="text-[11px] text-slate-400 uppercase">Inhalerede Fibre / Beboer</div>
             <div className="text-sm font-extrabold text-cyan-300 mt-0.5">
               {mostExposed.totalInhaledFibersPerResident24h.toLocaleString('da-DK')} fibre/døgn
             </div>
-            <div className="text-[10px] text-slate-400">
+            <div className="text-[11px] text-slate-400">
               Ved 0,75 m³/t åndingsvolumen
             </div>
           </div>
 
           <div className="p-2.5 rounded bg-slate-950/90 border border-purple-500/40">
-            <div className="text-[9.5px] text-slate-400 uppercase">Timer Over 2026-GV</div>
+            <div className="text-[11px] text-slate-400 uppercase">Timer Over 2026-GV</div>
             <div
               className={`text-sm font-extrabold mt-0.5 ${
                 mostExposed.hoursExceedingGv2026 > 0 ? 'text-rose-400' : 'text-emerald-300'
@@ -715,7 +779,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
             >
               {mostExposed.hoursExceedingGv2026} / 24 timer
             </div>
-            <div className="text-[10px] text-slate-400">
+            <div className="text-[11px] text-slate-400">
               {mostExposed.hoursExceedingActionValue}t over aktionsværdi
             </div>
           </div>
@@ -724,7 +788,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
 
       {/* 24-Hour Cumulative Asbestos Dose Chart */}
       <div className="p-2.5 rounded bg-slate-950/95 border border-slate-800 space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
           <div className="flex items-center gap-1.5">
             <TrendingUp className="w-3.5 h-3.5 text-rose-400" />
             <span className="font-bold text-slate-200">
@@ -824,7 +888,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
                   if (!active || !payload || !payload.length) return null;
                   const row = payload[0].payload as Record<string, number | string>;
                   return (
-                    <div className="bg-slate-950/95 border border-slate-700 rounded p-2.5 shadow-2xl font-mono text-[10px] space-y-1.5 max-w-xs">
+                    <div className="bg-slate-950/95 border border-slate-700 rounded p-2.5 shadow-2xl font-mono text-[11px] space-y-1.5 max-w-xs">
                       <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-1">
                         <span className="font-bold text-white">
                           Kl. {row.hourLabel} (Akkumuleret Asbest-Dosis)
@@ -918,7 +982,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
           </ResponsiveContainer>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[9.5px] font-mono text-slate-400 pt-1 border-t border-slate-800/80">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-400 pt-1 border-t border-slate-800/80">
           <div className="flex flex-wrap items-center gap-2">
             {top5Neighbors.map((n, idx) => {
               const pal = NEIGHBOR_CURVE_PALETTE[idx % NEIGHBOR_CURVE_PALETTE.length];
@@ -945,9 +1009,98 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
         </div>
       </div>
 
+      {/* Asbestos Exposure Risk: Total 24h Respirable Fiber Count per Receptor Zone vs. Current Demolition Activity */}
+      <div
+        data-testid="asbestos-exposure-risk-activity-comparison"
+        className="p-2.5 rounded bg-[#0B0E17] border border-[#253042] space-y-2 font-mono tabular-nums"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <div className="flex items-center gap-1.5 font-bold text-amber-300 uppercase">
+            <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            <span>
+              Asbestos Exposure Risk: 24t Respirable Asbestfibre pr. Receptorzone vs. Aktuel Nedrivningsaktivitet
+            </span>
+          </div>
+          <span className="text-slate-300">
+            Aktive kilder: <strong className="text-rose-300">{demolitionActivityComparison.activeCount}/{demolitionActivityComparison.totalSources}</strong> · Plads-intensitet:{' '}
+            <strong className="text-amber-300">{demolitionActivityComparison.siteDemolitionActivityPct}%</strong>
+          </span>
+        </div>
+
+        <div className="w-full h-44">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart
+              data={demolitionActivityComparison.rows}
+              margin={{ top: 8, right: 8, bottom: 0, left: -6 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
+              <XAxis
+                dataKey="code"
+                stroke="#64748B"
+                tick={{ fill: '#CBD5E1', fontSize: 10, fontFamily: 'monospace' }}
+                tickLine={false}
+              />
+              <YAxis
+                yAxisId="left"
+                stroke="#F43F5E"
+                tick={{ fill: '#FDA4AF', fontSize: 9.5, fontFamily: 'monospace' }}
+                tickLine={false}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                domain={[0, 140]}
+                stroke="#FBBF24"
+                tick={{ fill: '#FDE68A', fontSize: 9.5, fontFamily: 'monospace' }}
+                tickLine={false}
+              />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload || !payload.length) return null;
+                  const row = payload[0].payload as (typeof demolitionActivityComparison.rows)[number];
+                  return (
+                    <div className="bg-[#0B0E17]/95 border border-[#36465E] rounded p-2 shadow-xl text-[11px] font-mono space-y-1">
+                      <div className="font-bold text-white border-b border-[#253042] pb-0.5">
+                        {row.code}: {row.name}
+                      </div>
+                      <div className="text-rose-300 font-bold">
+                        Respirable asbestfibre (24t): {row.totalRespirableFibers24h.toLocaleString('da-DK')} fibre/beb.
+                      </div>
+                      <div className="text-cyan-300">
+                        24t Dosis: {row.total24hDoseFibersCm3H.toFixed(4)} f/cm³·t
+                      </div>
+                      <div className="text-amber-300 font-bold">
+                        Aktuel nedrivningsaktivitet ({row.dominantSourceCode}): {row.demolitionActivityPct}%
+                      </div>
+                    </div>
+                  );
+                }}
+              />
+              <Bar
+                yAxisId="left"
+                dataKey="totalRespirableFibers24h"
+                name="24t Respirable fibre/beboer"
+                fill="#F43F5E"
+                fillOpacity={0.78}
+                radius={[3, 3, 0, 0]}
+              />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="demolitionActivityPct"
+                name="Nedrivningsaktivitet (%)"
+                stroke="#FBBF24"
+                strokeWidth={2.2}
+                dot={{ r: 3, fill: '#FBBF24' }}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
       {/* Ranked Table / Cards of Most Exposed Neighbor Blocks with Source Attribution Breakdown */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between text-[10.5px] font-mono">
+        <div className="flex items-center justify-between text-[11px] font-mono">
           <span className="font-bold uppercase tracking-wider text-rose-300 flex items-center gap-1.5">
             <Building2 className="w-3.5 h-3.5 text-rose-400" />
             <span>
@@ -982,14 +1135,14 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
                 <div className="flex flex-wrap items-center justify-between gap-2 font-mono">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 text-[10px] font-extrabold">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 text-[11px] font-extrabold">
                         #{idx + 1}
                       </span>
                       <span className="text-xs font-bold text-white">
                         {n.receptorCode}: {n.receptorName}
                       </span>
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold ${
+                        className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
                           isCrit
                             ? 'bg-rose-600 text-white'
                             : isElev
@@ -1004,7 +1157,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
                           : 'OBSERVATIONSZONE'}
                       </span>
                     </div>
-                    <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                    <div className="text-[11px] text-slate-400 truncate mt-0.5">
                       {n.address} • {n.distanceToDominantSourceMeters} m fra {n.dominantSourceCode} •
                       ca. {n.residentCountEstimate} beboere
                     </div>
@@ -1018,7 +1171,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
                     >
                       ∑ 24t = {n.total24hDoseFibersCm3H.toFixed(4)} f/cm³·t
                     </div>
-                    <div className="text-[9.5px] text-slate-300">
+                    <div className="text-[11px] text-slate-300">
                       {(n.dailyDoseQuotient * 100).toFixed(0)}% af døgngrænse •{' '}
                       {n.totalInhaledFibersPerResident24h.toLocaleString('da-DK')} fibre/beboer
                     </div>
@@ -1027,7 +1180,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
 
                 {/* Stacked Bar Showing Percentage Contribution from Each Active Demolition Source */}
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[9.5px] font-mono text-slate-400">
+                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
                     <span>Kilde-bidrag til 24t asbest-dosis:</span>
                     <span>
                       Spids kl.{' '}
@@ -1052,7 +1205,7 @@ export const Neighbor24hAsbestosExposureDoseWidget: React.FC<
                     ))}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 text-[9.5px] font-mono pt-0.5">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono pt-0.5">
                     {n.sourceContributions.map((sc) => (
                       <span
                         key={sc.sourceId}

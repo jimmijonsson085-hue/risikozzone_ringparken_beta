@@ -384,7 +384,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
   };
 
   return (
-    <div className="p-4 rounded-md bg-slate-950/95 border-2 border-rose-500/60 space-y-4 shadow-xl">
+    <div className="p-4 rounded-md bg-[var(--surface-panel)] border border-[var(--border-subtle)] border-l-4 border-l-rose-500 space-y-4">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-3">
         <div className="space-y-1">
@@ -405,13 +405,13 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
         </div>
 
         <div className="text-right font-mono">
-          <div className="text-[10px] uppercase text-slate-400">
+          <div className="text-[11px] uppercase text-slate-400">
             Samlet Økonomisk Straf &amp; Konfiskation
           </div>
           <div className="text-lg font-extrabold text-rose-400 tabular-nums">
             {formatDkk(calculation.totalFinancialLiabilityDkk)}
           </div>
-          <div className="text-[10px] text-slate-400">
+          <div className="text-[11px] text-slate-400">
             Heraf bøde: {formatDkk(calculation.totalCriminalFineDkk)} · Konfiskation:{' '}
             {formatDkk(calculation.confiscationAmountDkk)}
           </div>
@@ -509,7 +509,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
                         <div className="text-xs font-bold text-white leading-snug">
                           {item.titleDa}
                         </div>
-                        <div className="text-[10px] font-mono text-amber-300">
+                        <div className="text-[11px] font-mono text-amber-300">
                           {item.statuteRefDa}
                           {isAutoLocked ? ' · [AUTO-AKTIVERET AF BYGNINGSKATEGORI a/c]' : ''}
                         </div>
@@ -525,7 +525,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
                             <button
                               type="button"
                               onClick={() => setUseSecondarySoilMove50k(false)}
-                              className={`px-2 py-0.5 rounded text-[10px] font-mono border cursor-pointer ${
+                              className={`px-2 py-0.5 rounded text-[11px] font-mono border cursor-pointer ${
                                 !useSecondarySoilMove50k
                                   ? 'bg-amber-400 text-slate-950 border-amber-300 font-bold'
                                   : 'bg-slate-900 text-slate-300 border-slate-700'
@@ -536,7 +536,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
                             <button
                               type="button"
                               onClick={() => setUseSecondarySoilMove50k(true)}
-                              className={`px-2 py-0.5 rounded text-[10px] font-mono border cursor-pointer ${
+                              className={`px-2 py-0.5 rounded text-[11px] font-mono border cursor-pointer ${
                                 useSecondarySoilMove50k
                                   ? 'bg-amber-400 text-slate-950 border-amber-300 font-bold'
                                   : 'bg-slate-900 text-slate-300 border-slate-700'
@@ -555,7 +555,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
                           ? formatDkk(matchedLine.adjustedFineDkk)
                           : formatDkk(item.baseFineEnterpriseDkk)}
                       </div>
-                      <div className="text-[10px] text-slate-400">
+                      <div className="text-[11px] text-slate-400">
                         Basis: {formatDkk(matchedLine ? matchedLine.baseDkk : item.baseFineEnterpriseDkk)}
                       </div>
                     </div>
@@ -579,7 +579,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
                 <button
                   type="button"
                   onClick={() => setActorType('enterprise')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer ${
                     actorType === 'enterprise'
                       ? 'bg-cyan-400 text-slate-950 font-bold'
                       : 'bg-slate-950 text-slate-400 border border-slate-800'
@@ -590,7 +590,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
                 <button
                   type="button"
                   onClick={() => setActorType('private')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer ${
                     actorType === 'private'
                       ? 'bg-cyan-400 text-slate-950 font-bold'
                       : 'bg-slate-950 text-slate-400 border border-slate-800'
@@ -618,7 +618,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
                     }`}
                   >
                     <div className="text-[11px] font-bold">{meta.labelDa}</div>
-                    <div className="text-[10px] font-mono text-cyan-300">{meta.noteDa}</div>
+                    <div className="text-[11px] font-mono text-cyan-300">{meta.noteDa}</div>
                   </button>
                 );
               })}
@@ -638,7 +638,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-mono text-slate-400 block">
+              <label className="text-[11px] font-mono text-slate-400 block">
                 Tilsigtet eller opnået besparelse ved manglende miljøsanering / ulovlig knusning (DKK):
               </label>
               <div className="flex items-center gap-2">
@@ -664,7 +664,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
 
             {/* Ringparken Quick Presets */}
             <div className="space-y-1">
-              <div className="text-[10px] font-mono text-slate-400">
+              <div className="text-[11px] font-mono text-slate-400">
                 Hurtigvalg (Dokumenterede Ringparken-besparelsesscenarier):
               </div>
               <div className="space-y-1">
@@ -673,7 +673,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
                     key={preset.id}
                     type="button"
                     onClick={() => setEconomicSavingDkk(preset.amountDkk)}
-                    className={`w-full text-left p-1.5 rounded border text-[10.5px] transition-colors cursor-pointer flex items-center justify-between gap-2 ${
+                    className={`w-full text-left p-1.5 rounded border text-[11px] transition-colors cursor-pointer flex items-center justify-between gap-2 ${
                       economicSavingDkk === preset.amountDkk
                         ? 'bg-amber-950/60 border-amber-400/70 text-amber-100 font-semibold'
                         : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:border-slate-700'
@@ -690,7 +690,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
 
             {/* Confiscation vs Non-confiscation (2.0x + 1.0x vs 3.0x) */}
             <div className="pt-1 border-t border-slate-800 space-y-1.5">
-              <div className="text-[10px] font-mono text-slate-400">
+              <div className="text-[11px] font-mono text-slate-400">
                 Konfiskationsregime jf. Lovforslag L 69:
               </div>
               <div className="grid grid-cols-1 gap-1.5">
@@ -737,7 +737,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
                 <button
                   type="button"
                   onClick={() => setOffenseCount(1)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer ${
                     offenseCount === 1
                       ? 'bg-slate-200 text-slate-950 font-bold'
                       : 'bg-slate-950 text-slate-400 border border-slate-800'
@@ -748,7 +748,7 @@ export const L69PenaltyCalculatorWidget: React.FC<L69PenaltyCalculatorWidgetProp
                 <button
                   type="button"
                   onClick={() => setOffenseCount(2)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer ${
                     offenseCount >= 2
                       ? 'bg-rose-500 text-slate-950 font-bold'
                       : 'bg-slate-950 text-slate-400 border border-slate-800'

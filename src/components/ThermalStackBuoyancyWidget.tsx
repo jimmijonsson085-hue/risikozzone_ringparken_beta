@@ -482,15 +482,15 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800 pb-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/60 text-amber-200 text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/60 text-amber-200 text-[11px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
               <Thermometer className="w-3 h-3 text-amber-400" />
               Termisk Opdrift (Skorstenseffekt) &amp; 3D Neutraltryksplan (z_NPL)
             </span>
-            <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/50 text-cyan-200 text-[10px] font-mono font-semibold">
+            <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/50 text-cyan-200 text-[11px] font-mono font-semibold">
               ΔP_s = +{model.calibratedDeltaPsPa.toFixed(1)} Pa ({model.stackGradientPaPerM} Pa/m)
             </span>
             <span
-              className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+              className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border ${
                 model.zNplEffectiveMeters >= 11.5
                   ? 'bg-rose-600/30 border-rose-400 text-rose-100 s-quotient-warning-pulse'
                   : 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200'
@@ -528,15 +528,18 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
             <button
               type="button"
               onClick={() => onToggle3DNeutralPressurePlane()}
-              className={`px-2.5 py-1 rounded font-mono text-[10.5px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded font-mono text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
                 show3DNeutralPressurePlane
                   ? 'bg-rose-500/30 border-rose-400 text-white shadow-md'
                   : 'bg-slate-900 hover:bg-slate-800 border-amber-400/60 text-amber-200'
               }`}
               title="Tænd/sluk 3D Neutraltryksplan (z_NPL) med indadrettede røde vektorpile og udadrettede cyan vektorpile i 3D-scenen"
             >
-              <span>🌡️ Vis 3D Neutraltryksplan &amp; Indeklima-Sug</span>
-              <span className="px-1.5 py-0.2 rounded bg-slate-950/90 text-[9.5px]">
+              <span className="inline-flex items-center gap-1">
+                <Thermometer className="w-3.5 h-3.5 shrink-0" />
+                <span>Vis 3D Neutraltryksplan &amp; Indeklima-Sug</span>
+              </span>
+              <span className="px-1.5 py-0.2 rounded bg-slate-950/90 text-[11px]">
                 {show3DNeutralPressurePlane ? 'AKTIV I 3D' : 'VIS I 3D'}
               </span>
             </button>
@@ -553,7 +556,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                 onChangeCavVentilationMode('cav_central_exhaust');
               }
             }}
-            className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-mono text-cyan-300 cursor-pointer"
+            className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] font-mono text-cyan-300 cursor-pointer"
           >
             ↺ Kalibreret Reference (ΔP_s = +5,0 Pa · z_NPL = 12,0 m)
           </button>
@@ -580,7 +583,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
               onChange={(e) => setIndoorTempC(Number(e.target.value))}
               className="w-full accent-amber-400 cursor-pointer"
             />
-            <div className="text-[9.5px] text-slate-400">
+            <div className="text-[11px] text-slate-400">
               Opvarmet af uisolerede varmerør i kælder/krybekælder (18–26 °C)
             </div>
           </div>
@@ -602,7 +605,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
               onChange={(e) => setLeakageRatioTopBottom(Number(e.target.value))}
               className="w-full accent-cyan-400 cursor-pointer"
             />
-            <div className="text-[9.5px] text-slate-400">
+            <div className="text-[11px] text-slate-400">
               Ved 1,00 ligger det rent termiske neutralplan ved ≈ 0,48 H (5,8 m)
             </div>
           </div>
@@ -622,7 +625,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
               onChange={(e) => setPipeApertureCm2(Number(e.target.value))}
               className="w-full accent-rose-500 cursor-pointer"
             />
-            <label className="flex items-center gap-1.5 text-[9.5px] text-slate-300 cursor-pointer pt-0.5">
+            <label className="flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer pt-0.5">
               <input
                 type="checkbox"
                 checked={useCalibratedWinterDeltaT}
@@ -638,7 +641,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
         </div>
 
         {/* Quick Mode Toggle between Pure Thermal Buoyancy (5.8 m) vs. Active CAV Shift (12.0 m) */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800 text-[10.5px] font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800 text-[11px] font-mono">
           <span className="text-slate-300">
             Sammenlign Neutraltryksplanets forskydning (<strong className="text-cyan-300">5,8 m</strong>{' '}
             → <strong className="text-rose-300">12,0 m</strong>):
@@ -689,12 +692,12 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
               <Layers className="w-3.5 h-3.5 text-amber-400" />
               1. Vertikalt Etage-Trykdiagram (Kælder, Stue, 1., 2. og 3. sal · H = 12,0 m)
             </h4>
-            <p className="text-[10px] text-slate-400 font-mono">
+            <p className="text-[11px] text-slate-400 font-mono">
               ΔP_s(z) = 3460 · (1/T_o - 1/T_i) · (z - z_NPL) · Viser både ren termisk profil
               (stiplet cyan) og total profil inkl. ΔP_CAV (rød kurve)
             </p>
           </div>
-          <span className="px-2 py-0.5 rounded bg-slate-950 border border-amber-500/40 text-[10px] font-mono text-amber-200 font-bold">
+          <span className="px-2 py-0.5 rounded bg-slate-950 border border-amber-500/40 text-[11px] font-mono text-amber-200 font-bold">
             Termisk z_NPL,0 = {model.zNplThermalOnlyMeters.toFixed(1)} m → Aktuel z_NPL ={' '}
             {model.zNplEffectiveMeters.toFixed(1)} m
           </span>
@@ -745,7 +748,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                     y={padT + plotH + 14}
                     textAnchor="middle"
                     fill={isZero ? '#FFFFFF' : '#94A3B8'}
-                    fontSize="9"
+                    fontSize="9.5"
                     fontFamily="monospace"
                     fontWeight={isZero ? 'bold' : 'normal'}
                   >
@@ -798,7 +801,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
               y={thermalNplY - 5}
               textAnchor="end"
               fill="#38BDF8"
-              fontSize="8.5"
+              fontSize="9.5"
               fontFamily="monospace"
               fontWeight="bold"
             >
@@ -828,7 +831,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
               x={padL + 13}
               y={Math.max(padT + 12, effectiveNplY - 5)}
               fill="#FDE68A"
-              fontSize="9"
+              fontSize="9.5"
               fontFamily="monospace"
               fontWeight="bold"
             >
@@ -881,7 +884,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                     y={cy - 6}
                     textAnchor={isSuction ? 'start' : 'end'}
                     fill="#FFFFFF"
-                    fontSize="9"
+                    fontSize="9.5"
                     fontFamily="monospace"
                     fontWeight="bold"
                   >
@@ -921,14 +924,14 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                   Animeret Skorstenseffekt-Visualisering (Bygnings-Tværsnit, Rørskakt-Opdrift &amp; Facade-Infiltration)
                 </span>
               </h5>
-              <p className="text-[10px] text-slate-400 font-mono">
+              <p className="text-[11px] text-slate-400 font-mono">
                 Viser hvordan varm kælder-/skaktluft (T_i = {indoorTempC.toFixed(1)} °C vs. T_o ={' '}
                 {model.effectiveToC.toFixed(1)} °C) stiger op gennem rørskakte og trappeopgange (Q_op ={' '}
                 {model.shaftSuctionQopM3PerH} m³/h) og trækker asbest-/støvpartikler ind under Neutraltryksplanet (z_NPL ={' '}
                 {model.zNplEffectiveMeters.toFixed(1)} m)
               </p>
             </div>
-            <div className="flex items-center gap-1.5 font-mono text-[10px]">
+            <div className="flex items-center gap-1.5 font-mono text-[11px]">
               <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-400/60 text-rose-200 font-bold">
                 ↑ Opdrift Q_op = {model.shaftSuctionQopM3PerH} m³/h
               </span>
@@ -955,10 +958,10 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
 
               {/* Outdoor Left (Windward / Demolition Dust Plume) & Outdoor Right */}
               <rect x="10" y="15" width="145" height="235" fill="#0f172a" fillOpacity="0.55" rx="4" />
-              <text x="82" y="30" textAnchor="middle" fill="#94a3b8" fontSize="9" fontFamily="monospace" fontWeight="bold">
+              <text x="82" y="30" textAnchor="middle" fill="#94a3b8" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
                 UDELUFT (T_o = {model.effectiveToC.toFixed(1)}°C)
               </text>
-              <text x="82" y="42" textAnchor="middle" fill="#f43f5e" fontSize="8.5" fontFamily="monospace">
+              <text x="82" y="42" textAnchor="middle" fill="#f43f5e" fontSize="9.5" fontFamily="monospace">
                 Støv-/Asbestfane ({currentWeather.windSpeed10m} m/s)
               </text>
 
@@ -985,7 +988,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                 strokeWidth="1.5"
                 rx="2"
               />
-              <text x="355" y="18" textAnchor="middle" fill="#fde68a" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+              <text x="355" y="18" textAnchor="middle" fill="#fde68a" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
                 TAG-AFKAST ({model.deltaPCavPa} Pa)
               </text>
 
@@ -1005,7 +1008,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                 y="135"
                 textAnchor="middle"
                 fill="#fef08a"
-                fontSize="8"
+                fontSize="9.5"
                 fontFamily="monospace"
                 fontWeight="bold"
               >
@@ -1065,7 +1068,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                       x="175"
                       y={yMid - 3}
                       fill="#f8fafc"
-                      fontSize="9"
+                      fontSize="9.5"
                       fontFamily="monospace"
                       fontWeight="bold"
                     >
@@ -1075,7 +1078,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                       x="175"
                       y={yMid + 9}
                       fill={isSuction ? '#fda4af' : '#67e8f9'}
-                      fontSize="8.5"
+                      fontSize="9.5"
                       fontFamily="monospace"
                     >
                       ΔP_tot = {flData.deltaPTotPa > 0 ? `+${flData.deltaPTotPa.toFixed(1)}` : flData.deltaPTotPa.toFixed(1)} Pa (ΔP_s: {flData.deltaPsPa > 0 ? `+${flData.deltaPsPa.toFixed(1)}` : flData.deltaPsPa.toFixed(1)} Pa)
@@ -1094,7 +1097,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                           strokeDasharray="4,2"
                         />
                         <polygon points={`163,${yMid} 155,${yMid - 4} 155,${yMid + 4}`} fill="#f43f5e" />
-                        <text x="110" y={yMid + 3} textAnchor="end" fill="#fda4af" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                        <text x="110" y={yMid + 3} textAnchor="end" fill="#fda4af" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
                           IND-SUG
                         </text>
                       </g>
@@ -1109,7 +1112,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                           strokeWidth="2.2"
                         />
                         <polygon points={`115,${yMid} 123,${yMid - 4} 123,${yMid + 4}`} fill="#06b6d4" />
-                        <text x="110" y={yMid + 3} textAnchor="end" fill="#67e8f9" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                        <text x="110" y={yMid + 3} textAnchor="end" fill="#67e8f9" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
                           UD-PRES
                         </text>
                       </g>
@@ -1120,7 +1123,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                       x="392"
                       y={yMid + 3}
                       fill="#cbd5e1"
-                      fontSize="8"
+                      fontSize="9.5"
                       fontFamily="monospace"
                     >
                       {row.flIdx === 0
@@ -1155,7 +1158,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                       y={Math.max(24, yNpl + 2)}
                       textAnchor="middle"
                       fill="#fde68a"
-                      fontSize="8.5"
+                      fontSize="9.5"
                       fontFamily="monospace"
                       fontWeight="bold"
                     >
@@ -1170,7 +1173,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
 
         {/* Compact Floor-by-Floor Pressure Breakdown Table (Kælder, Stue, 1., 2. og 3. sal) */}
         <div className="overflow-x-auto rounded border border-slate-800">
-          <table className="w-full text-left border-collapse font-mono text-[10px]">
+          <table className="w-full text-left border-collapse font-mono text-[11px]">
             <thead className="bg-slate-950 text-slate-300 border-b border-slate-800">
               <tr>
                 <th className="py-1.5 px-2">Etage (z)</th>
@@ -1221,11 +1224,11 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
               <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
               A. Under z_NPL (Infiltrations- &amp; Kældersug)
             </span>
-            <span className="px-1.5 py-0.5 rounded bg-rose-500 text-slate-950 font-mono text-[9px] font-bold">
+            <span className="px-1.5 py-0.5 rounded bg-rose-500 text-slate-950 font-mono text-[11px] font-bold">
               0 → {model.zNplEffectiveMeters.toFixed(1)} m
             </span>
           </div>
-          <p className="text-[10.5px] text-slate-200 leading-snug">
+          <p className="text-[11px] text-slate-200 leading-snug">
             Rød advarselszone, hvor negativt tryk (<strong>{model.deltaPCavPa} Pa</strong> + termisk
             opdrift <strong>+{model.calibratedDeltaPsPa} Pa</strong>) suger udendørs støvfane og
             krybekælder-skimmel (<code>moldSewer</code>) samt asbestfibre fra tekniske kældergange
@@ -1243,7 +1246,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
               B. Trappeopgange, Rørskakte &amp; Dørkraft
             </span>
             <span
-              className={`px-1.5 py-0.5 rounded font-mono text-[9px] font-bold ${
+              className={`px-1.5 py-0.5 rounded font-mono text-[11px] font-bold ${
                 model.doorForceExceeded
                   ? 'bg-rose-500 text-slate-950'
                   : 'bg-amber-400 text-slate-950'
@@ -1252,7 +1255,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
               F_door = {model.doorOpeningForceN} N / 133 N
             </span>
           </div>
-          <p className="text-[10.5px] text-slate-200 leading-snug">
+          <p className="text-[11px] text-slate-200 leading-snug">
             Opadgående skorstensstrøm{' '}
             <code className="text-amber-300">Q_s = {model.stackFlowQsM3PerS} m³/s</code> (
             {model.shaftSuctionQopM3PerH} m³/h) gør trappeopgangen til en lodret støvskorsten.
@@ -1271,13 +1274,13 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
               <Wind className="w-3.5 h-3.5 text-cyan-400" />
               C. Over z_NPL (Fugteksfiltration)
             </span>
-            <span className="px-1.5 py-0.5 rounded bg-cyan-500/30 border border-cyan-400 text-cyan-100 font-mono text-[9px] font-bold">
+            <span className="px-1.5 py-0.5 rounded bg-cyan-500/30 border border-cyan-400 text-cyan-100 font-mono text-[11px] font-bold">
               {model.zNplEffectiveMeters >= 12.0
                 ? 'Elimineret af CAV-Vakuum'
                 : `${model.zNplEffectiveMeters.toFixed(1)} → 12,0 m`}
             </span>
           </div>
-          <p className="text-[10.5px] text-slate-200 leading-snug">
+          <p className="text-[11px] text-slate-200 leading-snug">
             Når neutralplanet ligger ved{' '}
             <strong className="text-cyan-300">{model.zNplThermalOnlyMeters} m (0,48 H)</strong> i
             passiv drift, presses varm, fugtig indeluft på 2. og 3. sal ud i kolde facadefuger og
@@ -1292,7 +1295,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
           <div className="text-xs font-bold font-mono text-white">
             Scenarie-Simulator for Kælder-Resuspension &amp; Skakt-Transport:
           </div>
-          <div className="grid grid-cols-1 gap-1.5 font-mono text-[10.5px]">
+          <div className="grid grid-cols-1 gap-1.5 font-mono text-[11px]">
             {[
               {
                 id: 'pipe_asbestos_crawlspace' as const,
@@ -1341,14 +1344,14 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
                 }`}
               >
                 <div className="font-bold">{sc.title}</div>
-                <div className="text-[9.5px] text-slate-400 mt-0.5">{sc.detail}</div>
+                <div className="text-[11px] text-slate-400 mt-0.5">{sc.detail}</div>
               </button>
             ))}
           </div>
         </div>
 
         {/* Embedded Mathematical Formulas & Calibrated Values */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-3 space-y-1.5 font-mono text-[10px] text-slate-200">
+        <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-3 space-y-1.5 font-mono text-[11px] text-slate-200">
           <div className="text-xs font-bold text-amber-300">
             Matematiske Formler &amp; Aktuelle Kalibreringstal:
           </div>
@@ -1366,7 +1369,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
               • <code>F_door = F_dc + (W · A · |ΔP_tot|) / (2 · (W - d)) ≤ 133 N</code>
             </div>
           </div>
-          <div className="p-2 rounded bg-slate-950 border border-amber-500/30 space-y-0.5 text-[9.5px]">
+          <div className="p-2 rounded bg-slate-950 border border-amber-500/30 space-y-0.5 text-[11px]">
             <div>
               • Afstand d = {distanceMeters} m → Vibrations-PPV = <strong>{ppvMmPerSec} mm/s</strong>{' '}
               (@ 3 Hz), Degraderet Permeabilitet q₇₅,deg = <strong>{q75DegM3PerHm2} m³/(h·m²)</strong>
@@ -1395,22 +1398,22 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
       </div>
 
       {/* Cryptographic Proof-of-State & Merkle-Root Action Bar */}
-      <div className="bg-gradient-to-r from-slate-900 via-amber-950/30 to-slate-900 border border-amber-500/50 rounded-lg p-3 space-y-2.5">
+      <div className="bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-amber-400 rounded-lg p-3 space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-amber-200">
             <Lock className="w-3.5 h-3.5 text-amber-400" />
             Kryptografisk Proof-of-State &amp; Merkle-Root Beviskæde (Retsplejelovens § 823 &amp;
             ISO/IEC 27037)
           </div>
-          <span className="text-[10px] font-mono text-slate-400">
+          <span className="text-[11px] font-mono text-slate-400">
             Tidsstempel: {dateIso} · kl. {currentWeather.hourLabel} ({currentWeather.isoTime})
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] font-mono">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] font-mono">
           <div className="bg-slate-950/90 border border-slate-800 rounded p-2 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="text-slate-400 text-[9px] uppercase">
+              <div className="text-slate-400 text-[11px] uppercase">
                 64-Tegns SHA-256 Signatur (S_in, ΔP_CAV, z_NPL, ΔP_s &amp; PPV):
               </div>
               <div className="text-emerald-300 truncate font-semibold" title={proofSha256}>
@@ -1437,7 +1440,7 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
           </div>
 
           <div className="bg-slate-950/90 border border-slate-800 rounded p-2">
-            <div className="text-slate-400 text-[9px] uppercase">
+            <div className="text-slate-400 text-[11px] uppercase">
               Merkle-Root Beviskæde Ankepunkt ({observations.length} registrerede beviser):
             </div>
             <div className="text-cyan-300 truncate font-semibold" title={merkleHeadHash}>
@@ -1451,11 +1454,11 @@ export const ThermalStackBuoyancyWidget: React.FC<ThermalStackBuoyancyWidgetProp
             type="button"
             onClick={handleLogThermalEvidence}
             disabled={isLogging}
-            className="w-full sm:w-auto flex-1 px-3.5 py-2 rounded bg-gradient-to-r from-amber-600 via-rose-600 to-cyan-600 hover:from-amber-500 hover:via-rose-500 hover:to-cyan-500 text-white font-mono text-xs font-bold shadow-lg border border-amber-300/50 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            className="w-full sm:w-auto flex-1 px-3.5 py-2 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-mono text-xs font-bold border border-amber-200 flex items-center justify-center gap-2 transition-colors cursor-pointer"
           >
             <PlusCircle className="w-4 h-4 shrink-0" />
             <span>
-              ➕ Føj Termisk Skorstens- &amp; Neutralplansbevis til Beviser (SHA-256)
+              Føj Termisk Skorstens- &amp; Neutralplansbevis til Beviser (SHA-256)
             </span>
           </button>
 

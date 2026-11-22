@@ -906,9 +906,9 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
   };
 
   return (
-    <div className="bg-slate-900/95 border border-rose-500/40 rounded-lg shadow-2xl overflow-hidden text-slate-100">
+    <div className="bg-[var(--surface-panel)] border border-[var(--border-subtle)] rounded-lg overflow-hidden text-[var(--text-primary)]">
       {/* Top Clinical Header */}
-      <div className="bg-gradient-to-r from-rose-950/90 via-slate-900 to-slate-900 px-4 py-3 border-b border-rose-500/30 flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-[var(--surface-card)] px-4 py-3 border-b border-[var(--border-subtle)] border-l-4 border-l-rose-500 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-lg bg-rose-500/20 border border-rose-400/40 flex items-center justify-center text-rose-300 shadow-inner">
             <Stethoscope className="w-5 h-5" />
@@ -918,12 +918,12 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
               <h3 className="text-sm font-bold tracking-wide uppercase text-rose-100">
                 Lægefaglig AI Ekspert — Arbejds-, Miljø- & Retsmedicin
               </h3>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-200 border border-rose-400/30">
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-200 border border-rose-400/30">
                 BEK 613/2026 & At-vejledning C.0.1
               </span>
               {analysis && (
                 <span
-                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${severityBadgeColor(
+                  className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded border ${severityBadgeColor(
                     analysis.clinicalSeverity
                   )}`}
                 >
@@ -1042,7 +1042,7 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
 
       {/* Measured Exposure Snapshot Strip */}
       <div className="px-4 py-2 bg-slate-900/70 border-b border-slate-800/80 flex items-center gap-2 overflow-x-auto">
-        <span className="text-[10px] font-mono uppercase text-slate-400 whitespace-nowrap flex items-center gap-1">
+        <span className="text-[11px] font-mono uppercase text-slate-400 whitespace-nowrap flex items-center gap-1">
           <Microscope className="w-3.5 h-3.5 text-rose-400" />
           Målt Eksponering:
         </span>
@@ -1066,7 +1066,7 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
               <span>
                 {s.concentration < 0.01 ? s.concentration.toFixed(4) : s.concentration.toFixed(2)} {s.unit}
               </span>
-              <span className="text-[10px] opacity-80">({pct.toFixed(0)}% GV)</span>
+              <span className="text-[11px] opacity-80">({pct.toFixed(0)}% GV)</span>
             </div>
           );
         })}
@@ -1080,7 +1080,7 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
         const asbSample = srcProfile.substanceSamples.find((s) => s.substanceKey === 'asbestos');
         const pcbSample = srcProfile.substanceSamples.find((s) => s.substanceKey === 'pcb');
         return (
-          <div className="px-4 py-2 bg-slate-950/90 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
+          <div className="px-4 py-2 bg-slate-950/90 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
             <div className="flex items-center gap-1.5 text-slate-300 truncate">
               <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span className="text-amber-300 font-bold">
@@ -1186,15 +1186,15 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
 
         {/* Clinical Headline Banner */}
         {analysis && (
-          <div className="bg-gradient-to-r from-slate-950 via-rose-950/30 to-slate-950 border border-rose-500/30 rounded-lg p-3.5">
+          <div className="bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-rose-500 rounded-lg p-3.5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[10px] font-mono uppercase text-rose-400 tracking-wider mb-1">
+                <div className="text-[11px] font-mono uppercase text-rose-400 tracking-wider mb-1">
                   Lægefaglig Konklusion for {selectedReceptorExposure.receptorName} ({patientFocusGroup})
                 </div>
                 <h4 className="text-sm font-bold text-slate-100 leading-snug">{analysis.clinicalHeadline}</h4>
               </div>
-              <span className="text-[10px] font-mono text-slate-400 whitespace-nowrap">
+              <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap">
                 {new Date(analysis.generatedAtIso).toLocaleTimeString('da-DK')}
               </span>
             </div>
@@ -1268,11 +1268,11 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
                       <div className="flex items-start justify-between gap-2">
                         <span className="text-xs font-bold text-slate-100">{org.organSystem}</span>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">
+                          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">
                             ICD-10: {org.icd10Code}
                           </span>
                           <span
-                            className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${severityBadgeColor(
+                            className={`text-[11px] font-mono font-bold px-1.5 py-0.5 rounded border ${severityBadgeColor(
                               org.severityLevel
                             )}`}
                           >
@@ -1293,13 +1293,13 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
                         {(org.clinicalSymptoms || []).map((sym, sIdx) => (
                           <span
                             key={sIdx}
-                            className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300"
+                            className="text-[11px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300"
                           >
                             {sym}
                           </span>
                         ))}
                       </div>
-                      <div className="text-[10px] font-mono text-slate-400">
+                      <div className="text-[11px] font-mono text-slate-400">
                         Klinisk latenstid: <span className="text-slate-300">{org.latencyPeriod}</span>
                       </div>
                     </div>
@@ -1323,7 +1323,7 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
                 <ul className="space-y-2">
                   {(analysis.healthGuidance.immediateResidentActions || []).map((item, idx) => (
                     <li key={idx} className="text-xs text-slate-200 flex items-start gap-2 leading-relaxed">
-                      <span className="w-4 h-4 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-mono flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="w-4 h-4 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[11px] font-mono flex items-center justify-center shrink-0 mt-0.5">
                         {idx + 1}
                       </span>
                       <span>{item}</span>
@@ -1341,7 +1341,7 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
                 <ul className="space-y-2">
                   {(analysis.healthGuidance.vulnerableGroupsGuidance || []).map((item, idx) => (
                     <li key={idx} className="text-xs text-slate-200 flex items-start gap-2 leading-relaxed">
-                      <span className="w-4 h-4 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-mono flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="w-4 h-4 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[11px] font-mono flex items-center justify-center shrink-0 mt-0.5">
                         {idx + 1}
                       </span>
                       <span>{item}</span>
@@ -1359,7 +1359,7 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
                 <ul className="space-y-2">
                   {(analysis.healthGuidance.occupationalSiteActions || []).map((item, idx) => (
                     <li key={idx} className="text-xs text-slate-200 flex items-start gap-2 leading-relaxed">
-                      <span className="w-4 h-4 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-mono flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="w-4 h-4 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-mono flex items-center justify-center shrink-0 mt-0.5">
                         {idx + 1}
                       </span>
                       <span>{item}</span>
@@ -1377,7 +1377,7 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
                 <ul className="space-y-2">
                   {(analysis.healthGuidance.clinicalFollowUpAndDocumentation || []).map((item, idx) => (
                     <li key={idx} className="text-xs text-slate-200 flex items-start gap-2 leading-relaxed">
-                      <span className="w-4 h-4 rounded-full bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-[10px] font-mono flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="w-4 h-4 rounded-full bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-[11px] font-mono flex items-center justify-center shrink-0 mt-0.5">
                         {idx + 1}
                       </span>
                       <span>{item}</span>
@@ -1500,7 +1500,7 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
                         ({rec.incidentDateIso} kl. {String(rec.incidentHour).padStart(2, '0')}:00)
                       </span>
                       <span
-                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                        className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded border ${
                           rec.exceedsLimit
                             ? 'bg-red-950/90 text-red-200 border-red-500/50'
                             : 'bg-slate-900 text-slate-300 border-slate-700'
@@ -1508,7 +1508,7 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
                       >
                         Sumformel S = {rec.sumQuotientS.toFixed(2)}
                       </span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300">
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300">
                         Fokus: {rec.patientFocusGroup}
                       </span>
                     </div>
@@ -1528,12 +1528,12 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
                     {rec.substancesSnapshot.map((s) => (
                       <span
                         key={s.id}
-                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300"
+                        className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300"
                       >
                         <strong>{s.shortName}:</strong> {s.concentrationText} ({(s.quotientRatio * 100).toFixed(0)}% GV)
                       </span>
                     ))}
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-amber-300 flex items-center gap-1">
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-amber-300 flex items-center gap-1">
                       <Volume2 className="w-3 h-3" />
                       Vindrefraktion: {rec.acousticRefractionDb >= 0 ? '+' : ''}
                       {rec.acousticRefractionDb.toFixed(1)} dB
@@ -1544,7 +1544,7 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs text-slate-300">
                     <div className="bg-slate-900/60 border border-slate-800/80 rounded p-2.5">
-                      <div className="text-[10px] font-mono uppercase text-rose-400 mb-1">
+                      <div className="text-[11px] font-mono uppercase text-rose-400 mb-1">
                         Kroppens Akutte & Cellulære Reaktion
                       </div>
                       <p className="leading-relaxed">{rec.acuteReactionSummary}</p>
@@ -1552,7 +1552,7 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
                     </div>
 
                     <div className="bg-slate-900/60 border border-slate-800/80 rounded p-2.5">
-                      <div className="text-[10px] font-mono uppercase text-amber-400 mb-1">
+                      <div className="text-[11px] font-mono uppercase text-amber-400 mb-1">
                         Retsmedicinsk Bevis-Konklusion & Synergi
                       </div>
                       <p className="leading-relaxed">{rec.forensicAnnexSummary}</p>
@@ -1561,7 +1561,7 @@ export const MedicalExpertAiWidget: React.FC<MedicalExpertAiWidgetProps> = ({
                   </div>
 
                   {/* ICD-10 tags */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[10px] font-mono text-slate-400">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] font-mono text-slate-400">
                     <div className="flex flex-wrap gap-1.5">
                       {rec.affectedOrgans.map((o, i) => (
                         <span

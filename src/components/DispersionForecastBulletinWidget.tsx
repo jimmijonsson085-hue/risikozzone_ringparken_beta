@@ -1236,7 +1236,7 @@ export const DispersionForecastBulletinWidget: React.FC<
 
     if (residentReportStyle === 'tv_weather_segment') {
       const lines = [
-        `🎙️ VEJRUDSIGT-INDLÆG (SPEAKER-MANUSKRIPT): SPREDNINGSPROGNOSE FOR RINGPARKEN, SLAGELSE`,
+        `VEJRUDSIGT-INDLÆG (SPEAKER-MANUSKRIPT): SPREDNINGSPROGNOSE FOR RINGPARKEN, SLAGELSE`,
         `Udsendelses-grundlag: Prognosedata fra ${baseDateIso} (${getDanishWeekdayName(baseDateIso)})`,
         `--------------------------------------------------------------------------------`,
         `"Go'aften. Her følger sær-indlægget i lokal-vejrudsigten med 5-døgns miljø- og spredningsprognose for naboerne omkring Ringparken i Slagelse.`,
@@ -1255,7 +1255,7 @@ export const DispersionForecastBulletinWidget: React.FC<
     }
 
     const lines = [
-      `📋 FORMEL AFDELINGSBESTYRELSES- & MYNDIGHEDS-BULLETIN (5-DØGNS PROGNOSE)`,
+      `FORMEL AFDELINGSBESTYRELSES- & MYNDIGHEDS-BULLETIN (5-DØGNS PROGNOSE)`,
       `Vedr.: Præventiv 120-timers sprednings- og grænseværdivurdering (BEK nr. 613 / MBL)`,
       `Prognoseperiode: ${fiveDaysDetailed[0]?.dateIso} kl. 00.00.00 til ${fiveDaysDetailed[fiveDaysDetailed.length - 1]?.dateIso} kl. 23.59.59`,
       `--------------------------------------------------------------------------------`,
@@ -1843,14 +1843,14 @@ export const DispersionForecastBulletinWidget: React.FC<
   return (
     <div
       ref={widgetContainerRef}
-      className={`p-3.5 rounded-md bg-slate-950/95 border shadow-xl space-y-3.5 font-mono text-xs transition-all ${
+      className={`p-3.5 rounded-md bg-[var(--surface-panel)] border space-y-3.5 font-mono text-xs transition-colors ${
         isFocusPulseActive
           ? mode === 'five_day_forecast'
-            ? 'border-amber-300 ring-2 ring-amber-400/80 shadow-[0_0_24px_rgba(251,191,36,0.3)]'
+            ? 'border-amber-400 ring-1 ring-amber-400/60'
             : mode === 'weather_broadcast_segment'
-            ? 'border-emerald-300 ring-2 ring-emerald-400/80 shadow-[0_0_24px_rgba(52,211,153,0.3)]'
-            : 'border-cyan-300 ring-2 ring-cyan-400/80 shadow-[0_0_24px_rgba(34,211,238,0.35)]'
-          : 'border-cyan-500/60'
+            ? 'border-emerald-400 ring-1 ring-emerald-400/60'
+            : 'border-sky-400 ring-1 ring-sky-400/60'
+          : 'border-[var(--border-subtle)]'
       }`}
     >
       {/* =====================================================================
@@ -1873,7 +1873,7 @@ export const DispersionForecastBulletinWidget: React.FC<
             </strong>
           </span>
           {isLoadingForecast && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-amber-300">
+            <span className="inline-flex items-center gap-1 text-[11px] text-amber-300">
               <RefreshCw className="w-3 h-3 animate-spin" />
               <span>Synkroniserer Open-Meteo...</span>
             </span>
@@ -1895,43 +1895,43 @@ export const DispersionForecastBulletinWidget: React.FC<
             <span>
               {showCrossIntervalComparison
                 ? 'Skjul Tværgående Risiko-Sammenligning'
-                : '📊 Sammenlign Prognose-Intervaller'}
+                : 'Sammenlign Prognose-Intervaller'}
             </span>
           </button>
 
           <button
             type="button"
             onClick={() => handleExportForecastReportPdf()}
-            className={`px-2.5 py-1 rounded text-[11px] font-extrabold border transition-all flex items-center gap-1.5 cursor-pointer shadow-xs ${
+            className={`px-2.5 py-1 rounded text-[11px] font-extrabold border transition-colors flex items-center gap-1.5 cursor-pointer ${
               exportedPdfSuccess
-                ? 'bg-emerald-400 text-slate-950 border-white'
-                : 'bg-gradient-to-r from-amber-400 via-cyan-400 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 border-white/80'
+                ? 'bg-emerald-400 text-slate-950 border-emerald-200'
+                : 'bg-sky-400 hover:bg-sky-300 text-slate-950 border-sky-200'
             }`}
             title="Eksportér den valgte prognose-rapport direkte som PDF inklusiv grafiske sammenligninger og aggregeret sumkvotient-tabel"
           >
             <FileDown className="w-3.5 h-3.5 shrink-0" />
             <span>
               {exportedPdfSuccess
-                ? '✓ Prognose-PDF Eksporteret (inkl. Grafer)!'
-                : '📄 Eksportér Prognose-Rapport (PDF inkl. Grafer)'}
+                ? 'Prognose-PDF Eksporteret (inkl. Grafer)'
+                : 'Eksportér Prognose-Rapport (PDF inkl. Grafer)'}
             </span>
           </button>
 
           <button
             type="button"
             onClick={handleLogForecastAsEvidence}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-all flex items-center gap-1 cursor-pointer ${
+            className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-colors flex items-center gap-1 cursor-pointer ${
               loggedEvidenceSuccess
-                ? 'bg-emerald-400 text-slate-950 border-white'
-                : 'bg-emerald-950/90 hover:bg-emerald-900 text-emerald-200 border-emerald-400/70'
+                ? 'bg-emerald-400 text-slate-950 border-emerald-200'
+                : 'bg-[var(--surface-card)] hover:bg-[var(--surface-overlay)] text-emerald-200 border-emerald-500/50'
             }`}
             title="Føj den valgte Spredningsprognose direkte til Beviser med kryptografisk SHA-256 signatur"
           >
             <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
             <span>
               {loggedEvidenceSuccess
-                ? '✓ Prognose føjet til Beviser!'
-                : '➕ Føj Prognose til Beviser (SHA-256)'}
+                ? 'Prognose føjet til Beviser'
+                : 'Føj Prognose til Beviser (SHA-256)'}
             </span>
           </button>
 
@@ -1939,9 +1939,9 @@ export const DispersionForecastBulletinWidget: React.FC<
             <button
               type="button"
               onClick={onClose}
-              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[11px]"
+              className="px-2 py-1 rounded bg-[var(--surface-card)] hover:bg-[var(--surface-overlay)] text-slate-300 border border-[var(--border-subtle)] text-[11px]"
             >
-              Skjul ✕
+              Skjul
             </button>
           )}
         </div>
@@ -1964,16 +1964,16 @@ export const DispersionForecastBulletinWidget: React.FC<
               nextDayForecast.dataset
             );
           }}
-          className={`text-left p-3 rounded-md border-2 transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+          className={`text-left p-3 rounded-md border transition-colors cursor-pointer flex flex-col justify-between gap-2 ${
             mode === 'next_day_00_00_59'
-              ? 'bg-gradient-to-br from-cyan-950/90 via-slate-900 to-slate-950 border-cyan-400 ring-1 ring-cyan-300/60 shadow-[0_0_18px_rgba(34,211,238,0.25)]'
-              : 'bg-slate-900/75 border-slate-800 hover:border-cyan-500/60 hover:bg-slate-900'
+              ? 'bg-[var(--surface-card)] border-sky-400 border-l-4 border-l-sky-400'
+              : 'bg-[var(--surface-panel)] border-[var(--border-subtle)] hover:border-sky-500/60 hover:bg-[var(--surface-card)]'
           }`}
         >
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <span
-                className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 ${
+                className={`px-2 py-0.5 rounded text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1 ${
                   mode === 'next_day_00_00_59'
                     ? 'bg-cyan-400 text-slate-950'
                     : 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/40'
@@ -1983,7 +1983,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                 <span>PROGNOSETYPE 1 · MIDNATSVINDUE</span>
               </span>
               <span
-                className={`px-1.5 py-0.5 rounded text-[9.5px] font-extrabold border ${mode1Risk.badgeClass}`}
+                className={`px-1.5 py-0.5 rounded text-[11px] font-extrabold border ${mode1Risk.badgeClass}`}
               >
                 {mode1Risk.label}
               </span>
@@ -1992,11 +1992,11 @@ export const DispersionForecastBulletinWidget: React.FC<
             <div className="text-xs font-extrabold text-white flex items-center justify-between">
               <span>Døgnet efter fra klokken 00.00.00 - 00.59.59</span>
               {mode === 'next_day_00_00_59' && (
-                <span className="text-[10px] text-cyan-300 font-bold">● AKTIV</span>
+                <span className="text-[11px] text-cyan-300 font-bold">● AKTIV</span>
               )}
             </div>
 
-            <p className="text-[10.5px] text-slate-300 leading-snug">
+            <p className="text-[11px] text-slate-300 leading-snug">
               Højopløselig 60-minutters analyse ved døgnskiftet til{' '}
               <strong className="text-cyan-300">
                 {nextDayMidnightAnalysis.weekdayDa} d. {nextDayMidnightAnalysis.dateIso}
@@ -2006,7 +2006,7 @@ export const DispersionForecastBulletinWidget: React.FC<
           </div>
 
           <div className="space-y-1.5 pt-1.5 border-t border-slate-800/90 tabular-nums">
-            <div className="flex items-center justify-between text-[10.5px]">
+            <div className="flex items-center justify-between text-[11px]">
               <span className="text-slate-400">
                 Vind {nextDayMidnightAnalysis.hr00.windSpeed10m} m/s → Fane{' '}
                 {nextDayMidnightAnalysis.plumeDir00}° ({nextDayMidnightAnalysis.plumeCompass00})
@@ -2030,16 +2030,16 @@ export const DispersionForecastBulletinWidget: React.FC<
           role="tab"
           aria-selected={mode === 'five_day_forecast'}
           onClick={() => onChangeMode('five_day_forecast')}
-          className={`text-left p-3 rounded-md border-2 transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+          className={`text-left p-3 rounded-md border transition-colors cursor-pointer flex flex-col justify-between gap-2 ${
             mode === 'five_day_forecast'
-              ? 'bg-gradient-to-br from-amber-950/85 via-slate-900 to-slate-950 border-amber-400 ring-1 ring-amber-300/60 shadow-[0_0_18px_rgba(251,191,36,0.25)]'
-              : 'bg-slate-900/75 border-slate-800 hover:border-amber-500/60 hover:bg-slate-900'
+              ? 'bg-[var(--surface-card)] border-amber-400 border-l-4 border-l-amber-400'
+              : 'bg-[var(--surface-panel)] border-[var(--border-subtle)] hover:border-amber-500/60 hover:bg-[var(--surface-card)]'
           }`}
         >
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <span
-                className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 ${
+                className={`px-2 py-0.5 rounded text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1 ${
                   mode === 'five_day_forecast'
                     ? 'bg-amber-400 text-slate-950'
                     : 'bg-amber-500/15 text-amber-300 border border-amber-500/40'
@@ -2049,7 +2049,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                 <span>PROGNOSETYPE 2 · 120 TIMERS HORISONT</span>
               </span>
               <span
-                className={`px-1.5 py-0.5 rounded text-[9.5px] font-extrabold border ${mode2Risk.badgeClass}`}
+                className={`px-1.5 py-0.5 rounded text-[11px] font-extrabold border ${mode2Risk.badgeClass}`}
               >
                 {mode2Risk.label}
               </span>
@@ -2058,11 +2058,11 @@ export const DispersionForecastBulletinWidget: React.FC<
             <div className="text-xs font-extrabold text-white flex items-center justify-between">
               <span>Fem døgns prognose (Dag +1 til Dag +5)</span>
               {mode === 'five_day_forecast' && (
-                <span className="text-[10px] text-amber-300 font-bold">● AKTIV</span>
+                <span className="text-[11px] text-amber-300 font-bold">● AKTIV</span>
               )}
             </div>
 
-            <p className="text-[10.5px] text-slate-300 leading-snug">
+            <p className="text-[11px] text-slate-300 leading-snug">
               Aggregerer 5 dages vejrdata, receptor-matrix og{' '}
               <strong className="text-amber-300">
                 akkumuleret sumkvotient-tendens (ΣS = {fiveDaysAggregatedSummary.cumulativeDoseS120h})
@@ -2072,7 +2072,7 @@ export const DispersionForecastBulletinWidget: React.FC<
           </div>
 
           <div className="space-y-1.5 pt-1.5 border-t border-slate-800/90 tabular-nums">
-            <div className="flex items-center justify-between text-[10.5px]">
+            <div className="flex items-center justify-between text-[11px]">
               <span className="text-slate-400">
                 {fiveDaysAggregatedSummary.totalExceedanceHours5d}t ≥ 1,0 · Maks vind{' '}
                 {fiveDaysAggregatedSummary.maxWindSpeed5d} m/s
@@ -2096,16 +2096,16 @@ export const DispersionForecastBulletinWidget: React.FC<
           role="tab"
           aria-selected={mode === 'weather_broadcast_segment'}
           onClick={() => onChangeMode('weather_broadcast_segment')}
-          className={`text-left p-3 rounded-md border-2 transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+          className={`text-left p-3 rounded-md border transition-colors cursor-pointer flex flex-col justify-between gap-2 ${
             mode === 'weather_broadcast_segment'
-              ? 'bg-gradient-to-br from-emerald-950/85 via-slate-900 to-slate-950 border-emerald-400 ring-1 ring-emerald-300/60 shadow-[0_0_18px_rgba(52,211,153,0.25)]'
-              : 'bg-slate-900/75 border-slate-800 hover:border-emerald-500/60 hover:bg-slate-900'
+              ? 'bg-[var(--surface-card)] border-emerald-400 border-l-4 border-l-emerald-400'
+              : 'bg-[var(--surface-panel)] border-[var(--border-subtle)] hover:border-emerald-500/60 hover:bg-[var(--surface-card)]'
           }`}
         >
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <span
-                className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 ${
+                className={`px-2 py-0.5 rounded text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1 ${
                   mode === 'weather_broadcast_segment'
                     ? 'bg-emerald-400 text-slate-950'
                     : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
@@ -2115,7 +2115,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                 <span>PROGNOSETYPE 3 · BEBOER-KOMMUNIKATION</span>
               </span>
               <span
-                className={`px-1.5 py-0.5 rounded text-[9.5px] font-extrabold border ${mode3Risk.badgeClass}`}
+                className={`px-1.5 py-0.5 rounded text-[11px] font-extrabold border ${mode3Risk.badgeClass}`}
               >
                 5d S̄ = {fiveDaysAggregatedSummary.meanS5d.toFixed(2)}
               </span>
@@ -2124,17 +2124,17 @@ export const DispersionForecastBulletinWidget: React.FC<
             <div className="text-xs font-extrabold text-white flex items-center justify-between">
               <span>Som indlæg i en Vejrudsigt (Beboer-Rapport)</span>
               {mode === 'weather_broadcast_segment' && (
-                <span className="text-[10px] text-emerald-300 font-bold">● AKTIV</span>
+                <span className="text-[11px] text-emerald-300 font-bold">● AKTIV</span>
               )}
             </div>
 
-            <p className="text-[10.5px] text-slate-300 leading-snug">
+            <p className="text-[11px] text-slate-300 leading-snug">
               Læsbar tekstlig 5-døgns rapport og vejrudsigts-bulletin med konkrete handlingsråd til beboere i Ringparken.
             </p>
           </div>
 
           <div className="space-y-1.5 pt-1.5 border-t border-slate-800/90 tabular-nums">
-            <div className="flex items-center justify-between text-[10.5px]">
+            <div className="flex items-center justify-between text-[11px]">
               <span className="text-slate-400">
                 Primær retning: {fiveDaysAggregatedSummary.aggPlumeCompass} (mod{' '}
                 {fiveDaysAggregatedSummary.worstDayEntry?.peakReceptorCode})
@@ -2158,10 +2158,10 @@ export const DispersionForecastBulletinWidget: React.FC<
         <div
           className={`h-full w-1/3 rounded-full transition-all duration-500 ease-out ${
             mode === 'next_day_00_00_59'
-              ? 'translate-x-0 bg-gradient-to-r from-cyan-400 to-sky-500 shadow-[0_0_12px_rgba(34,211,238,0.8)]'
+              ? 'translate-x-0 bg-sky-400'
               : mode === 'five_day_forecast'
-              ? 'translate-x-full bg-gradient-to-r from-amber-400 to-orange-500 shadow-[0_0_12px_rgba(251,191,36,0.8)]'
-              : 'translate-x-[200%] bg-gradient-to-r from-emerald-400 to-teal-500 shadow-[0_0_12px_rgba(52,211,153,0.8)]'
+              ? 'translate-x-full bg-amber-400'
+              : 'translate-x-[200%] bg-emerald-400'
           }`}
         />
       </div>
@@ -2173,7 +2173,7 @@ export const DispersionForecastBulletinWidget: React.FC<
         <div className="p-3 rounded-md bg-slate-900/95 border border-indigo-500/50 space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-indigo-500 text-white font-extrabold text-[10px] uppercase flex items-center gap-1">
+              <span className="px-2 py-0.5 rounded bg-indigo-500 text-white font-extrabold text-[11px] uppercase flex items-center gap-1">
                 <BarChart3 className="w-3 h-3 shrink-0" />
                 <span>TVÆRGÅENDE RISIKO-SAMMENLIGNING PÅ TVÆRS AF PROGNOSE-INTERVALLER</span>
               </span>
@@ -2183,7 +2183,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                 <strong className="text-indigo-200">Vindhastighed (m/s)</strong> mellem Aktuel time, Døgnet efter 00.00–00.59, Dag +1..+5 og 5-døgns middel
               </span>
             </div>
-            <span className="text-[10px] text-slate-400">
+            <span className="text-[11px] text-slate-400">
               Klik på en søjle eller et interval-kort for at skifte til prognose-intervallet
             </span>
           </div>
@@ -2278,7 +2278,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                     }}
                     className="p-2 rounded bg-slate-950/90 hover:bg-slate-800 border border-slate-800 hover:border-indigo-400 text-left transition-all cursor-pointer tabular-nums"
                   >
-                    <div className="text-[9.5px] text-indigo-300 font-bold truncate">
+                    <div className="text-[11px] text-indigo-300 font-bold truncate">
                       {item.intervalLabel}
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
@@ -2293,7 +2293,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                       >
                         S = {item.sumQuotient.toFixed(2)}
                       </span>
-                      <span className="text-[9.5px] text-slate-400">
+                      <span className="text-[11px] text-slate-400">
                         {item.windSpeedMs} m/s · {item.worstReceptorCode}
                       </span>
                     </div>
@@ -2328,10 +2328,10 @@ export const DispersionForecastBulletinWidget: React.FC<
           className="space-y-3 focus:outline-none"
         >
           {/* Top Highlight Banner for Next Day 00.00.00 - 00.59.59 */}
-          <div className="p-3 rounded-md bg-gradient-to-r from-cyan-950/90 via-slate-900 to-indigo-950/80 border-2 border-cyan-400/80 flex flex-wrap items-center justify-between gap-3 shadow-md">
+          <div className="p-3 rounded-md bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-sky-400 flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-cyan-400 text-slate-950 font-extrabold text-[10.5px] uppercase flex items-center gap-1">
+                <span className="px-2 py-0.5 rounded bg-cyan-400 text-slate-950 font-extrabold text-[11px] uppercase flex items-center gap-1">
                   <Crosshair className="w-3 h-3 shrink-0" />
                   <span>AKTIV VISNING: DØGNET EFTER FRA KLOKKEN 00.00.00 - 00.59.59</span>
                 </span>
@@ -2339,7 +2339,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                   {nextDayMidnightAnalysis.weekdayDa} d. {nextDayMidnightAnalysis.dateIso} · kl. 00.00.00 – 00.59.59
                 </span>
                 <span
-                  className={`px-2 py-0.5 rounded text-[10.5px] font-bold border tabular-nums ${
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold border tabular-nums ${
                     nextDayMidnightAnalysis.maxS00 >= 1.0
                       ? 'bg-rose-600 text-white border-rose-300'
                       : nextDayMidnightAnalysis.maxS00 >= 0.5
@@ -2350,7 +2350,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                   Sumkvotient S(00.00.00–00.59.59) = {nextDayMidnightAnalysis.maxS00.toFixed(2)}
                 </span>
                 {isSimulatingNextDayMidnight && (
-                  <span className="px-2 py-0.5 rounded bg-emerald-500/25 border border-emerald-400 text-emerald-200 text-[10px] font-bold">
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/25 border border-emerald-400 text-emerald-200 text-[11px] font-bold">
                     ✓ Synkroniseret med 2D/3D-simulator (kl. 00.00.00 – 00.59.59)
                   </span>
                 )}
@@ -2434,7 +2434,7 @@ export const DispersionForecastBulletinWidget: React.FC<
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-cyan-400 shrink-0" />
               <div>
-                <div className="text-[10.5px] font-bold uppercase text-cyan-300">
+                <div className="text-[11px] font-bold uppercase text-cyan-300">
                   Minut- &amp; Sekund-Inspektion i Midnatsvinduet (kl. 00.00.00 – 00.59.59)
                 </div>
                 <div className="text-[11px] text-slate-300 tabular-nums">
@@ -2452,7 +2452,7 @@ export const DispersionForecastBulletinWidget: React.FC<
             </div>
 
             <div className="flex items-center gap-2 flex-1 min-w-[220px] max-w-md">
-              <span className="text-[10px] text-slate-400 tabular-nums">00.00.00</span>
+              <span className="text-[11px] text-slate-400 tabular-nums">00.00.00</span>
               <input
                 type="range"
                 min={0}
@@ -2467,7 +2467,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                 aria-label="Minut-slider for Døgnet efter fra klokken 00.00.00 til 00.59.59"
                 className="flex-1 accent-cyan-400 cursor-pointer"
               />
-              <span className="text-[10px] text-slate-400 tabular-nums">00.59.59</span>
+              <span className="text-[11px] text-slate-400 tabular-nums">00.59.59</span>
             </div>
           </div>
 
@@ -2508,7 +2508,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                     }`}
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/50 text-cyan-200 font-extrabold text-[10.5px] tabular-nums">
+                      <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/50 text-cyan-200 font-extrabold text-[11px] tabular-nums">
                         kl. {sub.windowLabel}
                       </span>
                       <span
@@ -2523,10 +2523,10 @@ export const DispersionForecastBulletinWidget: React.FC<
                         S = {sub.sumQuotient.toFixed(2)}
                       </span>
                     </div>
-                    <div className="text-[10.5px] font-bold text-white truncate">
+                    <div className="text-[11px] font-bold text-white truncate">
                       {sub.phaseTitle}
                     </div>
-                    <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-300 pt-1 border-t border-slate-800/80 tabular-nums">
+                    <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-300 pt-1 border-t border-slate-800/80 tabular-nums">
                       <div>
                         Vind: <strong className="text-white">{sub.windSpeedMs} m/s</strong> ({sub.windGustsMs})
                       </div>
@@ -2554,12 +2554,12 @@ export const DispersionForecastBulletinWidget: React.FC<
                 <span className="text-[11px] font-bold uppercase text-cyan-300">
                   Receptor-Eksponering kl. 00.00.00 – 00.59.59 ({nextDayMidnightAnalysis.dateIso})
                 </span>
-                <span className="text-[10px] text-slate-400">Klik for at vælge receptor</span>
+                <span className="text-[11px] text-slate-400">Klik for at vælge receptor</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-[11px] tabular-nums">
                   <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 text-[10px]">
+                    <tr className="border-b border-slate-800 text-slate-400 text-[11px]">
                       <th className="py-1 pr-2">Receptor</th>
                       <th className="py-1 px-2">Afstand</th>
                       <th className="py-1 px-2">Asbest (f/cm³)</th>
@@ -2617,7 +2617,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                 <span className="text-[11px] font-bold uppercase text-amber-300">
                   Døgnet Efter ({nextDayMidnightAnalysis.dateIso}): Fra kl. 00.00.00–00.59.59 gennem hele døgnet
                 </span>
-                <span className="text-[10px] text-slate-400">
+                <span className="text-[11px] text-slate-400">
                   Klik på en time i grafen for at simulere
                 </span>
               </div>
@@ -2703,22 +2703,22 @@ export const DispersionForecastBulletinWidget: React.FC<
           <div className="p-2.5 rounded bg-slate-900/95 border border-cyan-500/40 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400 text-cyan-200 font-extrabold text-[10px] uppercase">
+                <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400 text-cyan-200 font-extrabold text-[11px] uppercase">
                   TIME-FOR-TIME FANE-TRÆF: 15 BEBOEDE BLOKKE (kat. a) &amp; 7 RENOVERINGSBLOKKE (kat. c)
                 </span>
-                <span className="text-[10.5px] text-slate-300">
+                <span className="text-[11px] text-slate-300">
                   Automatisk identifikation af hvilke <strong className="text-emerald-300">a. Beboede blokke</strong> og{' '}
                   <strong className="text-sky-300">c. Renoveringsblokke</strong> der rammes af støvfanen hver time på{' '}
                   <strong className="text-white">{nextDayMidnightAnalysis.dateIso}</strong>
                 </span>
               </div>
-              <span className="text-[10px] text-slate-400">Klik på en time for at simulere i 2D/3D</span>
+              <span className="text-[11px] text-slate-400">Klik på en time for at simulere i 2D/3D</span>
             </div>
 
             <div className="overflow-x-auto max-h-52">
-              <table className="w-full text-left border-collapse text-[10.5px] font-mono tabular-nums">
+              <table className="w-full text-left border-collapse text-[11px] font-mono tabular-nums">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-slate-950/90 text-slate-400 text-[9.5px] uppercase sticky top-0">
+                  <tr className="border-b border-slate-800 bg-slate-950/90 text-slate-400 text-[11px] uppercase sticky top-0">
                     <th className="py-1.5 px-2">Time</th>
                     <th className="py-1.5 px-2">Vind / Fane</th>
                     <th className="py-1.5 px-2 text-right">Max S</th>
@@ -2798,11 +2798,11 @@ export const DispersionForecastBulletinWidget: React.FC<
           className="space-y-3 focus:outline-none"
         >
           {/* Top 5-Day Aggregated Summary Header & KPI Strip (120 Hours Aggregated) */}
-          <div className="p-3 rounded-md bg-gradient-to-r from-amber-950/85 via-slate-900 to-cyan-950/80 border-2 border-amber-400/80 space-y-2.5 shadow-md">
+          <div className="p-3 rounded-md bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-amber-400 space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="space-y-0.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-extrabold text-[10.5px] uppercase flex items-center gap-1">
+                  <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-extrabold text-[11px] uppercase flex items-center gap-1">
                     <Calendar className="w-3 h-3 shrink-0" />
                     <span>FEM DØGNS PROGNOSE · 5 DAGE FREM (120 TIMERS AGGREGERING &amp; AKKUMULERET ΣS-TENDENS)</span>
                   </span>
@@ -2878,12 +2878,12 @@ export const DispersionForecastBulletinWidget: React.FC<
             {/* 4 Aggregated 5-Day Telemetry & Sum Quotient KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
               <div className="p-2.5 rounded bg-slate-950/90 border border-amber-400/50 space-y-1 tabular-nums">
-                <div className="flex items-center justify-between text-[10px] text-amber-300 font-bold uppercase">
+                <div className="flex items-center justify-between text-[11px] text-amber-300 font-bold uppercase">
                   <span>5-Døgns Sumkvotient &amp; ΣS</span>
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-slate-400 text-[10.5px]">5d Spids / Middel:</span>
+                  <span className="text-slate-400 text-[11px]">5d Spids / Middel:</span>
                   <span
                     className={`text-sm font-extrabold ${
                       fiveDaysAggregatedSummary.peakS5d >= 1.0
@@ -2895,39 +2895,39 @@ export const DispersionForecastBulletinWidget: React.FC<
                     {fiveDaysAggregatedSummary.meanS5d.toFixed(2)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-[10.5px] text-slate-300">
+                <div className="flex items-center justify-between text-[11px] text-slate-300">
                   <span>Akkumuleret 5d ΣS:</span>
                   <strong className="text-cyan-300">
                     ΣS = {fiveDaysAggregatedSummary.cumulativeDoseS120h} (+
                     {fiveDaysAggregatedSummary.dailyAccumulationSlope}/d)
                   </strong>
                 </div>
-                <div className="text-[10px] text-rose-300">
+                <div className="text-[11px] text-rose-300">
                   Overskridelser (S ≥ 1,0):{' '}
                   <strong>{fiveDaysAggregatedSummary.totalExceedanceHours5d} timer</strong> (af 120t)
                 </div>
               </div>
 
               <div className="p-2.5 rounded bg-slate-950/90 border border-cyan-500/40 space-y-1 tabular-nums">
-                <div className="flex items-center justify-between text-[10px] text-cyan-300 font-bold uppercase">
+                <div className="flex items-center justify-between text-[11px] text-cyan-300 font-bold uppercase">
                   <span>Aggregeret Vind (5 Døgn)</span>
                   <Wind className="w-3.5 h-3.5 text-cyan-400" />
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-slate-400 text-[10.5px]">Middel / Maks vind:</span>
+                  <span className="text-slate-400 text-[11px]">Middel / Maks vind:</span>
                   <span className="text-sm font-extrabold text-white">
                     {fiveDaysAggregatedSummary.meanWindSpeed5d} /{' '}
                     {fiveDaysAggregatedSummary.maxWindSpeed5d} m/s
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-[10.5px] text-slate-300">
+                <div className="flex items-center justify-between text-[11px] text-slate-300">
                   <span>Maks vindstød / &gt;10 m/s:</span>
                   <strong className="text-amber-300">
                     {fiveDaysAggregatedSummary.maxWindGusts5d} m/s ·{' '}
                     {fiveDaysAggregatedSummary.totalHighWindHours5d}t
                   </strong>
                 </div>
-                <div className="text-[10px] text-cyan-200">
+                <div className="text-[11px] text-cyan-200">
                   5d Vektor-fane:{' '}
                   <strong>
                     {fiveDaysAggregatedSummary.aggPlumeToDeg}° (
@@ -2937,30 +2937,30 @@ export const DispersionForecastBulletinWidget: React.FC<
               </div>
 
               <div className="p-2.5 rounded bg-slate-950/90 border border-indigo-500/40 space-y-1 tabular-nums">
-                <div className="flex items-center justify-between text-[10px] text-indigo-300 font-bold uppercase">
+                <div className="flex items-center justify-between text-[11px] text-indigo-300 font-bold uppercase">
                   <span>5-Døgns Nedbør &amp; Temperatur</span>
                   <CloudRain className="w-3.5 h-3.5 text-indigo-400" />
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-slate-400 text-[10.5px]">Akkumuleret nedbør:</span>
+                  <span className="text-slate-400 text-[11px]">Akkumuleret nedbør:</span>
                   <span className="text-sm font-extrabold text-indigo-200">
                     {fiveDaysAggregatedSummary.totalPrecipitation5d} mm
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-[10.5px] text-slate-300">
+                <div className="flex items-center justify-between text-[11px] text-slate-300">
                   <span>5d Temperatur-spænd:</span>
                   <strong className="text-white">
                     {fiveDaysAggregatedSummary.minTemp5d}°C til{' '}
                     {fiveDaysAggregatedSummary.maxTemp5d}°C
                   </strong>
                 </div>
-                <div className="text-[10px] text-slate-400">
+                <div className="text-[11px] text-slate-400">
                   Våd-deponering &amp; udvaskning i regntimer indregnet
                 </div>
               </div>
 
               <div className="p-2.5 rounded bg-slate-950/90 border border-rose-500/50 space-y-1 tabular-nums">
-                <div className="flex items-center justify-between text-[10px] text-rose-300 font-bold uppercase">
+                <div className="flex items-center justify-between text-[11px] text-rose-300 font-bold uppercase">
                   <span>Mest Udsatte Receptor (5d)</span>
                   <Thermometer className="w-3.5 h-3.5 text-rose-400" />
                 </div>
@@ -2968,7 +2968,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                   {fiveDaysAggregatedSummary.worstDayEntry?.peakReceptorCode}:{' '}
                   {fiveDaysAggregatedSummary.worstDayEntry?.peakReceptorName}
                 </div>
-                <div className="text-[10.5px] text-amber-300">
+                <div className="text-[11px] text-amber-300">
                   Kulminerer:{' '}
                   <strong>
                     {fiveDaysAggregatedSummary.worstDayEntry?.weekdayDa} d.{' '}
@@ -2976,7 +2976,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                     {fiveDaysAggregatedSummary.worstDayEntry?.peakHourLabel}
                   </strong>
                 </div>
-                <div className="text-[10px] text-slate-300">
+                <div className="text-[11px] text-slate-300">
                   Maks asbest:{' '}
                   <strong className="text-rose-300">
                     {fiveDaysAggregatedSummary.worstDayEntry?.peakAsbestosFibreCm3.toFixed(4)} fibre/cm³
@@ -2989,10 +2989,10 @@ export const DispersionForecastBulletinWidget: React.FC<
           {/* =================================================================
               DEDIKERET OVERSKUELIG TABEL OVER AGGREGEREDE SUMKVOTIENTER (5 DØGN)
              ================================================================= */}
-          <div className="p-3 rounded-md bg-slate-900/95 border-2 border-amber-400/60 space-y-2 shadow-md">
+          <div className="p-3 rounded-md bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-amber-400 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-extrabold text-[10.5px] uppercase flex items-center gap-1">
+                <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-extrabold text-[11px] uppercase flex items-center gap-1">
                   <Table2 className="w-3.5 h-3.5 shrink-0" />
                   <span>OVERSKUELIG TABEL: AGGREGEREDE SUMKVOTIENTER FOR 5-DØGNS PROGNOSEN (DAG +1 TIL DAG +5)</span>
                 </span>
@@ -3002,7 +3002,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                   <strong className="text-rose-300">Wissenberg PSS 5-dages Støj/Støv-Varsling Status (ID 3.3 &amp; 3.4)</strong>
                 </span>
               </div>
-              <span className="text-[10px] text-slate-400">
+              <span className="text-[11px] text-slate-400">
                 Klik på en række for at synkronisere 2D/3D-simulatoren med døgnets spidsbelastning
               </span>
             </div>
@@ -3010,7 +3010,7 @@ export const DispersionForecastBulletinWidget: React.FC<
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-[11px] tabular-nums">
                 <thead>
-                  <tr className="border-b border-slate-700 bg-slate-950/90 text-slate-300 text-[10px] uppercase">
+                  <tr className="border-b border-slate-700 bg-slate-950/90 text-slate-300 text-[11px] uppercase">
                     <th className="py-2 px-2.5">Prognosedøgn</th>
                     <th className="py-2 px-2 text-right text-cyan-300">Midnat S (00.00–00.59)</th>
                     <th className="py-2 px-2 text-right">Døgn-Middel S̄</th>
@@ -3054,7 +3054,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                         }`}
                       >
                         <td className="py-2 px-2.5 font-bold text-white whitespace-nowrap">
-                          <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-cyan-300 text-[10px] mr-1.5">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-cyan-300 text-[11px] mr-1.5">
                             DAG +{day.dayOffset}
                           </span>
                           {day.weekdayDa} d. {day.shortDateDa}
@@ -3077,7 +3077,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                           >
                             {day.peakS.toFixed(2)}
                           </span>{' '}
-                          <span className="text-[9.5px] text-slate-400 font-normal">
+                          <span className="text-[11px] text-slate-400 font-normal">
                             (kl. {day.peakHourLabel})
                           </span>
                         </td>
@@ -3092,7 +3092,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                         </td>
                         <td className="py-2 px-2 text-center">
                           <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
                               day.hoursExceedingLimit > 0
                                 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
                                 : 'bg-emerald-500/15 text-emerald-300'
@@ -3101,7 +3101,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                             {day.hoursExceedingLimit} timer
                           </span>
                         </td>
-                        <td className="py-2 px-2 text-[10px]">
+                        <td className="py-2 px-2 text-[11px]">
                           <div className="flex flex-col gap-0.5">
                             <span className="text-emerald-300 truncate max-w-[200px]" title={day.dailyHitInhabitedCodes.join(', ')}>
                               <strong>a. Beboet ({day.dailyHitInhabitedCodes.length}):</strong>{' '}
@@ -3127,26 +3127,26 @@ export const DispersionForecastBulletinWidget: React.FC<
                           title="Klik for at skifte 5-dages varslingsstatus jf. Wissenberg PSS pkt. 7 ID 3.3 & 3.4 mellem d_under_demolition og tilstødende c_under_renovation blokke"
                         >
                           {isPssNotified ? (
-                            <span className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-[9.5px] font-bold inline-flex items-center gap-1">
+                            <span className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-[11px] font-bold inline-flex items-center gap-1">
                               ✓ VARSLET ≥5 DAGE (PSS ID 3.3/3.4 OK)
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500/70 text-rose-200 text-[9.5px] font-extrabold inline-flex items-center gap-1">
+                            <span className="px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500/70 text-rose-200 text-[11px] font-extrabold inline-flex items-center gap-1">
                               ⚠ EJ VARSLET 5 DAGE (PSS ID 3.3/3.4 BRUD)
                             </span>
                           )}
                         </td>
                         <td className="py-2 px-2.5 text-right whitespace-nowrap">
                           {isCritical ? (
-                            <span className="px-2 py-0.5 rounded bg-rose-600 text-white text-[9.5px] font-extrabold">
+                            <span className="px-2 py-0.5 rounded bg-rose-600 text-white text-[11px] font-extrabold">
                               OVERSKRIDELSE (S ≥ 1,0)
                             </span>
                           ) : day.peakS >= 0.5 ? (
-                            <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[9.5px] font-extrabold">
+                            <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[11px] font-extrabold">
                               FORHØJET (S ≥ 0,5)
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[9.5px] font-bold">
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[11px] font-bold">
                               UNDER GRÆNSEVÆRDI
                             </span>
                           )}
@@ -3185,11 +3185,11 @@ export const DispersionForecastBulletinWidget: React.FC<
                       {fiveDaysAggregatedSummary.worstDayEntry?.peakReceptorCode}:{' '}
                       {fiveDaysAggregatedSummary.worstDayEntry?.peakReceptorName}
                     </td>
-                    <td className="py-2 px-2 text-rose-300 text-[10px]">
+                    <td className="py-2 px-2 text-rose-300 text-[11px]">
                       PSS pkt. 7 ID 3.3 &amp; 3.4: 5-dages varsling påkrævet
                     </td>
                     <td className="py-2 px-2.5 text-right">
-                      <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[9.5px] font-extrabold">
+                      <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[11px] font-extrabold">
                         BEK 613 AKKUMULERET
                       </span>
                     </td>
@@ -3206,7 +3206,7 @@ export const DispersionForecastBulletinWidget: React.FC<
               if (!activeDay) return null;
               return (
                 <div className="pt-2 border-t border-slate-800 space-y-1.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
                     <span className="text-amber-300 font-bold uppercase">
                       Time-for-Time Støvfane-Træf på {activeDay.weekdayDa} d. {activeDay.dateIso} (DAG +{activeDay.dayOffset}) — 15 a. Beboede &amp; 7 c. Renoveringsblokke:
                     </span>
@@ -3215,7 +3215,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                     </span>
                   </div>
                   <div className="overflow-x-auto max-h-44">
-                    <table className="w-full text-left border-collapse text-[10px] font-mono tabular-nums">
+                    <table className="w-full text-left border-collapse text-[11px] font-mono tabular-nums">
                       <thead>
                         <tr className="border-b border-slate-800 bg-slate-950/90 text-slate-400 uppercase sticky top-0">
                           <th className="py-1 px-2">Time</th>
@@ -3292,11 +3292,11 @@ export const DispersionForecastBulletinWidget: React.FC<
                 >
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-1">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-[10px] font-extrabold text-cyan-300">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-[11px] font-extrabold text-cyan-300">
                         DAG +{day.dayOffset} · {day.weekdayShortDa.toUpperCase()}
                       </span>
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold tabular-nums ${
+                        className={`px-1.5 py-0.5 rounded text-[11px] font-extrabold tabular-nums ${
                           isExceed
                             ? 'bg-rose-600 text-white'
                             : day.peakS >= 0.5
@@ -3312,14 +3312,15 @@ export const DispersionForecastBulletinWidget: React.FC<
                       <span className="text-xs font-bold text-white">
                         {day.weekdayDa} d. {day.shortDateDa}
                       </span>
-                      <span className="text-[10px] font-bold text-amber-200 tabular-nums">
+                      <span className="text-[11px] font-bold text-amber-200 tabular-nums">
                         ΣS = {accumUpToDay.toFixed(1)}
                       </span>
                     </div>
 
-                    <div className="p-1.5 rounded bg-slate-950/90 border border-cyan-500/30 text-[10px] space-y-0.5 tabular-nums">
-                      <div className="text-cyan-300 font-bold">
-                        🕛 Kl. 00.00.00 – 00.59.59:
+                    <div className="p-1.5 rounded bg-slate-950/90 border border-cyan-500/30 text-[11px] space-y-0.5 tabular-nums">
+                      <div className="text-cyan-300 font-bold flex items-center gap-1">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span>Kl. 00.00.00 – 00.59.59:</span>
                       </div>
                       <div className="text-slate-200 flex items-center justify-between">
                         <span>Vind {day.midnight00_59.windSpeedMs} m/s</span>
@@ -3332,7 +3333,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                       </div>
                     </div>
 
-                    <div className="space-y-1 text-[10.5px] text-slate-300 tabular-nums">
+                    <div className="space-y-1 text-[11px] text-slate-300 tabular-nums">
                       <div className="flex items-center justify-between">
                         <span className="text-slate-400">Middel / Maks vind:</span>
                         <strong
@@ -3380,7 +3381,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                         }
                         onSelectDateAndHour(day.dateIso, 0, day.dataset);
                       }}
-                      className="px-1.5 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/60 text-cyan-200 font-bold text-[10px] text-center cursor-pointer"
+                      className="px-1.5 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/60 text-cyan-200 font-bold text-[11px] text-center cursor-pointer"
                       title={`Indlæs ${day.dateIso} kl. 00.00.00 - 00.59.59 i 2D/3D simulatoren`}
                     >
                       00.00–00.59
@@ -3396,7 +3397,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                           day.dataset
                         );
                       }}
-                      className="px-1.5 py-1 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[10px] text-center cursor-pointer"
+                      className="px-1.5 py-1 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[11px] text-center cursor-pointer"
                       title={`Indlæs spidsbelastningstimen kl. ${day.peakHourLabel} på ${day.dateIso} i 2D/3D simulatoren`}
                     >
                       Spids {day.peakHourLabel}
@@ -3416,15 +3417,15 @@ export const DispersionForecastBulletinWidget: React.FC<
                   <Layers className="w-3.5 h-3.5 text-amber-400" />
                   <span>5-Døgns Sumkvotient-Matrix &amp; Akkumuleret ΣS pr. Receptor</span>
                 </span>
-                <span className="text-[10px] text-slate-400">
+                <span className="text-[11px] text-slate-400">
                   Klik på en receptor for at se dens 5-døgns ΣS-tendens
                 </span>
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-[10.5px] tabular-nums">
+                <table className="w-full text-left border-collapse text-[11px] tabular-nums">
                   <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 text-[10px]">
+                    <tr className="border-b border-slate-800 text-slate-400 text-[11px]">
                       <th className="py-1 pr-2">Receptor</th>
                       {fiveDaysDetailed.map((d) => (
                         <th key={`th-${d.dateIso}`} className="py-1 px-1 text-center">
@@ -3514,7 +3515,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                     onClick={() =>
                       setFiveDayChartSubView('accumulated_trend_5d')
                     }
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
                       fiveDayChartSubView === 'accumulated_trend_5d'
                         ? 'bg-amber-400 text-slate-950 shadow-xs'
                         : 'bg-slate-950 text-amber-200 border border-slate-700'
@@ -3529,7 +3530,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                     onClick={() =>
                       setFiveDayChartSubView('accumulated_trend_120h')
                     }
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold cursor-pointer ${
                       fiveDayChartSubView === 'accumulated_trend_120h'
                         ? 'bg-fuchsia-400 text-slate-950 shadow-xs'
                         : 'bg-slate-950 text-fuchsia-200 border border-slate-700'
@@ -3541,7 +3542,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                   <button
                     type="button"
                     onClick={() => setFiveDayChartSubView('daily_5d')}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold cursor-pointer ${
                       fiveDayChartSubView === 'daily_5d'
                         ? 'bg-cyan-400 text-slate-950'
                         : 'bg-slate-950 text-cyan-200 border border-slate-700'
@@ -3552,7 +3553,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                   <button
                     type="button"
                     onClick={() => setFiveDayChartSubView('selected_day_24h')}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold cursor-pointer ${
                       fiveDayChartSubView === 'selected_day_24h'
                         ? 'bg-emerald-400 text-slate-950'
                         : 'bg-slate-950 text-emerald-200 border border-slate-700'
@@ -3561,7 +3562,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                     Dag +{selectedFiveDayEntry?.dayOffset} (24t)
                   </button>
                 </div>
-                <span className="text-[10px] text-slate-400">
+                <span className="text-[11px] text-slate-400">
                   Valgt receptor: <strong className="text-cyan-300">{selectedReceptorMeta?.code}</strong>
                 </span>
               </div>
@@ -3859,7 +3860,7 @@ export const DispersionForecastBulletinWidget: React.FC<
           className="space-y-3 focus:outline-none"
         >
           {/* TV / Resident Communication Header Banner */}
-          <div className="p-3.5 rounded-md bg-gradient-to-r from-emerald-950/85 via-slate-900 to-cyan-950/85 border-2 border-emerald-400/70 shadow-lg space-y-3">
+          <div className="p-3.5 rounded-md bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-emerald-400 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-500/30 pb-2.5">
               <div className="space-y-0.5">
                 <div className="flex flex-wrap items-center gap-2">
@@ -3882,7 +3883,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                   <button
                     type="button"
                     onClick={() => setResidentReportStyle('resident_notice')}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
                       residentReportStyle === 'resident_notice'
                         ? 'bg-emerald-400 text-slate-950'
                         : 'text-emerald-200 hover:bg-slate-900'
@@ -3894,7 +3895,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                   <button
                     type="button"
                     onClick={() => setResidentReportStyle('tv_weather_segment')}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
                       residentReportStyle === 'tv_weather_segment'
                         ? 'bg-cyan-400 text-slate-950'
                         : 'text-cyan-200 hover:bg-slate-900'
@@ -3908,7 +3909,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                     onClick={() =>
                       setResidentReportStyle('board_authority_brief')
                     }
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
                       residentReportStyle === 'board_authority_brief'
                         ? 'bg-amber-400 text-slate-950'
                         : 'text-amber-200 hover:bg-slate-900'
@@ -3970,13 +3971,13 @@ export const DispersionForecastBulletinWidget: React.FC<
             {/* Automatisk Genereret Beboer-Venlig Spredningsrisiko-Profil pr. Boligblok i Ringparken */}
             <div className="p-2.5 rounded bg-slate-950/90 border border-emerald-500/40 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[10.5px] font-extrabold uppercase text-emerald-300 flex items-center gap-1.5">
+                <span className="text-[11px] font-extrabold uppercase text-emerald-300 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                   <span>
                     AUTOMATISK 5-DØGNS SPREDNINGSRISIKO-PROFIL FOR BOLIGAFSNIT OMKRING RINGPARKEN
                   </span>
                 </span>
-                <span className="text-[10px] text-slate-400">
+                <span className="text-[11px] text-slate-400">
                   Beregnet ud fra 5-døgns prognosens vindretninger, nedbør og sumkvotienter (R1–R6)
                 </span>
               </div>
@@ -4006,12 +4007,12 @@ export const DispersionForecastBulletinWidget: React.FC<
                       className="p-2 rounded bg-slate-900/90 border border-slate-800 hover:border-emerald-400/60 cursor-pointer space-y-1 transition-colors"
                     >
                       <div className="flex items-center justify-between gap-1">
-                        <span className="text-[10.5px] font-extrabold text-white truncate">
+                        <span className="text-[11px] font-extrabold text-white truncate">
                           <span className="text-cyan-300">{recRow.receptorCode}</span>:{' '}
                           {recRow.receptorName}
                         </span>
                         <span
-                          className={`px-1.5 py-0.5 rounded text-[9.5px] font-extrabold tabular-nums ${
+                          className={`px-1.5 py-0.5 rounded text-[11px] font-extrabold tabular-nums ${
                             isHighRiskRec
                               ? 'bg-rose-600 text-white'
                               : isElevatedRec
@@ -4022,7 +4023,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                           5d S_max = {recRow.recPeak5d.toFixed(2)}
                         </span>
                       </div>
-                      <p className="text-[10px] text-slate-300 leading-snug">
+                      <p className="text-[11px] text-slate-300 leading-snug">
                         {residentActionSummary}
                       </p>
                     </div>
@@ -4043,11 +4044,11 @@ export const DispersionForecastBulletinWidget: React.FC<
                     nextDayForecast.dataset
                   );
                 }}
-                className="p-2.5 rounded bg-cyan-950/70 border-2 border-cyan-400/80 cursor-pointer hover:bg-cyan-900/60 transition-all space-y-1"
+                className="p-2.5 rounded bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-sky-400 cursor-pointer hover:bg-[var(--surface-overlay)] transition-colors space-y-1"
                 title="Klik for at fokusere på Døgnet efter fra klokken 00.00.00 - 00.59.59"
               >
                 <div className="flex items-center justify-between">
-                  <span className="px-1.5 py-0.5 rounded bg-cyan-400 text-slate-950 font-extrabold text-[9.5px]">
+                  <span className="px-1.5 py-0.5 rounded bg-cyan-400 text-slate-950 font-extrabold text-[11px]">
                     NAT-VARSEL 00.00–00.59
                   </span>
                   <Clock className="w-3.5 h-3.5 text-cyan-300" />
@@ -4055,11 +4056,11 @@ export const DispersionForecastBulletinWidget: React.FC<
                 <div className="text-[11px] font-bold text-white">
                   {nextDayMidnightAnalysis.weekdayDa} kl. 00.00.00–00.59.59
                 </div>
-                <div className="text-[10px] text-cyan-200 tabular-nums">
+                <div className="text-[11px] text-cyan-200 tabular-nums">
                   Vind {nextDayMidnightAnalysis.hr00.windSpeed10m} m/s → Fane{' '}
                   {nextDayMidnightAnalysis.plumeDir00}° ({nextDayMidnightAnalysis.plumeCompass00})
                 </div>
-                <div className="pt-1 border-t border-cyan-500/30 flex items-center justify-between text-[10.5px] font-extrabold">
+                <div className="pt-1 border-t border-cyan-500/30 flex items-center justify-between text-[11px] font-extrabold">
                   <span className="text-amber-300">
                     S = {nextDayMidnightAnalysis.maxS00.toFixed(2)}
                   </span>
@@ -4074,21 +4075,21 @@ export const DispersionForecastBulletinWidget: React.FC<
                 const badge =
                   day.weatherSynopsis === 'STORM_DUST'
                     ? {
-                        label: '🌪️ KRAFTIG STØVFLUGT',
+                        label: 'KRAFTIG STØVFLUGT',
                         cls: 'bg-rose-600 text-white',
                       }
                     : day.weatherSynopsis === 'RAIN_WASHOUT'
                     ? {
-                        label: '🌧️ REGN & UDVASKNING',
+                        label: 'REGN & UDVASKNING',
                         cls: 'bg-indigo-500 text-white',
                       }
                     : day.weatherSynopsis === 'INVERSION_STAGNATION'
                     ? {
-                        label: '🌫️ NAT-INVERSION',
+                        label: 'NAT-INVERSION',
                         cls: 'bg-amber-400 text-slate-950',
                       }
                     : {
-                        label: '💨 MODERAT SPREDNING',
+                        label: 'MODERAT SPREDNING',
                         cls: 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/50',
                       };
 
@@ -4108,22 +4109,22 @@ export const DispersionForecastBulletinWidget: React.FC<
                     title="Klik for at åbne dette døgn i Fem døgns prognosen og simulere i 2D/3D"
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <span className="text-[10px] font-extrabold text-emerald-300">
+                      <span className="text-[11px] font-extrabold text-emerald-300">
                         {day.weekdayShortDa.toUpperCase()} {day.shortDateDa}
                       </span>
                       <span
-                        className={`px-1 py-0.2 rounded text-[9px] font-extrabold ${badge.cls}`}
+                        className={`px-1 py-0.2 rounded text-[11px] font-extrabold ${badge.cls}`}
                       >
                         {badge.label}
                       </span>
                     </div>
-                    <div className="text-[10.5px] text-white font-bold tabular-nums">
+                    <div className="text-[11px] text-white font-bold tabular-nums">
                       {day.minTempC}° / {day.maxTempC}°C · {day.maxWindSpeedMs} m/s
                     </div>
-                    <div className="text-[10px] text-slate-300 tabular-nums">
+                    <div className="text-[11px] text-slate-300 tabular-nums">
                       Fane → {day.dominantPlumeDirDeg}° ({day.dominantPlumeCompass}) · {day.totalPrecipitationMm} mm
                     </div>
-                    <div className="pt-1 border-t border-slate-800 flex items-center justify-between text-[10px] font-bold tabular-nums">
+                    <div className="pt-1 border-t border-slate-800 flex items-center justify-between text-[11px] font-bold tabular-nums">
                       <span
                         className={
                           day.peakS >= 1.0 ? 'text-rose-400' : 'text-amber-300'
@@ -4149,7 +4150,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                     <ShieldAlert className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Dag-for-Dag Beboer-Handlingsplan (5 Døgn)</span>
                   </span>
-                  <span className="text-[10px] text-slate-400">Konkrete råd pr. døgn</span>
+                  <span className="text-[11px] text-slate-400">Konkrete råd pr. døgn</span>
                 </div>
 
                 <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
@@ -4173,7 +4174,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                         }
                         className="p-2 rounded bg-slate-900/90 border border-slate-800 hover:border-emerald-400/60 cursor-pointer space-y-0.5"
                       >
-                        <div className="flex items-center justify-between text-[10.5px] font-bold">
+                        <div className="flex items-center justify-between text-[11px] font-bold">
                           <span className="text-white">
                             Dag +{d.dayOffset}: {d.weekdayDa} d. {d.shortDateDa}
                           </span>
@@ -4185,7 +4186,7 @@ export const DispersionForecastBulletinWidget: React.FC<
                             Spids kl. {d.peakHourLabel} (S = {d.peakS.toFixed(2)})
                           </span>
                         </div>
-                        <p className="text-[10px] text-slate-300 leading-snug">
+                        <p className="text-[11px] text-slate-300 leading-snug">
                           {residentInstruction}
                         </p>
                       </div>
@@ -4196,7 +4197,7 @@ export const DispersionForecastBulletinWidget: React.FC<
 
               {/* Right 7 cols: Full Readable Textual Resident Report */}
               <div className="lg:col-span-7 p-3 rounded bg-slate-950 border border-slate-800 space-y-1.5">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-[10.5px] text-emerald-300 font-bold uppercase">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-emerald-300 font-bold uppercase">
                   <span>
                     Læsbar Tekstlig 5-Døgns Rapport til Beboer-Kommunikation &amp; Vejrudsigt-Indlæg
                   </span>

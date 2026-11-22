@@ -4,15 +4,19 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import {
   Box,
+  Calendar,
   Camera,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Clock,
+  Hammer,
   Layers,
   Maximize2,
   Minimize2,
+  PlusCircle,
   RotateCcw,
   Wind,
 } from 'lucide-react';
@@ -1035,21 +1039,25 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
   return (
     <section
       aria-label="3D-visualisering af støvfanens vertikale udbredelse over Ringparken"
-      className="rounded-md bg-[#080D18] border-2 border-cyan-500/60 shadow-lg overflow-hidden font-mono text-xs"
+      className="rounded-md bg-[var(--surface-panel)] border border-[var(--border-subtle)] border-l-4 border-l-sky-400 overflow-hidden font-mono text-xs"
     >
       {/* Top Header Bar */}
       <div className="px-3 py-2 bg-[#0B1220] border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/60 text-cyan-200 font-extrabold text-[10.5px] flex items-center gap-1.5">
+          <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/60 text-cyan-200 font-extrabold text-[11px] flex items-center gap-1.5">
             <Box className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
             <span>3D VERTIKAL STØVFANE-UDBREDELSE OVER RINGPARKEN (σ_z &amp; ETAGEPROFIL)</span>
           </span>
 
-          <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-amber-300 font-bold text-[10.5px]">
-            📅 {dateIso} · 🕒 kl. {currentWeather.hourLabel}
+          <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-amber-300 font-bold text-[11px] inline-flex items-center gap-1.5 tabular-nums">
+            <Calendar className="w-3 h-3 shrink-0" />
+            <span>{dateIso}</span>
+            <span>·</span>
+            <Clock className="w-3 h-3 shrink-0" />
+            <span>kl. {currentWeather.hourLabel}</span>
           </span>
 
-          <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-sky-300 text-[10.5px]">
+          <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-sky-300 text-[11px]">
             Pasquill <strong className="text-white">{currentWeather.pasquillClass}</strong> · Vind{' '}
             <strong className="text-white">{currentWeather.windSpeed10m.toFixed(1)} m/s</strong> (stød{' '}
             {currentWeather.windGusts10m.toFixed(1)} m/s) · Fane mod{' '}
@@ -1065,19 +1073,19 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
             <button
               type="button"
               onClick={() => onSelectHour(prevHourIdx)}
-              className="px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-300 hover:text-white flex items-center gap-0.5 text-[10px] cursor-pointer"
+              className="px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-300 hover:text-white flex items-center gap-0.5 text-[11px] cursor-pointer"
               title="Forrige time"
             >
               <ChevronLeft className="w-3 h-3" />
               <span>{String(prevHourIdx).padStart(2, '0')}:00</span>
             </button>
-            <span className="px-2 py-0.5 text-[10.5px] font-extrabold text-amber-300">
+            <span className="px-2 py-0.5 text-[11px] font-extrabold text-amber-300">
               kl. {currentWeather.hourLabel}
             </span>
             <button
               type="button"
               onClick={() => onSelectHour(nextHourIdx)}
-              className="px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-300 hover:text-white flex items-center gap-0.5 text-[10px] cursor-pointer"
+              className="px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-300 hover:text-white flex items-center gap-0.5 text-[11px] cursor-pointer"
               title="Næste time"
             >
               <span>{String(nextHourIdx).padStart(2, '0')}:00</span>
@@ -1088,7 +1096,7 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
           <button
             type="button"
             onClick={() => setIsTallViewport((prev) => !prev)}
-            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-cyan-200 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-cyan-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
             title="Skift højde på 3D-boksen"
           >
             {isTallViewport ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
@@ -1098,7 +1106,7 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
           <button
             type="button"
             onClick={() => setIsExpanded((prev) => !prev)}
-            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer"
           >
             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             <span>{isExpanded ? 'Minimer' : 'Vis 3D-Boks'}</span>
@@ -1113,7 +1121,7 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
             {/* LEFT 8 COLS: Dedicated Three.js 3D Viewport */}
             <div className="lg:col-span-8 flex flex-col rounded border border-slate-800 bg-[#070B14] overflow-hidden relative">
               {/* Solid Top-Left Telemetry Overlay (No backdrop-filter over WebGL canvas) */}
-              <div className="px-2.5 py-1.5 bg-[#0A0F1D] border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[10px]">
+              <div className="px-2.5 py-1.5 bg-[#0A0F1D] border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px]">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-cyan-300 font-bold flex items-center gap-1">
                     <Layers className="w-3.5 h-3.5 text-cyan-400" />
@@ -1132,10 +1140,13 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
                     <strong className="text-white">{verticalMetrics.plumeTopHeightMeters.toFixed(1)} m</strong> (Tag = 12,0 m)
                   </span>
                   <span className="text-slate-600">·</span>
-                  <span className="text-fuchsia-300 font-bold">
-                    🔨 Betonhammer Refraktion (kl. {currentWeather.hourLabel}):{' '}
-                    <strong className="text-white">+{verticalMetrics.hourlyRefractionDb.toFixed(1)} dB</strong>{' '}
-                    (Spids {verticalMetrics.hammerImpulseLafmaxDb.toFixed(1)} dB)
+                  <span className="text-fuchsia-300 font-bold inline-flex items-center gap-1">
+                    <Hammer className="w-3 h-3 shrink-0" />
+                    <span>
+                      Betonhammer Refraktion (kl. {currentWeather.hourLabel}):{' '}
+                      <strong className="text-white">+{verticalMetrics.hourlyRefractionDb.toFixed(1)} dB</strong>{' '}
+                      (Spids {verticalMetrics.hammerImpulseLafmaxDb.toFixed(1)} dB)
+                    </span>
                   </span>
                 </div>
 
@@ -1154,7 +1165,7 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
                       key={preset.id}
                       type="button"
                       onClick={() => setCameraPreset(preset.id)}
-                      className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border transition-colors cursor-pointer ${
+                      className={`px-1.5 py-0.5 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
                         cameraPreset === preset.id
                           ? 'bg-cyan-400 text-slate-950 border-white'
                           : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
@@ -1173,7 +1184,7 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
               />
 
               {/* Bottom Control Dock below WebGL Canvas */}
-              <div className="px-3 py-2 bg-[#0A0F1D] border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-[10px]">
+              <div className="px-3 py-2 bg-[#0A0F1D] border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-[11px]">
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="flex items-center gap-1.5 text-cyan-200">
                     <span className="font-bold">Tværsnits-afstand x:</span>
@@ -1234,8 +1245,11 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
                       onChange={(e) => setShowHydraulicHammerImpulse3D(e.target.checked)}
                       className="accent-fuchsia-400"
                     />
-                    <span>
-                      🔨 Impuls-støjbølger fra betonhammere (+{verticalMetrics.hourlyRefractionDb.toFixed(1)} dB)
+                    <span className="inline-flex items-center gap-1">
+                      <Hammer className="w-3 h-3 shrink-0" />
+                      <span>
+                        Impuls-støjbølger fra betonhammere (+{verticalMetrics.hourlyRefractionDb.toFixed(1)} dB)
+                      </span>
                     </span>
                   </label>
 
@@ -1262,15 +1276,15 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-1 border-b border-slate-800 pb-1.5">
                   <div>
-                    <div className="text-[10.5px] font-extrabold uppercase text-cyan-300">
+                    <div className="text-[11px] font-extrabold uppercase text-cyan-300">
                       Vertikal Koncentrationsprofil C(z) ved x = {sliceDistanceMeters} m
                     </div>
-                    <div className="text-[9.5px] text-slate-400">
+                    <div className="text-[11px] text-slate-400">
                       {pgSpec.labelDa}
                     </div>
                   </div>
                   <span
-                    className={`px-1.5 py-0.5 rounded text-[9.5px] font-extrabold shrink-0 ${
+                    className={`px-1.5 py-0.5 rounded text-[11px] font-extrabold shrink-0 ${
                       verticalMetrics.plumeTopHeightMeters >= 12.0
                         ? 'bg-rose-500/20 border border-rose-400/60 text-rose-300'
                         : 'bg-amber-500/20 border border-amber-400/60 text-amber-300'
@@ -1308,7 +1322,7 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
                           x="6"
                           y={py + 3}
                           fill={isRoof ? '#fcd34d' : '#94a3b8'}
-                          fontSize="7.5"
+                          fontSize="9.5"
                           fontWeight={isRoof ? 'bold' : 'normal'}
                         >
                           {zM.toFixed(1)}m
@@ -1328,16 +1342,16 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
                     stroke="#38bdf8"
                     strokeWidth="0.9"
                   />
-                  <text x="47" y="114" fill="#bae6fd" fontSize="6.5">
+                  <text x="47" y="114" fill="#bae6fd" fontSize="9.5">
                     Stue
                   </text>
-                  <text x="47" y="99" fill="#bae6fd" fontSize="6.5">
+                  <text x="47" y="99" fill="#bae6fd" fontSize="9.5">
                     1.sal
                   </text>
-                  <text x="47" y="86" fill="#bae6fd" fontSize="6.5">
+                  <text x="47" y="86" fill="#bae6fd" fontSize="9.5">
                     2.sal
                   </text>
-                  <text x="47" y="75" fill="#bae6fd" fontSize="6.5">
+                  <text x="47" y="75" fill="#bae6fd" fontSize="9.5">
                     3.sal
                   </text>
 
@@ -1390,7 +1404,7 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
                           stroke="#22d3ee"
                           strokeWidth="1.4"
                         />
-                        <text x="165" y={Math.max(12, cutPy - 3)} fill="#67e8f9" fontSize="7.5" fontWeight="bold">
+                        <text x="165" y={Math.max(12, cutPy - 3)} fill="#67e8f9" fontSize="9.5" fontWeight="bold">
                           Snit z={horizontalCutHeightMeters.toFixed(1)}m (S={verticalMetrics.cutHeightS.toFixed(2)})
                         </text>
                       </g>
@@ -1410,7 +1424,7 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
                         onClick={() => setHorizontalCutHeightMeters(fl.zMeters)}
                         className="p-1.5 rounded bg-slate-950/90 border border-slate-800 hover:border-cyan-500/50 cursor-pointer transition-colors"
                       >
-                        <div className="flex items-center justify-between text-[10px]">
+                        <div className="flex items-center justify-between text-[11px]">
                           <span className="text-slate-200 font-semibold">{fl.label}</span>
                           <span
                             className={`font-extrabold ${
@@ -1446,18 +1460,22 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
               <button
                 type="button"
                 onClick={handleLogFinding}
-                className={`w-full px-3 py-1.5 rounded font-mono text-[10.5px] font-extrabold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                className={`w-full px-3 py-1.5 rounded font-mono text-[11px] font-extrabold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                   loggedConfirmation
                     ? 'bg-emerald-400 text-slate-950 border-white'
                     : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 border-cyan-200'
                 }`}
                 title="Registrér den vertikale 3D-støvfaneudbredelse og etage-eksponering for den valgte time i Beviser med SHA-256 signatur"
               >
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                {loggedConfirmation ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                ) : (
+                  <PlusCircle className="w-3.5 h-3.5 shrink-0" />
+                )}
                 <span>
                   {loggedConfirmation
-                    ? `✓ 3D Vertikal Støvfane (kl. ${currentWeather.hourLabel}) Føjet til Beviser!`
-                    : `➕ Føj 3D Vertikal Faneprofil (kl. ${currentWeather.hourLabel}) til Beviser`}
+                    ? `3D Vertikal Støvfane (kl. ${currentWeather.hourLabel}) Føjet til Beviser`
+                    : `Føj 3D Vertikal Faneprofil (kl. ${currentWeather.hourLabel}) til Beviser`}
                 </span>
               </button>
             </div>
@@ -1465,7 +1483,7 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
 
           {/* 24-Hour Quick Timeline Bar for Inspecting Vertical Plume Spread Across All Hours */}
           <div className="px-2.5 py-1.5 rounded bg-[#0B1220] border border-slate-800 flex flex-wrap items-center justify-between gap-1.5">
-            <span className="text-[10px] font-bold text-slate-300 flex items-center gap-1">
+            <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
               <Wind className="w-3.5 h-3.5 text-cyan-400" />
               <span>Vælg time for 3D vertikal støvfane:</span>
             </span>
@@ -1477,7 +1495,7 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
                     key={`vplume-hr-${h.hourIndex}`}
                     type="button"
                     onClick={() => onSelectHour(h.hourIndex)}
-                    className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border transition-colors cursor-pointer ${
+                    className={`px-1.5 py-0.5 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
                       isSelected
                         ? 'bg-cyan-400 text-slate-950 border-white font-extrabold'
                         : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'

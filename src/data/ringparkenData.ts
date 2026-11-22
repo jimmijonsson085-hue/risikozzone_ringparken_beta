@@ -1279,6 +1279,20 @@ export interface SourceNodeOverride {
   releaseHeightMeters?: number;
   fiberReleaseIndex?: number;
   substances?: SubstanceKey[];
+  baseSoundPowerLwaDb?: number;
+}
+
+export function getDefaultSourceBaseLwaDb(
+  sourceId: string,
+  buildingCategory?: BuildingOperationalCategory
+): number {
+  if (buildingCategory === 'b_vacant') return 68.0;
+  if (buildingCategory === 'e_demolished_unsecured') return 98.5;
+  if (buildingCategory === 'c_under_renovation') return 108.5;
+  if (sourceId === 'src-blok-1') return 118.5;
+  if (sourceId === 'src-bygning-2') return 115.0;
+  if (sourceId === 'src-bygning-3') return 112.0;
+  return 114.0;
 }
 
 export function getSourceIdForBuilding(buildingId: string): string {
@@ -1364,6 +1378,10 @@ export function deriveSourcesFromBuildings(
       buildingCategory: b.category,
       sourceEmissionFactor: meta.sourceEmissionFactor,
       buildingHeight3DMeters: height3D,
+      baseSoundPowerLwaDb:
+        ov?.baseSoundPowerLwaDb ??
+        legacy?.baseSoundPowerLwaDb ??
+        getDefaultSourceBaseLwaDb(srcId, b.category),
       isCustom: false,
       active: ov?.active ?? true,
     });

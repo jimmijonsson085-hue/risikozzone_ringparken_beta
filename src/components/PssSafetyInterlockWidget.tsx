@@ -1,26 +1,23 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
   AlertOctagon,
-  AlertTriangle,
   BarChart3,
   CalendarClock,
-  CheckCircle2,
   FileAudio,
   HardHat,
   Languages,
   Lock,
   PlusCircle,
-  ShieldAlert,
   Truck,
   Unlock,
   Upload,
-  Users,
   Volume2,
   Wind,
 } from 'lucide-react';
 import {
   BuildingOperationalCategory,
   RingparkenBuildingUnit,
+  SimultaneousAlgedonicDispatch,
 } from '../types/dispersion';
 import { CavVentilationMode } from './CavExhaustImpactWidget';
 
@@ -165,6 +162,7 @@ export interface PssSafetyInterlockWidgetProps {
     nextCategory: BuildingOperationalCategory
   ) => void;
   onLogAlgedonicEvent?: (title: string, details: string) => void;
+  simultaneousDispatch?: SimultaneousAlgedonicDispatch | null;
 }
 
 export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> = ({
@@ -174,6 +172,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
   onChangeCavVentilationMode,
   onChangeBuildingCategory,
   onLogAlgedonicEvent,
+  simultaneousDispatch,
 }) => {
   // 1. Krybekælder-lås (PSS pkt. 7 ID 1.1) — BLOK-1
   const [blok1DeckRemoved, setBlok1DeckRemoved] = useState<boolean>(false);
@@ -367,7 +366,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
   };
 
   return (
-    <div className="p-4 rounded-md bg-slate-950/95 border-2 border-amber-500/60 space-y-4 shadow-xl">
+    <div className="p-4 rounded-md bg-[var(--surface-panel)] border border-[var(--border-subtle)] border-l-4 border-l-amber-400 space-y-4">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-3">
         <div className="space-y-1">
@@ -408,6 +407,46 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
         </div>
       </div>
 
+      {/* System 3 Simultaneous Algedonic Dispatch Banner (T1 Lockout & CAV Switch) */}
+      {simultaneousDispatch?.active && (
+        <div
+          data-testid="pss-simultaneous-system3-lockout-banner"
+          className={`p-3 rounded-md border-2 space-y-2 font-mono text-xs transition-colors ${
+            simultaneousDispatch.isBlinkingP1
+              ? 'bg-rose-950/90 border-rose-400 ring-1 ring-rose-500/60 animate-pulse'
+              : 'bg-rose-950/75 border-rose-700'
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 font-bold text-rose-100">
+              <Lock className="w-4 h-4 text-amber-300 shrink-0" />
+              <span>
+                SYSTEM 3 ALGEDONISK NØDBREMSE AKTIVERET (T0 → T1: {simultaneousDispatch.latencyMs} ms · Δt = 0 ms)
+              </span>
+            </div>
+            <span className="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-400 text-emerald-200 text-[11px] font-bold">
+              CAV → BALANCERET HEPA-OVERTRYK (TVANGS-SKIFT)
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
+            {simultaneousDispatch.system3State.haltedMachines.map((m) => (
+              <div
+                key={m.id}
+                className="p-2 rounded bg-[#0F141D] border border-rose-500/60 text-slate-200"
+              >
+                <div className="font-bold text-rose-200 flex items-center justify-between gap-1">
+                  <span className="truncate">{m.nameDa}</span>
+                  <span className="px-1 rounded bg-rose-600 text-white text-[11px] shrink-0">
+                    TVANGSSTOP
+                  </span>
+                </div>
+                <div className="text-slate-400 mt-0.5">{m.interlockRuleDa}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 4 Interlock Modules in 2x2 Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
         {/* 1. Krybekælder-lås (PSS pkt. 7 ID 1.1) */}
@@ -428,7 +467,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
               <span>1. Krybekælder-Lås · BLOK-1 (PSS pkt. 7 ID 1.1)</span>
             </span>
             <span
-              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+              className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
                 crawlspaceInterlockBreached
                   ? 'bg-rose-500 text-slate-950'
                   : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
@@ -501,7 +540,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
               <span>2. Uforseglet Afrømningsniveau (PSS pkt. 11.1)</span>
             </span>
             <span
-              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+              className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
                 unsealedGroundTrafficBreached
                   ? 'bg-amber-400 text-slate-950'
                   : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
@@ -532,7 +571,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
               <button
                 type="button"
                 onClick={() => setMachineryTrafficOnUnsealedGround((prev) => !prev)}
-                className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold border cursor-pointer ${
+                className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold border cursor-pointer ${
                   machineryTrafficOnUnsealedGround
                     ? 'bg-amber-400 text-slate-950 border-amber-300'
                     : 'bg-slate-950 text-slate-300 border-slate-700'
@@ -553,7 +592,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
                         : 'e_demolished_unsecured'
                     )
                   }
-                  className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 border border-slate-700 text-[10px] font-mono text-cyan-300 cursor-pointer"
+                  className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 border border-slate-700 text-[11px] font-mono text-cyan-300 cursor-pointer"
                 >
                   Skift Bygning 2 (d ↔ e)
                 </button>
@@ -576,7 +615,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
               <span>3. Samtidigheds- &amp; 5-Dages Varslingslås (PSS pkt. 7 ID 3.3 &amp; 3.4)</span>
             </span>
             <span
-              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+              className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
                 fiveDayNoticeBreached || concurrencyInterlockBreached
                   ? 'bg-rose-500 text-slate-950'
                   : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
@@ -607,7 +646,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
                       key={d}
                       type="button"
                       onClick={() => setFiveDayNoticeDaysSubmitted(d)}
-                      className={`px-2 py-0.5 rounded font-mono text-[10px] cursor-pointer ${
+                      className={`px-2 py-0.5 rounded font-mono text-[11px] cursor-pointer ${
                         fiveDayNoticeDaysSubmitted === d
                           ? d >= 5
                             ? 'bg-emerald-400 text-slate-950 font-bold'
@@ -634,7 +673,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
               <button
                 type="button"
                 onClick={() => setAdjacentRenovationShielded((prev) => !prev)}
-                className={`w-full mt-1 py-1 px-2 rounded font-mono text-[10px] font-bold border cursor-pointer ${
+                className={`w-full mt-1 py-1 px-2 rounded font-mono text-[11px] font-bold border cursor-pointer ${
                   adjacentRenovationShielded
                     ? 'bg-emerald-950/80 border-emerald-400 text-emerald-200'
                     : 'bg-rose-950/80 border-rose-400 text-rose-200'
@@ -648,7 +687,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
           </div>
 
           {concurrentPairs.length > 0 && (
-            <div className="text-[10px] font-mono text-slate-300 bg-slate-950/80 p-2 rounded border border-slate-800">
+            <div className="text-[11px] font-mono text-slate-300 bg-slate-950/80 p-2 rounded border border-slate-800">
               Tættest koblede d↔c konflikter:{' '}
               {concurrentPairs.slice(0, 3).map((p, idx) => (
                 <span key={idx} className="inline-block mr-2 text-amber-200">
@@ -679,7 +718,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
               >
                 <div className="min-w-[180px] flex-1">
                   <div className="font-bold text-white truncate">{row.companyName}</div>
-                  <div className="text-[10px] font-mono text-slate-400">
+                  <div className="text-[11px] font-mono text-slate-400">
                     {row.amkPersonDa} ·{' '}
                     <button
                       type="button"
@@ -694,7 +733,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
                 </div>
 
                 <div className="flex items-center gap-1.5 font-mono shrink-0">
-                  <span className="text-[10px] text-slate-400">Udeblivelser:</span>
+                  <span className="text-[11px] text-slate-400">Udeblivelser:</span>
                   <button
                     type="button"
                     onClick={() => updateMissedMeetings(row.id, -1)}
@@ -712,7 +751,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
                   >
                     +
                   </button>
-                  <span className="text-[10px] text-amber-300 font-bold w-20 text-right tabular-nums">
+                  <span className="text-[11px] text-amber-300 font-bold w-20 text-right tabular-nums">
                     {(row.missedMeetingsCount * 1000).toLocaleString('da-DK')} kr.
                   </span>
                 </div>
@@ -722,7 +761,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
 
           {/* 3-Language Safety Signage Control (PSS pkt. 11.2) */}
           <div className="pt-1 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[10px] font-mono text-slate-300 flex items-center gap-1">
+            <span className="text-[11px] font-mono text-slate-300 flex items-center gap-1">
               <Languages className="w-3.5 h-3.5 text-cyan-400" />
               <span>PSS pkt. 11.2 Skiltning (3 sprog påkrævet):</span>
             </span>
@@ -745,7 +784,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
                         [lang.key]: !prev[lang.key],
                       }))
                     }
-                    className={`px-2 py-0.5 rounded text-[10px] font-mono border cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono border cursor-pointer ${
                       active
                         ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200 font-bold'
                         : 'bg-rose-950/80 border-rose-500/70 text-rose-200 font-bold'
@@ -762,10 +801,10 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
 
       {/* NY KYBERNETISK SIKKERHEDSLÅS: CAV-Vakuumspærring ved Udendørs Spredningsfane (BR18 § 443 & DS 447) */}
       <div
-        className={`p-3.5 rounded-md border-2 space-y-2.5 transition-colors ${
+        className={`p-3.5 rounded-md border border-[var(--border-subtle)] border-l-4 space-y-2.5 transition-colors ${
           cavVacuumInterlockBreached
-            ? 'bg-rose-950/60 border-rose-500 shadow-lg'
-            : 'bg-emerald-950/35 border-emerald-500/60'
+            ? 'bg-rose-950/60 border-l-rose-500'
+            : 'bg-emerald-950/35 border-l-emerald-500'
         }`}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -781,7 +820,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
             </span>
           </div>
           <span
-            className={`px-2.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+            className={`px-2.5 py-0.5 rounded text-[11px] font-mono font-bold ${
               cavVacuumInterlockBreached
                 ? 'bg-rose-500 text-slate-950 animate-pulse'
                 : 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/50'
@@ -817,7 +856,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
               <span>Krav A: Øjeblikkeligt stop for mekanisk nedbrydning i medvind</span>
               <span>{upwindDemolitionStopped ? '✓ STOPPET' : '✕ KØRER I MEDVIND'}</span>
             </div>
-            <div className="text-[9.5px] text-slate-300 font-normal mt-0.5">
+            <div className="text-[11px] text-slate-300 font-normal mt-0.5">
               Standser 3 Hz betonknuser (PPV = 8,7 mm/s) og asbestfrigivelse ved S_out ≥ 0,5.
             </div>
           </button>
@@ -847,7 +886,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
                   : '✕ CAV VAKUUM (-45,3 Pa)'}
               </span>
             </div>
-            <div className="text-[9.5px] text-slate-300 font-normal mt-0.5">
+            <div className="text-[11px] text-slate-300 font-normal mt-0.5">
               Eliminerer vakuum-indsugning fra facaderevner og kælderskakte (z_NPL: 12,0 m → 0,0 m).
             </div>
           </button>
@@ -873,7 +912,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
               BRUD-GRAF (TIDSLINJE): 5-DAGES VARSLINGSKRAV (&gt;80 dB) &amp; ULOVLIG SAMTIDIG NEDRIVNING
             </span>
           </div>
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-rose-500/20 text-rose-200 border border-rose-500/40 font-bold">
+          <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-rose-500/20 text-rose-200 border border-rose-500/40 font-bold">
             {heavyNoiseHammerActive &&
             (fiveDayNoticeDaysSubmitted < 5 ||
               (concurrentPairs.length > 0 && !adjacentRenovationShielded))
@@ -889,7 +928,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
         </p>
 
         {/* 5-Day Notification Pre-Window + Operating Day Gantt Bars */}
-        <div className="space-y-2 pt-1 font-mono text-[10px]">
+        <div className="space-y-2 pt-1 font-mono text-[11px]">
           {/* Row 1: 5-Day Notification Requirement Bar */}
           <div className="space-y-1">
             <div className="flex items-center justify-between text-slate-300">
@@ -906,7 +945,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
                 return (
                   <div
                     key={dayNum}
-                    className={`rounded flex items-center justify-center border text-[9.5px] font-bold transition-colors ${
+                    className={`rounded flex items-center justify-center border text-[11px] font-bold transition-colors ${
                       isCovered
                         ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200'
                         : 'bg-rose-950/80 border-rose-500/80 text-rose-200 animate-pulse'
@@ -953,8 +992,8 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
                         : 'Normal baggrundsdrift'
                     }`}
                   >
-                    <div className="text-[9px]">{String(hour).padStart(2, '0')}:00</div>
-                    <div className="text-[8.5px] truncate">
+                    <div className="text-[11px]">{String(hour).padStart(2, '0')}:00</div>
+                    <div className="text-[11px] truncate">
                       {isIllegalConcurrent ? '⚡ BRUD' : isDiamondPeakHour ? '>80dB' : 'OK'}
                     </div>
                   </div>
@@ -974,12 +1013,12 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
               HISTORISKE .DBA STØJ-LOGS PR. BYGNING &amp; AUTOMATISK KORRELATION MED SIMULERET STØJ
             </span>
           </div>
-          <span className="text-[10px] font-mono text-slate-400">
+          <span className="text-[11px] font-mono text-slate-400">
             B&amp;K 2250 · Norsonic Nor140 · SVANTEK SV 977 (.DBA)
           </span>
         </div>
 
-        <div className="flex flex-wrap items-end gap-2 p-2 rounded bg-slate-900/90 border border-slate-800 text-[10px] font-mono">
+        <div className="flex flex-wrap items-end gap-2 p-2 rounded bg-slate-900/90 border border-slate-800 text-[11px] font-mono">
           <div className="space-y-0.5">
             <label className="block text-slate-400">Bygningsenhed (29 enheder):</label>
             <select
@@ -1097,7 +1136,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
           </button>
         </div>
 
-        <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 font-mono text-[10px]">
+        <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 font-mono text-[11px]">
           {dbaLogs.map((log) => (
             <div
               key={log.id}
@@ -1109,7 +1148,7 @@ export const PssSafetyInterlockWidget: React.FC<PssSafetyInterlockWidgetProps> =
                   <span>{log.fileName}</span>
                   <span className="text-slate-400 font-normal">· kl. {log.hourLabel}</span>
                 </div>
-                <div className="text-[9.5px] text-slate-400">
+                <div className="text-[11px] text-slate-400">
                   {log.buildingName} · {log.instrumentModel}
                 </div>
               </div>

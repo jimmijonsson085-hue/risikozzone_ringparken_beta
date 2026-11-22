@@ -1,12 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Camera,
   Clock,
+  FileText,
   GripHorizontal,
   Magnet,
   MapPin,
   MoveHorizontal,
   SlidersHorizontal,
+  Star,
   Wind,
+  Zap,
 } from 'lucide-react';
 import {
   AlgedonicObservation,
@@ -54,6 +58,7 @@ export function resolveObservationEvidenceCategory(
   if (obs.evidenceCategory) return obs.evidenceCategory;
   if (obs.photoEvidence?.evidenceCategory) return obs.photoEvidence.evidenceCategory;
   if (obs.pdfEvidence?.evidenceCategory) return obs.pdfEvidence.evidenceCategory;
+  if (obs.audioEvidence?.evidenceCategory) return obs.audioEvidence.evidenceCategory;
   if (obs.pdfEvidence) return 'Myndighedskorrespondance';
   if (obs.reporterRole.includes('AMR')) return 'AMR-Observation';
   if (obs.reporterRole.includes('Tilsyn') || obs.reporterRole.includes('Byggerådgiver')) {
@@ -521,7 +526,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
 
             {/* Live Dynamic Plume Scrubbing Readout Badge */}
             <div
-              className={`px-2 py-0.5 rounded text-[10px] font-mono flex items-center gap-1.5 border transition-colors ${
+              className={`px-2 py-0.5 rounded text-[11px] font-mono flex items-center gap-1.5 border transition-colors ${
                 activeDragTarget
                   ? 'bg-cyan-500/25 border-cyan-300 text-white shadow-sm'
                   : 'bg-slate-900 border-slate-700 text-slate-200'
@@ -560,7 +565,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                   onSelectHour(weatherTrendGustStats.peakGustHourIndex);
                 }
               }}
-              className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/50 text-amber-200 flex items-center gap-1 cursor-pointer transition-colors"
+              className="px-2 py-0.5 rounded text-[11px] font-mono bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/50 text-amber-200 flex items-center gap-1 cursor-pointer transition-colors"
               title="Klik for at hoppe direkte til døgnets højeste vindstød (Peak Wind Gust m/s)"
             >
               <Wind className="w-3 h-3 text-amber-400 shrink-0" />
@@ -577,7 +582,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
             <button
               type="button"
               onClick={() => setShowPeakGustTrendLine((v) => !v)}
-              className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold flex items-center gap-1 border transition-colors cursor-pointer ${
+              className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold flex items-center gap-1 border transition-colors cursor-pointer ${
                 showPeakGustTrendLine
                   ? 'bg-amber-400 text-slate-950 border-amber-200 font-bold shadow-xs'
                   : 'bg-slate-900 text-amber-300 border-amber-500/40 hover:bg-slate-800'
@@ -593,7 +598,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
             </button>
 
             {/* Sub-hour fine scrubbing buttons */}
-            <div className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded p-0.5 font-mono text-[10px]">
+            <div className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded p-0.5 font-mono text-[11px]">
               <button
                 type="button"
                 onClick={() => stepScrubByHours(-0.25)}
@@ -638,7 +643,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                   }`}
                   title={
                     markerDragMode === 'MOVE_EVIDENCE'
-                      ? 'Aktiv tilstand: Træk i en bevis-markør (⚡/📸/📄) for at flytte dens tidspunkt og se plume-korrelationen'
+                      ? 'Aktiv tilstand: Træk i en bevis-markør for at flytte dens tidspunkt og se plume-korrelationen'
                       : 'Skift mellem at spole med markører eller flytte et bevis-tidspunkt på tidslinjen'
                   }
                 >
@@ -653,7 +658,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
             </div>
 
             {/* Interactive Filter Controls for Evidence Types */}
-            <div className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded p-0.5 font-mono text-[10px]">
+            <div className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded p-0.5 font-mono text-[11px]">
               <button
                 type="button"
                 onClick={() => setFilterKind('ALL')}
@@ -675,7 +680,8 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                 }`}
                 title="Vis fysiske observationer / algedoniske signaler"
               >
-                <span>⚡ ({countsByKind.physical})</span>
+                <Zap className="w-3 h-3 shrink-0" />
+                <span>({countsByKind.physical})</span>
               </button>
               <button
                 type="button"
@@ -687,7 +693,8 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                 }`}
                 title="Vis AI-analyserede foto-beviser"
               >
-                <span>📸 ({countsByKind.photo})</span>
+                <Camera className="w-3 h-3 shrink-0" />
+                <span>({countsByKind.photo})</span>
               </button>
               <button
                 type="button"
@@ -699,14 +706,15 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                 }`}
                 title="Vis PDF-beviser (aktindsigt, mailkorrespondance & myndighedssvar)"
               >
-                <span>📄 ({countsByKind.pdf})</span>
+                <FileText className="w-3 h-3 shrink-0" />
+                <span>({countsByKind.pdf})</span>
               </button>
             </div>
 
             <button
               type="button"
               onClick={() => setShowExpandedDetailsInBar((prev) => !prev)}
-              className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 hover:border-slate-700 text-[10px] font-mono text-slate-300 cursor-pointer"
+              className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 hover:border-slate-700 text-[11px] font-mono text-slate-300 cursor-pointer"
             >
               {showExpandedDetailsInBar ? 'Skjul detalje' : 'Vis detalje'}
             </button>
@@ -742,7 +750,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                 '0'
               )}:00) for at opdatere sammenlignings-heatmappet på kortet`}
             >
-              <div className="px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-mono text-[9px] font-bold shadow-md border border-white whitespace-nowrap flex items-center gap-0.5">
+              <div className="px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-mono text-[11px] font-bold shadow-md border border-white whitespace-nowrap flex items-center gap-0.5">
                 <GripHorizontal className="w-2.5 h-2.5" />
                 <span>T_A {String(comparisonHourAIndex).padStart(2, '0')}:00</span>
               </div>
@@ -762,7 +770,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
             } m/s)`}
           >
             <div
-              className={`px-2 py-0.5 rounded-full font-mono text-[9.5px] font-bold shadow-lg border whitespace-nowrap flex items-center gap-1 transition-transform ${
+              className={`px-2 py-0.5 rounded-full font-mono text-[11px] font-bold shadow-lg border whitespace-nowrap flex items-center gap-1 transition-transform ${
                 activeDragTarget?.type === 'PLAYHEAD'
                   ? 'bg-cyan-300 text-slate-950 border-white scale-105'
                   : 'bg-cyan-400 text-slate-950 border-cyan-100 hover:scale-105'
@@ -774,8 +782,8 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                 {scrubbedTelemetry.timeLabel}
               </span>
             </div>
-            <div className="w-0.5 flex-1 bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.9)]" />
-            <div className="w-2.5 h-2.5 rounded-full bg-cyan-300 border-2 border-slate-950 -mt-1" />
+            <div className="w-0.5 flex-1 bg-cyan-300" />
+            <div className="w-2.5 h-2.5 rounded-full bg-cyan-300 border border-slate-950 -mt-1" />
           </div>
 
           {/* 24-Hour Synchronized Track Aligned with 00:00–23:00 Time-Slider + SVG Peak Wind Gust Trend Line */}
@@ -915,7 +923,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                     <div className="flex items-center justify-center gap-0.5 min-h-[14px] z-10">
                       {hm.isMeteoPeak && (
                         <span
-                          className="text-[10px] leading-none text-amber-300 font-bold cursor-grab active:cursor-grabbing"
+                          className="text-[11px] leading-none text-amber-300 font-bold cursor-grab active:cursor-grabbing"
                           title="Meteorologisk Spidsbelastning — Træk for at spole fra spidsen"
                         >
                           ★
@@ -956,10 +964,10 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                     </div>
 
                     {/* Bottom Row: Hour Label & Gust Readout on Selected/Peak */}
-                    <div className="w-full flex flex-col items-center justify-center text-[8px] font-mono leading-none z-10">
+                    <div className="w-full flex flex-col items-center justify-center text-[11px] font-mono leading-none z-10">
                       {showPeakGustTrendLine && (
                         <span
-                          className={`text-[7.5px] leading-tight ${
+                          className={`text-[11px] leading-tight ${
                             hm.windGustsMs > 10
                               ? 'text-rose-300 font-bold'
                               : isSelectedHour
@@ -992,7 +1000,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
 
           {/* Compact Weather-Trend Legend Strip */}
           {showPeakGustTrendLine && (
-            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[9.5px] font-mono text-slate-300 bg-slate-900/80 border border-slate-800/90 rounded px-2.5 py-1">
+            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-300 bg-slate-900/80 border border-slate-800/90 rounded px-2.5 py-1">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="flex items-center gap-1.5 text-amber-300 font-semibold">
                   <span className="inline-block w-3.5 h-1 rounded bg-amber-400" />
@@ -1056,7 +1064,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                       onSelectObservation(obs);
                     }}
                     title={`${obs.code} [${catTag}] (kl. ${obs.observedHourLabel}): ${obs.observationType} — S=${obs.plumeCorroboration.calculatedSumQuotient.toFixed(2)} (${dtLabel}) · Klik for at spole plume hertil`}
-                    className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all duration-300 ease-out cursor-pointer flex items-center gap-1 border ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono transition-all duration-300 ease-out cursor-pointer flex items-center gap-1 border ${
                       isSel
                         ? 'bg-slate-100 text-slate-950 border-white font-bold scale-[1.03] shadow-sm'
                         : kind === 'PHOTO'
@@ -1066,14 +1074,20 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                         : 'bg-fuchsia-950/60 text-fuchsia-300 border-fuchsia-500/40 hover:border-fuchsia-400'
                     }`}
                   >
-                    <span>
-                      {kind === 'PHOTO' ? '📸' : kind === 'PDF' ? '📄' : '⚡'}
+                    <span className="inline-flex items-center">
+                      {kind === 'PHOTO' ? (
+                        <Camera className="w-3 h-3 shrink-0" />
+                      ) : kind === 'PDF' ? (
+                        <FileText className="w-3 h-3 shrink-0" />
+                      ) : (
+                        <Zap className="w-3 h-3 shrink-0" />
+                      )}
                     </span>
                     <span>
                       kl. {obs.observedHourLabel} ({obs.code})
                     </span>
                     <span
-                      className={`px-1 py-0.2 rounded text-[8.5px] ${
+                      className={`px-1 py-0.2 rounded text-[11px] ${
                         isSel
                           ? 'bg-slate-900 text-cyan-300'
                           : 'bg-slate-900/80 text-emerald-300 border border-emerald-500/30'
@@ -1094,7 +1108,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                     onSelectHour(peakHourIndex);
                   }
                 }}
-                className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/50 font-semibold cursor-pointer"
+                className="px-2 py-0.5 rounded text-[11px] font-mono bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/50 font-semibold cursor-pointer"
                 title="Spol direkte til døgnets meteorologiske spidsbelastning"
               >
                 ★ Spids kl. {peakHourLabel} (S={peakSumQuotient.toFixed(2)})
@@ -1104,7 +1118,7 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                 <button
                   type="button"
                   onClick={onToggleHeatmapComparison}
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono border cursor-pointer ${
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono border cursor-pointer ${
                     showHeatmapComparison
                       ? 'bg-amber-400 text-slate-950 border-amber-200 font-bold'
                       : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-amber-400/60'
@@ -1154,21 +1168,33 @@ export const ForensicEvidenceTimelineWidget: React.FC<
           <p className="text-xs text-slate-300 leading-relaxed">
             Træk i den primære <strong>Plume-Markør (kl. {scrubbedTelemetry.timeLabel})</strong>, i{' '}
             <strong>T_A Sammenlignings-Markøren</strong> eller direkte i de enkelte{' '}
-            <strong>bevis-markører (⚡, 📸, 📄, ★)</strong> for at spole kontinuerligt frem og tilbage i
+            <strong>bevis-markører</strong> for at spole kontinuerligt frem og tilbage i
             dispersion-simuleringen og observere støvfanens rotation, udstrækning og koncentration opdatere
             sig dynamisk på 2D- og 3D-kortet.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-slate-300">
-          <span>⚡ Fysiske: {countsByKind.physical}</span>
+          <span className="inline-flex items-center gap-1">
+            <Zap className="w-3.5 h-3.5 text-fuchsia-300 shrink-0" />
+            <span>Fysiske: {countsByKind.physical}</span>
+          </span>
           <span aria-hidden="true">·</span>
-          <span>📸 Foto: {countsByKind.photo}</span>
+          <span className="inline-flex items-center gap-1">
+            <Camera className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
+            <span>Foto: {countsByKind.photo}</span>
+          </span>
           <span aria-hidden="true">·</span>
-          <span>📄 PDF: {countsByKind.pdf}</span>
+          <span className="inline-flex items-center gap-1">
+            <FileText className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
+            <span>PDF: {countsByKind.pdf}</span>
+          </span>
           <span aria-hidden="true">·</span>
-          <span className="text-amber-300 font-bold">
-            ★ Spids kl. {peakHourLabel} (S={peakSumQuotient.toFixed(2)})
+          <span className="text-amber-300 font-bold inline-flex items-center gap-1">
+            <Star className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              Spids kl. {peakHourLabel} (S={peakSumQuotient.toFixed(2)})
+            </span>
           </span>
         </div>
       </div>
@@ -1242,22 +1268,31 @@ export const ForensicEvidenceTimelineWidget: React.FC<
                         ·
                       </span>
                       <span
-                        className={
+                        className={`inline-flex items-center gap-1 ${
                           kind === 'PHOTO'
                             ? 'text-cyan-300 font-semibold'
                             : kind === 'PDF'
                             ? 'text-indigo-300 font-semibold'
                             : 'text-fuchsia-300 font-semibold'
-                        }
+                        }`}
                       >
-                        {kind === 'PHOTO'
-                          ? '📸 Foto-Bevis'
-                          : kind === 'PDF'
-                          ? '📄 PDF-Dokumentbevis'
-                          : '⚡ Fysisk Observation'}{' '}
-                        ({obs.code})
+                        {kind === 'PHOTO' ? (
+                          <Camera className="w-3.5 h-3.5 shrink-0" />
+                        ) : kind === 'PDF' ? (
+                          <FileText className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <Zap className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                        <span>
+                          {kind === 'PHOTO'
+                            ? 'Foto-Bevis'
+                            : kind === 'PDF'
+                            ? 'PDF-Dokumentbevis'
+                            : 'Fysisk Observation'}{' '}
+                          ({obs.code})
+                        </span>
                       </span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold">
+                      <span className="px-1.5 py-0.5 rounded text-[11px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold">
                         {catTag}
                       </span>
                     </div>

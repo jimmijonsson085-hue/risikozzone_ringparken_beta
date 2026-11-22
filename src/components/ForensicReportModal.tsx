@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
+  AlertTriangle,
+  Camera,
   Check,
   Copy,
   Download,
@@ -7,13 +9,19 @@ import {
   FileCheck2,
   FileDown,
   FileText,
+  Link2,
+  Lock,
   Printer,
   Radio,
   RefreshCw,
   Scale,
+  Share2,
   ShieldAlert,
   Sparkles,
+  Trash2,
+  Wind,
   X,
+  Zap,
 } from 'lucide-react';
 import {
   AlgedonicObservation,
@@ -31,15 +39,26 @@ import {
   downloadForensicJsonReport,
   generateForensicChainOfCustodyPdfReport,
   generateForensicPdfReport,
+  generateTop5CriticalSummaryPdfReport,
   renderForensicMapSnapshotDataUrl,
+  validateObservationPhotoEvidenceBinary,
 } from '../services/pdfExportService';
+import {
+  createSimulatedPublicShareLink,
+  loadSharedForensicLinks,
+  revokeSharedForensicLink,
+  SharedForensicReportRecord,
+  ShareLinkExpiryDays,
+} from '../services/forensicShareService';
+import { generateWeatherCorrelationPdfReport } from '../services/weatherCorrelationPdfService';
 import { LegalObjectionGeneratorModal } from './LegalObjectionGeneratorModal';
 
 export type ReportModalTab =
   | 'technical'
   | 'legal_submission'
   | 'chain_of_custody'
-  | 'legal_objections';
+  | 'legal_objections'
+  | 'summary_data';
 
 interface ForensicReportModalProps {
   isOpen: boolean;
@@ -54,6 +73,8 @@ interface ForensicReportModalProps {
   sha256Hash: string;
   groundingAnalysis: string;
   groundingPlaces: MapsGroundingPlace[];
+  validatePhotoEvidenceBinary?: boolean;
+  onToggleValidatePhotoEvidenceBinary?: () => void;
 }
 
 export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
@@ -69,6 +90,8 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
   sha256Hash,
   groundingAnalysis,
   groundingPlaces,
+  validatePhotoEvidenceBinary: externalValidatePhotoEvidenceBinary,
+  onToggleValidatePhotoEvidenceBinary,
 }) => {
   const [activeReportTab, setActiveReportTab] = useState<ReportModalTab>(initialTab);
   const [legalDocumentText, setLegalDocumentText] = useState<string>('');
@@ -79,10 +102,47 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
   const [copiedLegal, setCopiedLegal] = useState<boolean>(false);
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
   const [pdfExportSuccess, setPdfExportSuccess] = useState<boolean>(false);
+  const [internalValidatePhotoBinary, setInternalValidatePhotoBinary] = useState<boolean>(true);
+  const effectiveValidatePhotoBinary =
+    externalValidatePhotoEvidenceBinary !== undefined
+      ? externalValidatePhotoEvidenceBinary
+      : internalValidatePhotoBinary;
+  const handleToggleValidatePhotoBinary = () => {
+    if (onToggleValidatePhotoEvidenceBinary) {
+      onToggleValidatePhotoEvidenceBinary();
+    } else {
+      setInternalValidatePhotoBinary((v) => !v);
+    }
+  };
+  const missingPhotoEvidenceCount = useMemo(
+    () => observations.filter((obs) => !validateObservationPhotoEvidenceBinary(obs).isValid).length,
+    [observations]
+  );
   const [jsonExportSuccess, setJsonExportSuccess] = useState<boolean>(false);
   const [txtExportSuccess, setTxtExportSuccess] = useState<boolean>(false);
   const [chainOfCustodyPdfSuccess, setChainOfCustodyPdfSuccess] = useState<boolean>(false);
+  const [summaryPdfSuccess, setSummaryPdfSuccess] = useState<boolean>(false);
+  const [weatherCorrelationPdfSuccess, setWeatherCorrelationPdfSuccess] = useState<boolean>(false);
   const [immutabilityVerifiedAt, setImmutabilityVerifiedAt] = useState<string>('');
+  const [isSharePanelOpen, setIsSharePanelOpen] = useState<boolean>(false);
+  const [selectedShareEntryId, setSelectedShareEntryId] = useState<string>('');
+  const [shareExpiryDays, setShareExpiryDays] = useState<ShareLinkExpiryDays>(30);
+  const [isGeneratingShareLink, setIsGeneratingShareLink] = useState<boolean>(false);
+  const [activeSharedLink, setActiveSharedLink] = useState<SharedForensicReportRecord | null>(null);
+  const [sharedLinksHistory, setSharedLinksHistory] = useState<SharedForensicReportRecord[]>(() =>
+    loadSharedForensicLinks()
+  );
+  const [copiedShareUrl, setCopiedShareUrl] = useState<boolean>(false);
+
+  const top5CriticalObservations = useMemo(() => {
+    return [...observations]
+      .sort(
+        (a, b) =>
+          (b.plumeCorroboration?.calculatedSumQuotient ?? 0) -
+          (a.plumeCorroboration?.calculatedSumQuotient ?? 0)
+      )
+      .slice(0, 5);
+  }, [observations]);
 
   const chainOfCustodyLedger = useMemo(
     () =>
@@ -116,11 +176,96 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
     window.setTimeout(() => setChainOfCustodyPdfSuccess(false), 4000);
   };
 
+  const handleExportTop5SummaryPdf = () => {
+    generateTop5CriticalSummaryPdfReport({
+      dateIso: weatherDataset.dateIso,
+      hourLabel: simulation.currentWeather.hourLabel,
+      top5Observations: top5CriticalObservations,
+      maxSiteSumQuotient: simulation.maxSiteSumQuotient,
+      sha256Hash,
+    });
+    setSummaryPdfSuccess(true);
+    window.setTimeout(() => setSummaryPdfSuccess(false), 3500);
+  };
+
   useEffect(() => {
     if (isOpen && initialTab) {
       setActiveReportTab(initialTab);
     }
   }, [isOpen, initialTab]);
+
+  const shareableForensicEntries = useMemo(() => {
+    const obsItems = observations.map((obs) => ({
+      id: obs.id,
+      code: obs.code,
+      title: `${obs.code} · ${obs.observationType} (${obs.locationLabel})`,
+      observedTimestampLabel: `${obs.observedDateIso} kl. ${obs.observedHourLabel}`,
+      sha256Signature: obs.sha256Signature,
+      sumQuotient: obs.plumeCorroboration?.calculatedSumQuotient ?? 0,
+    }));
+    const fullStateItem = {
+      id: 'FULL-FORENSIC-STATE',
+      code: `PSS-${weatherDataset.dateIso}-${simulation.currentWeather.hourLabel.replace(':', '')}`,
+      title: `Samlet Retsmedicinsk Tilstandsrapport (${weatherDataset.dateIso} kl. ${simulation.currentWeather.hourLabel})`,
+      observedTimestampLabel: `${weatherDataset.dateIso} kl. ${simulation.currentWeather.hourLabel}`,
+      sha256Signature: sha256Hash,
+      sumQuotient: simulation.maxSiteSumQuotient,
+    };
+    return [...obsItems, fullStateItem];
+  }, [observations, weatherDataset.dateIso, simulation.currentWeather.hourLabel, simulation.maxSiteSumQuotient, sha256Hash]);
+
+  useEffect(() => {
+    if (!selectedShareEntryId || !shareableForensicEntries.some((e) => e.id === selectedShareEntryId)) {
+      const preferred = top5CriticalObservations[0]?.id ?? shareableForensicEntries[0]?.id ?? 'FULL-FORENSIC-STATE';
+      setSelectedShareEntryId(preferred);
+    }
+  }, [selectedShareEntryId, shareableForensicEntries, top5CriticalObservations]);
+
+  const handleShareForensicEntry = useCallback(
+    async (entryIdOverride?: string, expiryOverride?: ShareLinkExpiryDays) => {
+      const targetId = entryIdOverride || selectedShareEntryId || shareableForensicEntries[0]?.id;
+      const targetEntry =
+        shareableForensicEntries.find((e) => e.id === targetId) || shareableForensicEntries[0];
+      if (!targetEntry) return;
+
+      setSelectedShareEntryId(targetEntry.id);
+      setIsSharePanelOpen(true);
+      setIsGeneratingShareLink(true);
+      try {
+        const record = await createSimulatedPublicShareLink({
+          entryId: targetEntry.id,
+          entryCode: targetEntry.code,
+          entryTitle: targetEntry.title,
+          observedTimestampLabel: targetEntry.observedTimestampLabel,
+          entrySha256Signature: targetEntry.sha256Signature,
+          expiryDays: expiryOverride ?? shareExpiryDays,
+        });
+        setActiveSharedLink(record);
+        setSharedLinksHistory(loadSharedForensicLinks());
+      } finally {
+        setIsGeneratingShareLink(false);
+      }
+    },
+    [selectedShareEntryId, shareableForensicEntries, shareExpiryDays]
+  );
+
+  const handleCopyShareUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedShareUrl(true);
+      window.setTimeout(() => setCopiedShareUrl(false), 2500);
+    } catch {
+      // Ignore clipboard errors in restricted frames
+    }
+  };
+
+  const handleRevokeShareUrl = (shareId: string) => {
+    const updated = revokeSharedForensicLink(shareId);
+    setSharedLinksHistory(updated);
+    if (activeSharedLink?.shareId === shareId) {
+      setActiveSharedLink((prev) => (prev ? { ...prev, revoked: true } : null));
+    }
+  };
 
   const { currentWeather, receptorExposures, legalViolations, puff24h, maxSiteSumQuotient } =
     simulation;
@@ -354,12 +499,26 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
         sha256Hash,
         legalDocumentText: effectiveLegalDocumentText,
         groundingPlaces: displayedPlaces,
+        validatePhotoEvidenceBinary: effectiveValidatePhotoBinary,
       });
       setPdfExportSuccess(true);
       window.setTimeout(() => setPdfExportSuccess(false), 2500);
     } finally {
       setIsExportingPdf(false);
     }
+  };
+
+  const handleGenerateWeatherCorrelationPdf = () => {
+    generateWeatherCorrelationPdfReport({
+      weatherDataset,
+      simulation,
+      sources,
+      receptors,
+      observations,
+      sha256Hash,
+    });
+    setWeatherCorrelationPdfSuccess(true);
+    window.setTimeout(() => setWeatherCorrelationPdfSuccess(false), 2800);
   };
 
   return (
@@ -375,6 +534,33 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
             </h2>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-testid="modal-photo-validation-toggle"
+              aria-pressed={effectiveValidatePhotoBinary}
+              onClick={handleToggleValidatePhotoBinary}
+              className={`px-2.5 py-1.5 rounded text-xs font-mono font-bold flex items-center gap-1.5 border transition-colors cursor-pointer ${
+                effectiveValidatePhotoBinary
+                  ? missingPhotoEvidenceCount > 0
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-100'
+                    : 'bg-emerald-500/20 border-emerald-400 text-emerald-100'
+                  : 'bg-slate-900 border-slate-700 text-slate-300'
+              }`}
+              title="Kontrollér om samtlige observationer har gyldig foto-bevis binær og flag mangler i den eksporterede PDF"
+            >
+              {effectiveValidatePhotoBinary && missingPhotoEvidenceCount > 0 ? (
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+              ) : (
+                <Camera className="w-3.5 h-3.5 shrink-0" />
+              )}
+              <span>
+                {effectiveValidatePhotoBinary
+                  ? missingPhotoEvidenceCount > 0
+                    ? `Foto-Validér TIL (${missingPhotoEvidenceCount} mangler)`
+                    : 'Foto-Validér TIL (OK)'
+                  : 'Foto-Validér FRA'}
+              </span>
+            </button>
             <button
               type="button"
               onClick={handleExportFormattedPdf}
@@ -405,11 +591,42 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
             </button>
             <button
               type="button"
+              data-testid="forensic-generate-weather-correlation-btn"
+              onClick={handleGenerateWeatherCorrelationPdf}
+              className="px-3 py-1.5 rounded bg-sky-500/90 text-slate-950 text-xs font-bold hover:bg-sky-400 transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+              title="Generér Vejr-Korrelationsrapport: Udtrækker 24t vind-støj-støv korrelationsdata (Pearson r, L_Aeq, L_AFmax og sumkvotient S) og eksporterer som detaljeret PDF-oversigt"
+            >
+              <Wind className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                {weatherCorrelationPdfSuccess
+                  ? '✓ Vejr-Korrelationsrapport Downloadet!'
+                  : 'Generér Vejr-Korrelationsrapport'}
+              </span>
+            </button>
+            <button
+              type="button"
               onClick={handleDownloadJson}
               className="px-3 py-1.5 rounded bg-cyan-500 text-slate-950 text-xs font-semibold hover:bg-cyan-400 transition-colors flex items-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5" />
               <span>{jsonExportSuccess ? '✓ JSON Downloadet!' : 'Download JSON'}</span>
+            </button>
+            <button
+              type="button"
+              data-testid="forensic-share-report-btn"
+              onClick={() => {
+                void handleShareForensicEntry();
+              }}
+              disabled={isGeneratingShareLink}
+              className={`px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1.5 border cursor-pointer disabled:opacity-50 ${
+                isSharePanelOpen && activeSharedLink
+                  ? 'bg-indigo-500 text-white border-indigo-300'
+                  : 'bg-indigo-600/90 hover:bg-indigo-500 text-white border-indigo-400/70'
+              }`}
+              title="Del Rapport: Generér et sikkert skrivebeskyttet offentligt link med SHA-256 verifikations-token til den valgte forensiske post"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>{isGeneratingShareLink ? 'Genererer Link...' : 'Del Rapport'}</span>
             </button>
             <button
               type="button"
@@ -489,12 +706,324 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
               4. EU- &amp; Miljøretlig Klage- &amp; Påbudsgenerator (Waddenzee C-127/02 · L 69 · C-417/23)
             </span>
           </button>
+
+          <button
+            type="button"
+            data-testid="report-tab-summary-data"
+            onClick={() => setActiveReportTab('summary_data')}
+            className={`px-3.5 py-1.5 rounded text-xs font-semibold flex items-center gap-2 transition-colors ${
+              activeReportTab === 'summary_data'
+                ? 'bg-sky-400 text-slate-950 shadow-xs font-bold'
+                : 'bg-slate-950 text-sky-300 border border-sky-500/50 hover:bg-slate-800'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>
+              5. Summary Data (Top {top5CriticalObservations.length} Kritiske · SumQuotient)
+            </span>
+          </button>
         </div>
+
+        {/* Simulated Public URL Share Report Panel */}
+        {isSharePanelOpen && (
+          <div
+            data-testid="forensic-share-report-panel"
+            className="px-6 py-3 bg-[#11192B] border-b border-indigo-500/50 font-mono text-[11px] tabular-nums space-y-2.5 no-print shrink-0"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-indigo-200 font-bold uppercase">
+                <Lock className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span>Sikker Offentlig Link-Deling (Simuleret URL-Delingstjeneste · ISO/IEC 27037)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSharePanelOpen(false)}
+                className="text-slate-400 hover:text-white p-0.5 cursor-pointer"
+                aria-label="Luk delingspanel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-slate-300 font-semibold shrink-0" htmlFor="share-entry-select">
+                Valgt forensisk post:
+              </label>
+              <select
+                id="share-entry-select"
+                data-testid="share-entry-select"
+                value={selectedShareEntryId}
+                onChange={(e) => setSelectedShareEntryId(e.target.value)}
+                className="flex-1 min-w-[240px] px-2.5 py-1.5 rounded bg-slate-950 border border-slate-700 text-slate-100 text-[11px] focus:outline-none focus:border-indigo-400"
+              >
+                {shareableForensicEntries.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.title} · S={item.sumQuotient.toFixed(2)} ({item.observedTimestampLabel})
+                  </option>
+                ))}
+              </select>
+
+              <select
+                aria-label="Link-gyldighed"
+                value={shareExpiryDays}
+                onChange={(e) => setShareExpiryDays(Number(e.target.value) as ShareLinkExpiryDays)}
+                className="px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-slate-200 text-[11px] focus:outline-none focus:border-indigo-400"
+              >
+                <option value={7}>Gyldig 7 dage</option>
+                <option value={30}>Gyldig 30 dage</option>
+                <option value={90}>Gyldig 90 dage</option>
+              </select>
+
+              <button
+                type="button"
+                data-testid="share-generate-link-btn"
+                onClick={() => {
+                  void handleShareForensicEntry(selectedShareEntryId, shareExpiryDays);
+                }}
+                disabled={isGeneratingShareLink}
+                className="px-3 py-1.5 rounded bg-indigo-500 hover:bg-indigo-400 text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                <span>{isGeneratingShareLink ? 'Genererer...' : 'Generér Offentligt Link'}</span>
+              </button>
+            </div>
+
+            {activeSharedLink && (
+              <div
+                data-testid="share-generated-link-box"
+                className={`p-2.5 rounded border space-y-1.5 ${
+                  activeSharedLink.revoked
+                    ? 'bg-rose-950/35 border-rose-500/50'
+                    : 'bg-slate-950/90 border-indigo-400/55'
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`px-1.5 py-0.5 rounded font-bold ${
+                        activeSharedLink.revoked
+                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/50'
+                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50'
+                      }`}
+                    >
+                      {activeSharedLink.revoked ? 'TILBAGEKALDT' : 'AKTIVT SIKKERT LINK'}
+                    </span>
+                    <span className="text-indigo-200 font-bold">{activeSharedLink.entryCode}</span>
+                    <span className="text-slate-400">
+                      Udløber: {activeSharedLink.expiresAtIso.slice(0, 10)} ({activeSharedLink.expiryDays}d)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {!activeSharedLink.revoked && (
+                      <button
+                        type="button"
+                        data-testid="share-copy-public-url-btn"
+                        onClick={() => {
+                          void handleCopyShareUrl(activeSharedLink.publicUrl);
+                        }}
+                        className="px-2.5 py-1 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        {copiedShareUrl ? (
+                          <>
+                            <Check className="w-3 h-3" />
+                            <span>✓ Link Kopieret!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Kopiér Link</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                    {!activeSharedLink.revoked && (
+                      <button
+                        type="button"
+                        onClick={() => handleRevokeShareUrl(activeSharedLink.shareId)}
+                        className="px-2 py-1 rounded bg-slate-900 hover:bg-rose-950 border border-slate-700 hover:border-rose-500/60 text-slate-300 hover:text-rose-200 flex items-center gap-1 cursor-pointer"
+                        title="Tilbagekald delt link"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Tilbagekald</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  data-testid="share-generated-public-url"
+                  className="p-2 rounded bg-[#090D16] border border-slate-800 text-cyan-300 break-all select-all font-mono"
+                >
+                  {activeSharedLink.publicUrl}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 text-slate-400">
+                  <span>{activeSharedLink.accessScopeLabel}</span>
+                  <span className="text-emerald-300">
+                    Token SHA-256: {activeSharedLink.securityTokenHash.slice(0, 20)}...
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {sharedLinksHistory.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5 text-slate-400">
+                <span>Tidligere links ({sharedLinksHistory.length}):</span>
+                {sharedLinksHistory.slice(0, 4).map((hist) => (
+                  <button
+                    key={hist.shareId}
+                    type="button"
+                    onClick={() => setActiveSharedLink(hist)}
+                    className={`px-2 py-0.5 rounded border cursor-pointer ${
+                      activeSharedLink?.shareId === hist.shareId
+                        ? 'bg-indigo-500/25 border-indigo-400 text-indigo-200 font-bold'
+                        : hist.revoked
+                        ? 'bg-slate-900 border-slate-800 text-slate-500 line-through'
+                        : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-indigo-400/50'
+                    }`}
+                  >
+                    {hist.entryCode} ({hist.shareId})
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Printable Document Body */}
         <div className="p-6 overflow-y-auto space-y-6 text-slate-200 text-sm">
-          {/* TAB 4: AUTOMATISK EU- & MILJØRETLIG INDSIGELSES- OG PÅBUDSGENERATOR */}
-          {activeReportTab === 'legal_objections' ? (
+          {/* TAB 5: SUMMARY DATA — TOP 5 MOST CRITICAL OBSERVATIONS BY SUMQUOTIENT */}
+          {activeReportTab === 'summary_data' ? (
+            <div data-testid="forensic-summary-data-panel" className="space-y-4">
+              <div className="p-4 rounded-md bg-[var(--surface-card)] border border-[var(--border-subtle)] flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
+                <div className="space-y-1">
+                  <div className="text-xs font-mono uppercase tracking-wider text-sky-300 font-bold flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-sky-400" />
+                    <span>
+                      SUMMARY DATA · TOP 5 MEST KRITISKE SPREDNINGSHÆNDELSER (RANGORDNET EFTER SUMQUOTIENT S)
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Udtrækker automatisk de op til 5 alvorligste registrerede spredningsobservationer
+                    ({observations.length} i alt) sorteret faldende efter beregnet{' '}
+                    <strong>SumQuotient (S)</strong> i en kompakt, myndighedsklar PDF-tabel.
+                    {observations.length < 5 && observations.length > 0
+                      ? ` (Viser alle ${observations.length} registrerede hændelser).`
+                      : ''}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  data-testid="export-summary-data-pdf-btn"
+                  onClick={handleExportTop5SummaryPdf}
+                  className="px-3.5 py-2 rounded bg-sky-400 hover:bg-sky-300 text-slate-950 text-xs font-mono font-bold transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <FileDown className="w-4 h-4" />
+                  <span>
+                    {summaryPdfSuccess
+                      ? '✓ Top-5 PDF-Tabel Downloadet!'
+                      : 'Eksportér Top-5 Kritisk PDF-Tabel'}
+                  </span>
+                </button>
+              </div>
+
+              {top5CriticalObservations.length === 0 ? (
+                <div className="p-5 rounded-md bg-slate-900/80 border border-slate-800 text-xs font-mono text-slate-300">
+                  Ingen spredningsobservationer er registreret endnu. Opret en observation på kortet eller via Beviser-fanen for at udfylde Top-5 Summary Data tabellen.
+                </div>
+              ) : (
+                <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-panel)] overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs font-mono tabular-nums">
+                    <thead className="bg-[var(--surface-card)] text-slate-300 border-b border-[var(--border-subtle)]">
+                      <tr>
+                        <th className="py-2.5 px-3 font-bold">Rang</th>
+                        <th className="py-2.5 px-3 font-bold">Obs-Kode</th>
+                        <th className="py-2.5 px-3 font-bold">Tidspunkt</th>
+                        <th className="py-2.5 px-3 font-bold">Sted / Receptor</th>
+                        <th className="py-2.5 px-3 font-bold">Hændelsestype</th>
+                        <th className="py-2.5 px-3 font-bold text-right">SumQuotient (S)</th>
+                        <th className="py-2.5 px-3 font-bold">Vind &amp; Fane</th>
+                        <th className="py-2.5 px-3 font-bold">Fanestatus</th>
+                        <th className="py-2.5 px-3 font-bold">SHA-256</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {top5CriticalObservations.map((obs, idx) => {
+                        const sVal = obs.plumeCorroboration?.calculatedSumQuotient ?? 0;
+                        const isCrit = sVal >= 1.0;
+                        const w = obs.weatherSnapshot;
+                        return (
+                          <tr
+                            key={obs.id}
+                            className={isCrit ? 'bg-rose-950/25' : 'hover:bg-slate-900/60'}
+                          >
+                            <td className="py-2.5 px-3 font-bold text-sky-300">#{idx + 1}</td>
+                            <td className="py-2.5 px-3 font-bold text-white whitespace-nowrap">
+                              {obs.code}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-300 whitespace-nowrap">
+                              {obs.observedDateIso} kl. {obs.observedHourLabel}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-200">
+                              <div className="font-semibold">{obs.locationLabel}</div>
+                              <div className="text-[11px] font-sans text-slate-400">
+                                {obs.description.slice(0, 72)}
+                                {obs.description.length > 72 ? '...' : ''}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-200">{obs.observationType}</td>
+                            <td
+                              className={`py-2.5 px-3 text-right font-extrabold whitespace-nowrap ${
+                                isCrit
+                                  ? 'text-rose-400'
+                                  : sVal >= 0.5
+                                  ? 'text-amber-300'
+                                  : 'text-slate-200'
+                              }`}
+                            >
+                              S = {sVal.toFixed(2)}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-300 whitespace-nowrap">
+                              {w.windSpeed10m.toFixed(1)} m/s · {w.windDirection10m}°
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              {obs.plumeCorroboration?.isInsideMathematicalPlume ? (
+                                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold">
+                                  I FANE
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px]">
+                                  RANDZONE
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-[11px] text-emerald-300 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <span>{obs.sha256Signature.slice(0, 12)}...</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void handleShareForensicEntry(obs.id);
+                                  }}
+                                  className="px-1.5 py-0.5 rounded bg-indigo-500/20 hover:bg-indigo-500/35 border border-indigo-400/50 text-indigo-200 font-bold inline-flex items-center gap-1 cursor-pointer"
+                                  title={`Generér sikkert offentligt link for ${obs.code}`}
+                                >
+                                  <Share2 className="w-3 h-3" />
+                                  <span>Del</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : /* TAB 4: AUTOMATISK EU- & MILJØRETLIG INDSIGELSES- OG PÅBUDSGENERATOR */
+          activeReportTab === 'legal_objections' ? (
             <LegalObjectionGeneratorModal
               embeddedMode
               weatherDataset={weatherDataset}
@@ -571,20 +1100,20 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
               {/* Statutory Verification Badges */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 font-mono text-[11px]">
                 <div className="p-2.5 bg-slate-900/90 border border-slate-800 rounded">
-                  <div className="text-[9px] text-slate-400">TIDSPUNKT &amp; VIND</div>
+                  <div className="text-[11px] text-slate-400">TIDSPUNKT &amp; VIND</div>
                   <div className="font-bold text-cyan-300 mt-0.5">
                     kl. {currentWeather.hourLabel} · {currentWeather.windSpeed10m} m/s (
                     {currentWeather.windDirection10m}°)
                   </div>
                 </div>
                 <div className="p-2.5 bg-slate-900/90 border border-slate-800 rounded">
-                  <div className="text-[9px] text-slate-400">TEMP &amp; NEDBØR</div>
+                  <div className="text-[11px] text-slate-400">TEMP &amp; NEDBØR</div>
                   <div className="font-bold text-white mt-0.5">
                     {currentWeather.temperature2m} °C · {currentWeather.precipitation} mm/t
                   </div>
                 </div>
                 <div className="p-2.5 bg-slate-900/90 border border-slate-800 rounded">
-                  <div className="text-[9px] text-slate-400">BEK 613/2026 SUMFORMEL</div>
+                  <div className="text-[11px] text-slate-400">BEK 613/2026 SUMFORMEL</div>
                   <div
                     className={`font-bold mt-0.5 ${
                       maxSiteSumQuotient >= 1.0 ? 'text-rose-400' : 'text-amber-300'
@@ -594,15 +1123,15 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                   </div>
                 </div>
                 <div className="p-2.5 bg-slate-900/90 border border-slate-800 rounded">
-                  <div className="text-[9px] text-slate-400">ASBESTPRØVER</div>
+                  <div className="text-[11px] text-slate-400">ASBESTPRØVER</div>
                   <div className="font-bold text-emerald-300 mt-0.5">3.-Part (01.07.2026)</div>
                 </div>
                 <div className="p-2.5 bg-slate-900/90 border border-slate-800 rounded">
-                  <div className="text-[9px] text-slate-400">STRAFANSVAR</div>
+                  <div className="text-[11px] text-slate-400">STRAFANSVAR</div>
                   <div className="font-bold text-amber-300 mt-0.5">Lovforslag L 69 (4x)</div>
                 </div>
                 <div className="p-2.5 bg-slate-900/90 border border-slate-800 rounded">
-                  <div className="text-[9px] text-slate-400">SANKTIONSHJEMMEL</div>
+                  <div className="text-[11px] text-slate-400">SANKTIONSHJEMMEL</div>
                   <div className="font-bold text-rose-400 mt-0.5">Entreprenørstop</div>
                 </div>
               </div>
@@ -702,7 +1231,7 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
               {/* Merkle-Root & Cryptographic Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs font-mono">
                 <div className="p-3 rounded bg-slate-950 border border-slate-800">
-                  <div className="text-[10px] text-slate-400 uppercase">
+                  <div className="text-[11px] text-slate-400 uppercase">
                     Samlet Antal SHA-256 Poster i Log-Tabel
                   </div>
                   <div className="text-sm font-bold text-emerald-300 mt-0.5">
@@ -710,7 +1239,7 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                   </div>
                 </div>
                 <div className="p-3 rounded bg-slate-950 border border-slate-800">
-                  <div className="text-[10px] text-slate-400 uppercase">
+                  <div className="text-[11px] text-slate-400 uppercase">
                     Chain Merkle-Root Signatur (SHA-256)
                   </div>
                   <div className="text-[11px] font-bold text-cyan-300 mt-0.5 break-all">
@@ -718,14 +1247,14 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                   </div>
                 </div>
                 <div className="p-3 rounded bg-slate-950 border border-emerald-500/40">
-                  <div className="text-[10px] text-emerald-300 uppercase">
+                  <div className="text-[11px] text-emerald-300 uppercase">
                     Bevis for Uforanderlighed Over Tid
                   </div>
                   <div className="text-xs font-bold text-emerald-400 mt-0.5">
                     ✓ BEVIST UFORANDRET OVER TID (100% SHA-256 MATCH)
                   </div>
                   {immutabilityVerifiedAt && (
-                    <div className="text-[10px] text-slate-400 mt-0.5">
+                    <div className="text-[11px] text-slate-400 mt-0.5">
                       Re-hash kontrol udført: {immutabilityVerifiedAt}
                     </div>
                   )}
@@ -751,37 +1280,37 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                             #{String(row.seqNo).padStart(3, '0')}
                           </div>
                           <div className="text-indigo-300 font-bold">{row.entryId}</div>
-                          <div className="text-[9px] text-slate-500 mt-0.5">
+                          <div className="text-[11px] text-slate-500 mt-0.5">
                             Reg.: {row.registeredUtcIso.slice(0, 19).replace('T', ' ')}
                           </div>
                         </td>
                         <td className="py-2.5 px-2.5 align-top">
-                          <div className="text-[10px] font-bold text-emerald-400">
+                          <div className="text-[11px] font-bold text-emerald-400">
                             {row.entryTypeLabel} · Obs: {row.timestampIso}
                           </div>
                           <div className="text-slate-100 font-semibold mt-0.5">
                             {row.sourceOrSubject}
                           </div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">
+                          <div className="text-[11px] text-slate-400 mt-0.5">
                             {row.referenceOrLocation}
                           </div>
-                          <div className="text-[9px] text-cyan-300/80 bg-slate-900/80 border border-slate-800 rounded px-1.5 py-0.5 mt-1 break-all">
+                          <div className="text-[11px] text-cyan-300/80 bg-slate-900/80 border border-slate-800 rounded px-1.5 py-0.5 mt-1 break-all">
                             {row.canonicalPayloadFingerprint}
                           </div>
                         </td>
                         <td className="py-2.5 px-2.5 align-top">
-                          <div className="p-1.5 rounded bg-slate-900 border border-cyan-500/30 text-[10px] text-cyan-200 break-all select-all leading-tight">
+                          <div className="p-1.5 rounded bg-slate-900 border border-cyan-500/30 text-[11px] text-cyan-200 break-all select-all leading-tight">
                             {row.sha256Signature}
                           </div>
                         </td>
                         <td className="py-2.5 px-2.5 align-top whitespace-nowrap">
-                          <div className="text-[9px] text-slate-400">
+                          <div className="text-[11px] text-slate-400">
                             Prev: {row.previousChainHash.slice(0, 14)}...
                           </div>
-                          <div className="text-[9px] text-indigo-300">
+                          <div className="text-[11px] text-indigo-300">
                             Chain: {row.chainedAuditDigest.slice(0, 14)}...
                           </div>
-                          <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/50 text-[9px] font-bold text-emerald-300">
+                          <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/50 text-[11px] font-bold text-emerald-300">
                             ✓ {row.immutabilityProofText}
                           </div>
                         </td>
@@ -810,7 +1339,7 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                 </div>
 
                 <div className="bg-slate-950 border border-slate-800 px-3.5 py-2.5 rounded text-right font-mono">
-                  <div className="text-[10px] text-slate-400 uppercase">
+                  <div className="text-[11px] text-slate-400 uppercase">
                     MAKSIMAL SUMFORMEL-KVOTIENT (BEK 613/2026)
                   </div>
                   <div
@@ -839,57 +1368,57 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
               </div>
 
               {/* Dedicated Appendix Section: Bilag: Bygningsfysisk Indeklima-Korrelation (DIN 4150-3, BR18 § 443 CAV-Undertryk & Termisk Skorstenseffekt) */}
-              <div className="border-2 border-amber-500/50 bg-slate-900/95 p-3.5 rounded-md font-mono text-xs space-y-2.5">
+              <div className="border border-[var(--border-subtle)] border-l-4 border-l-amber-400 bg-[var(--surface-card)] p-3.5 rounded-md font-mono text-xs space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-amber-300 font-bold uppercase tracking-wider">
                     Bilag: Bygningsfysisk Indeklima-Korrelation (DIN 4150-3, BR18 § 443 CAV-Undertryk &amp; Termisk Skorstenseffekt)
                   </div>
-                  <span className="px-2 py-0.5 rounded bg-rose-600/90 text-white text-[10px] font-bold">
+                  <span className="px-2 py-0.5 rounded bg-rose-600/90 text-white text-[11px] font-bold">
                     S_out = {maxSiteSumQuotient.toFixed(2)} · S_in = 3,15 (ULOVLIG ≥ 1,0)
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-300">
                   Primær Fokus-Receptor: <strong className="text-cyan-300">Alle beboede naboblokke (Afd. 23, 24, 26, 32, Rødtjørnevej 2 &amp; Kierulffsvej 4)</strong>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[10.5px]">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
                   <div className="p-2 rounded bg-slate-950/90 border border-slate-800">
-                    <div className="text-slate-400 text-[9.5px]">1. DIN 4150-3 VIBRATIONS-KOBLING</div>
+                    <div className="text-slate-400 text-[11px]">1. DIN 4150-3 VIBRATIONS-KOBLING</div>
                     <div className="text-white font-bold mt-0.5">
                       d = 32 m → PPV = 8,7 mm/s (@ 3 Hz)
                     </div>
-                    <div className="text-cyan-300 text-[10px]">
+                    <div className="text-cyan-300 text-[11px]">
                       q_75,deg = 6,57 m³/(h·m²)
                     </div>
                   </div>
                   <div className="p-2 rounded bg-slate-950/90 border border-slate-800">
-                    <div className="text-slate-400 text-[9.5px]">2. BR18 § 443 &amp; DS 447 CAV-VAKUUM</div>
+                    <div className="text-slate-400 text-[11px]">2. BR18 § 443 &amp; DS 447 CAV-VAKUUM</div>
                     <div className="text-rose-300 font-bold mt-0.5">
                       ΔP_CAV = -45,3 Pa
                     </div>
-                    <div className="text-amber-300 text-[10px]">
+                    <div className="text-amber-300 text-[11px]">
                       Skakt-indsugning Q_op = 78,1 m³/h
                     </div>
                   </div>
                   <div className="p-2 rounded bg-slate-950/90 border border-slate-800">
-                    <div className="text-slate-400 text-[9.5px]">3. TERMISK SKORSTENSEFFEKT</div>
+                    <div className="text-slate-400 text-[11px]">3. TERMISK SKORSTENSEFFEKT</div>
                     <div className="text-amber-300 font-bold mt-0.5">
                       ΔP_s = +5,0 Pa (1,04 Pa/m)
                     </div>
-                    <div className="text-cyan-300 text-[10px]">
+                    <div className="text-cyan-300 text-[11px]">
                       z_NPL = 12,0 m / 12,0 m
                     </div>
                   </div>
                   <div className="p-2 rounded bg-slate-950/90 border border-rose-500/40">
-                    <div className="text-slate-400 text-[9.5px]">4. INDENDØRS ASBEST &amp; S_in</div>
+                    <div className="text-slate-400 text-[11px]">4. INDENDØRS ASBEST &amp; S_in</div>
                     <div className="text-rose-400 font-bold mt-0.5">
                       C_in = 0,0071 f/cm³ (237 % GV)
                     </div>
-                    <div className="text-white text-[10px]">
+                    <div className="text-white text-[11px]">
                       S_in = 3,15 · Skimmel 685 CFU/m³
                     </div>
                   </div>
                 </div>
-                <div className="p-2.5 rounded bg-slate-950 border border-slate-800 space-y-1 text-[10.5px]">
+                <div className="p-2.5 rounded bg-slate-950 border border-slate-800 space-y-1 text-[11px]">
                   <div className="text-amber-300 font-bold">
                     • S_in = ∑ (C_in,i / GV_i) ≥ 0,5 → Krav om forholdsmæssigt afslag i lejen (25–100 %) jf. ALL §§ 11, 17, 18 (samt ALL §§ 81, 86 stk. 3, 90 genhusning &amp; Byfornyelseslovens § 75 kondemneringspligt)
                   </div>
@@ -939,25 +1468,25 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                 </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
                   <div className="p-3 bg-slate-900/80 border border-slate-800 rounded">
-                    <div className="text-slate-400 text-[10px]">VINDHASTIGHED &amp; STØD</div>
+                    <div className="text-slate-400 text-[11px]">VINDHASTIGHED &amp; STØD</div>
                     <div className="text-base font-bold text-white mt-0.5">
                       {currentWeather.windSpeed10m} m/s (stød {currentWeather.windGusts10m} m/s)
                     </div>
                   </div>
                   <div className="p-3 bg-slate-900/80 border border-slate-800 rounded">
-                    <div className="text-slate-400 text-[10px]">VINDRETNING → SPREDNINGSFANE</div>
+                    <div className="text-slate-400 text-[11px]">VINDRETNING → SPREDNINGSFANE</div>
                     <div className="text-base font-bold text-cyan-400 mt-0.5">
                       Fra {currentWeather.windDirection10m}° → Mod {plumeDirectionDeg}°
                     </div>
                   </div>
                   <div className="p-3 bg-slate-900/80 border border-slate-800 rounded">
-                    <div className="text-slate-400 text-[10px]">TEMPERATUR &amp; SOLINDSTRÅLING</div>
+                    <div className="text-slate-400 text-[11px]">TEMPERATUR &amp; SOLINDSTRÅLING</div>
                     <div className="text-base font-bold text-white mt-0.5">
                       {currentWeather.temperature2m} °C · {currentWeather.directRadiation} W/m²
                     </div>
                   </div>
                   <div className="p-3 bg-slate-900/80 border border-slate-800 rounded">
-                    <div className="text-slate-400 text-[10px]">NEDBØR, FUGT &amp; STABILITET</div>
+                    <div className="text-slate-400 text-[11px]">NEDBØR, FUGT &amp; STABILITET</div>
                     <div className="text-base font-bold text-white mt-0.5">
                       {currentWeather.precipitation} mm/t · {currentWeather.relativeHumidity2m}% · Kl.{' '}
                       {currentWeather.pasquillClass}
@@ -986,7 +1515,7 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs pt-2 border-t border-slate-800">
                     <div>
-                      <span className="text-slate-400 block text-[10px]">
+                      <span className="text-slate-400 block text-[11px]">
                         24T KUMULATIV SUM-DOSIS
                       </span>
                       <span className="text-rose-400 font-bold text-sm">
@@ -994,7 +1523,7 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                       </span>
                     </div>
                     <div>
-                      <span className="text-slate-400 block text-[10px]">
+                      <span className="text-slate-400 block text-[11px]">
                         DEPOSIT. TUNGMETAL/PCB
                       </span>
                       <span className="text-white font-bold text-sm">
@@ -1002,7 +1531,7 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                       </span>
                     </div>
                     <div>
-                      <span className="text-slate-400 block text-[10px]">DEPOSIT. ASBESTFIBRE</span>
+                      <span className="text-slate-400 block text-[11px]">DEPOSIT. ASBESTFIBRE</span>
                       <span className="text-white font-bold text-sm">
                         {puff24h.peakReceptor.totalDepositedAsbestosFibersM2.toLocaleString(
                           'da-DK'
@@ -1011,7 +1540,7 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                       </span>
                     </div>
                     <div>
-                      <span className="text-slate-400 block text-[10px]">
+                      <span className="text-slate-400 block text-[11px]">
                         TIMER I RØD / ORANGE ZONE
                       </span>
                       <span className="text-white font-bold text-sm">
@@ -1056,7 +1585,7 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                           <tr key={rec.receptorId} className="bg-slate-950/60">
                             <td className="py-2 px-3 font-sans font-medium text-slate-200">
                               {rec.receptorName}
-                              <div className="text-[10px] text-slate-400 font-mono">
+                              <div className="text-[11px] text-slate-400 font-mono">
                                 {rec.address}
                               </div>
                             </td>
@@ -1135,25 +1664,45 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                         className="p-3.5 bg-fuchsia-950/15 border border-fuchsia-500/40 rounded-md text-xs space-y-2"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2 font-mono">
-                          <span className="font-bold text-fuchsia-300">
-                            {obs.photoEvidence ? '📸 ' : '⚡ '}
-                            {obs.code}: {obs.observationType}
+                          <span className="font-bold text-fuchsia-300 inline-flex items-center gap-1">
+                            {obs.photoEvidence ? (
+                              <Camera className="w-3.5 h-3.5 shrink-0" />
+                            ) : (
+                              <Zap className="w-3.5 h-3.5 shrink-0" />
+                            )}
+                            <span>
+                              {obs.code}: {obs.observationType}
+                            </span>
                           </span>
-                          <span
-                            className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                              obs.plumeCorroboration.isInsideMathematicalPlume
-                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                            }`}
-                          >
-                            {obs.plumeCorroboration.isInsideMathematicalPlume
-                              ? `✓ BEKRÆFTET I MATEMATISK SPREDNINGSFANE (S = ${obs.plumeCorroboration.calculatedSumQuotient.toFixed(
-                                  2
-                                )})`
-                              : `○ RAND-/KILDEZONE (S = ${obs.plumeCorroboration.calculatedSumQuotient.toFixed(
-                                  2
-                                )})`}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`px-2 py-0.5 rounded font-bold text-[11px] ${
+                                obs.plumeCorroboration.isInsideMathematicalPlume
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                              }`}
+                            >
+                              {obs.plumeCorroboration.isInsideMathematicalPlume
+                                ? `✓ BEKRÆFTET I MATEMATISK SPREDNINGSFANE (S = ${obs.plumeCorroboration.calculatedSumQuotient.toFixed(
+                                    2
+                                  )})`
+                                : `○ RAND-/KILDEZONE (S = ${obs.plumeCorroboration.calculatedSumQuotient.toFixed(
+                                    2
+                                  )})`}
+                            </span>
+                            <button
+                              type="button"
+                              data-testid={`share-entry-btn-${obs.code}`}
+                              onClick={() => {
+                                void handleShareForensicEntry(obs.id);
+                              }}
+                              className="px-2 py-0.5 rounded bg-indigo-500/20 hover:bg-indigo-500/35 border border-indigo-400/55 text-indigo-200 font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer no-print"
+                              title={`Del ${obs.code} via sikkert offentligt link`}
+                            >
+                              <Share2 className="w-3 h-3" />
+                              <span>Del</span>
+                            </button>
+                          </div>
                         </div>
 
                         {obs.photoEvidence && (
@@ -1166,10 +1715,11 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                               />
                               <div className="flex-1 space-y-1.5 min-w-0">
                                 <div className="flex flex-wrap items-center justify-between gap-1 font-mono text-[11px]">
-                                  <span className="font-bold text-cyan-300">
-                                    📸 AI FOTO-BEVIS: {obs.photoEvidence.aiAnalysis.visualTitle}
+                                  <span className="font-bold text-cyan-300 inline-flex items-center gap-1">
+                                    <Camera className="w-3.5 h-3.5 shrink-0" />
+                                    <span>AI FOTO-BEVIS: {obs.photoEvidence.aiAnalysis.visualTitle}</span>
                                   </span>
-                                  <span className="px-1.5 py-0.5 rounded bg-rose-500/25 text-rose-200 border border-rose-400/50 text-[10px] font-bold">
+                                  <span className="px-1.5 py-0.5 rounded bg-rose-500/25 text-rose-200 border border-rose-400/50 text-[11px] font-bold">
                                     {obs.photoEvidence.aiAnalysis.severityAssessment} (
                                     {obs.photoEvidence.aiAnalysis.confidencePct}% AI-konfidens)
                                   </span>
@@ -1181,13 +1731,13 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                                   {obs.photoEvidence.aiAnalysis.detectedHazards.map((h, idx) => (
                                     <span
                                       key={idx}
-                                      className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] font-mono text-amber-200"
+                                      className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[11px] font-mono text-amber-200"
                                     >
                                       ⚠ {h}
                                     </span>
                                   ))}
                                 </div>
-                                <div className="text-[10px] font-mono text-emerald-300 pt-0.5 break-all">
+                                <div className="text-[11px] font-mono text-emerald-300 pt-0.5 break-all">
                                   Billed-fil: {obs.photoEvidence.fileName} · Billed SHA-256:{' '}
                                   {obs.photoEvidence.imageSha256Hash}
                                 </div>
@@ -1200,7 +1750,7 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1.5 border-t border-slate-800/80 font-mono text-[11px] text-slate-300">
                           <div>
-                            <span className="text-slate-400 block text-[10px]">
+                            <span className="text-slate-400 block text-[11px]">
                               OBSERVATIONSTIDSPUNKT &amp; ROLLE
                             </span>
                             <span>
@@ -1208,7 +1758,7 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                             </span>
                           </div>
                           <div>
-                            <span className="text-slate-400 block text-[10px]">
+                            <span className="text-slate-400 block text-[11px]">
                               GPS-PUNKT &amp; AFSTAND FRA KILDE
                             </span>
                             <span>
@@ -1218,7 +1768,7 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
                             </span>
                           </div>
                           <div>
-                            <span className="text-slate-400 block text-[10px]">
+                            <span className="text-slate-400 block text-[11px]">
                               OPEN-METEO VEJR PÅ TIDSPUNKTET
                             </span>
                             <span>
@@ -1233,7 +1783,7 @@ export const ForensicReportModal: React.FC<ForensicReportModalProps> = ({
 
                         <div className="text-[11px] font-mono text-fuchsia-200/90 bg-slate-950/80 p-2 rounded border border-slate-800">
                           <div>{obs.plumeCorroboration.corroborationSummary}</div>
-                          <div className="text-[10px] text-slate-400 mt-1 break-all">
+                          <div className="text-[11px] text-slate-400 mt-1 break-all">
                             SHA-256 Signatur: {obs.sha256Signature}
                           </div>
                         </div>

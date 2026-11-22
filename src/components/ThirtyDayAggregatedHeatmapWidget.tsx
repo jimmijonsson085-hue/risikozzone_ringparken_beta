@@ -2,12 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowUpRight,
+  Biohazard,
   Calendar,
   CheckCircle2,
+  Clock,
   Compass,
   Crosshair,
   Flame,
   Layers,
+  Map,
   MapPin,
   Maximize2,
   Navigation,
@@ -747,7 +750,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
       {!isMapOnly && (
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
         <div className="space-y-0.5">
-          <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold">
+          <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-rose-400 font-bold">
             <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span>
               30-DAGES AGGREGERET STØVSPREDNINGS-HEATMAP &amp; LANGSIGTET TREND-ANALYSE (720 TIMER)
@@ -758,7 +761,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
           </h3>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10.5px]">
+        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
           <button
             type="button"
             onClick={handleSaveCurrentSimulationToArchive}
@@ -792,7 +795,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
       {!isMapOnly && (
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 font-mono">
         <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-          <div className="text-[10px] text-slate-400 uppercase">
+          <div className="text-[11px] text-slate-400 uppercase">
             Primær 30-Dages Korridor
           </div>
           <div className="text-sm font-extrabold text-cyan-300 flex items-center gap-1.5">
@@ -804,28 +807,28 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
               Mod {dominant30DayCorridor.meanPlumeCompass} ({dominant30DayCorridor.meanPlumeDeg}°)
             </span>
           </div>
-          <div className="text-[10px] text-slate-400">
+          <div className="text-[11px] text-slate-400">
             Fremherskende vind fra {dominant30DayCorridor.meanWindFromCompass} (
             {dominant30DayCorridor.meanWindFromDeg}°)
           </div>
         </div>
 
         <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-          <div className="text-[10px] text-slate-400 uppercase">
+          <div className="text-[11px] text-slate-400 uppercase">
             30-Dages Hotspot Receptor
           </div>
           <div className="text-sm font-extrabold text-rose-400 truncate">
             {receptor30DayRanking[0]?.receptor.code}:{' '}
             {receptor30DayRanking[0]?.receptor.address.split(',')[0]}
           </div>
-          <div className="text-[10px] text-amber-300 font-semibold">
+          <div className="text-[11px] text-amber-300 font-semibold">
             Akkumuleret: {receptor30DayRanking[0]?.cumulativeDose30d} S·t (
             {receptor30DayRanking[0]?.exceedanceDays} dage ≥1,0)
           </div>
         </div>
 
         <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-          <div className="text-[10px] text-slate-400 uppercase">
+          <div className="text-[11px] text-slate-400 uppercase">
             Dage m. Lovbrud (S ≥ 1,0)
           </div>
           <div className="text-sm font-extrabold text-white">
@@ -834,7 +837,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
             </span>{' '}
             ud af {activeSliceDays.length} dage
           </div>
-          <div className="text-[10px] text-slate-300">
+          <div className="text-[11px] text-slate-300">
             {Math.round(
               (dominant30DayCorridor.totalViolationDays /
                 Math.max(1, activeSliceDays.length)) *
@@ -845,7 +848,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
         </div>
 
         <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-          <div className="text-[10px] text-slate-400 uppercase">
+          <div className="text-[11px] text-slate-400 uppercase">
             15d → 15d Langsigtet Trend
           </div>
           <div
@@ -865,7 +868,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
               {dominant30DayCorridor.overallTrendPct}% støvbelastning
             </span>
           </div>
-          <div className="text-[10px] text-slate-400">
+          <div className="text-[11px] text-slate-400">
             Seneste 15 dage vs. første 15 dage
           </div>
         </div>
@@ -873,7 +876,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
       )}
 
       {/* Controls Bar: Metric Selector + Time Window Filter + 'Kun Kort' / 'Afslut' Button */}
-      <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded bg-slate-950 border border-slate-800 font-mono text-[10.5px] shrink-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded bg-slate-950 border border-slate-800 font-mono text-[11px] shrink-0">
         <div className="flex flex-wrap items-center gap-1">
           <span className="text-slate-400 mr-1">Heatmap-Visning:</span>
           <button
@@ -959,10 +962,16 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
           </button>
 
           {isMapOnly && (
-            <span className="ml-1 px-2.5 py-1 rounded bg-[#0B0E17] border border-cyan-400/80 text-white font-mono font-bold flex items-center gap-1.5 shadow-md">
-              <span>📅 {weatherDataset.dateIso}</span>
+            <span className="ml-1 px-2.5 py-1 rounded bg-[#0B0E17] border border-cyan-400/80 text-white font-mono font-bold flex items-center gap-1.5 shadow-md tabular-nums">
+              <span className="inline-flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-cyan-300 shrink-0" />
+                <span>{weatherDataset.dateIso}</span>
+              </span>
               <span className="text-cyan-400">·</span>
-              <span className="text-amber-300 font-extrabold">🕒 kl. {currentWeather.hourLabel}</span>
+              <span className="text-amber-300 font-extrabold inline-flex items-center gap-1">
+                <Clock className="w-3 h-3 shrink-0" />
+                <span>kl. {currentWeather.hourLabel}</span>
+              </span>
             </span>
           )}
           {!isMapOnly ? (
@@ -972,14 +981,14 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
               className="ml-1 px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 border border-emerald-200 text-slate-950 font-extrabold flex items-center gap-1 shadow-sm cursor-pointer"
               title="Kun Kort — Vis kun 30-dages spredningskortet med filtre"
             >
-              <Maximize2 className="w-3.5 h-3.5 text-slate-950" />
-              <span>🗺️ Kun Kort</span>
+              <Map className="w-3.5 h-3.5 text-slate-950" />
+              <span>Kun Kort</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={() => setIsMapOnly(false)}
-              className="ml-1 px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 border-2 border-rose-200 text-white font-extrabold flex items-center gap-1.5 shadow-xl cursor-pointer"
+              className="ml-1 px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 border border-rose-300 text-white font-extrabold flex items-center gap-1.5 shadow-lg cursor-pointer"
               title="Afslut 'Kun Kort' visning (Esc)"
             >
               <X className="w-4 h-4 text-white" />
@@ -997,7 +1006,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
             isMapOnly ? 'xl:col-span-12 flex flex-col justify-between' : 'xl:col-span-7'
           } bg-slate-950 border border-slate-800 rounded-md p-2.5 space-y-2`}
         >
-          <div className="flex items-center justify-between font-mono text-[10.5px]">
+          <div className="flex items-center justify-between font-mono text-[11px]">
             <span className="font-bold text-white flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-rose-400" />
               <span>
@@ -1006,8 +1015,12 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
             </span>
             <div className="flex items-center gap-2">
               {isMapOnly && (
-                <span className="px-2 py-0.5 rounded bg-cyan-950/90 border border-cyan-400/70 text-cyan-100 font-bold">
-                  📅 {weatherDataset.dateIso} · 🕒 kl. {currentWeather.hourLabel}
+                <span className="px-2 py-0.5 rounded bg-cyan-950/90 border border-cyan-400/70 text-cyan-100 font-bold inline-flex items-center gap-1.5 tabular-nums">
+                  <Calendar className="w-3 h-3 shrink-0" />
+                  <span>{weatherDataset.dateIso}</span>
+                  <span>·</span>
+                  <Clock className="w-3 h-3 shrink-0" />
+                  <span>kl. {currentWeather.hourLabel}</span>
                 </span>
               )}
               <span className="text-slate-400">Klik på felt eller receptor</span>
@@ -1080,7 +1093,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
                         y={y + cellH / 2 + 3}
                         textAnchor="middle"
                         fill="#ffffff"
-                        fontSize="7.5"
+                        fontSize="9.5"
                         fontFamily="monospace"
                         fontWeight="bold"
                       >
@@ -1132,7 +1145,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
                 x={projectToSvg({ lat: 55.41292, lng: 11.3547 }).x}
                 y={projectToSvg({ lat: 55.41292, lng: 11.3547 }).y - 4}
                 fill="#cbd5e1"
-                fontSize="8"
+                fontSize="9.5"
                 fontFamily="monospace"
               >
                 Kierulffsvej
@@ -1141,7 +1154,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
                 x={projectToSvg({ lat: 55.4121, lng: 11.3518 }).x}
                 y={projectToSvg({ lat: 55.4121, lng: 11.3518 }).y + 10}
                 fill="#cbd5e1"
-                fontSize="8"
+                fontSize="9.5"
                 fontFamily="monospace"
               >
                 Rødtjørnevej 2
@@ -1170,7 +1183,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
                       x={endX + 6}
                       y={endY + 3}
                       fill="#67e8f9"
-                      fontSize="8.5"
+                      fontSize="9.5"
                       fontFamily="monospace"
                       fontWeight="bold"
                     >
@@ -1200,11 +1213,11 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
                       y={pt.y - 11}
                       textAnchor="middle"
                       fill="#fda4af"
-                      fontSize="8.5"
+                      fontSize="9.5"
                       fontFamily="monospace"
                       fontWeight="bold"
                     >
-                      ☣ {src.code}
+                      {src.code}
                     </text>
                   </g>
                 );
@@ -1239,7 +1252,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
                       y={pt.y + 15}
                       textAnchor="middle"
                       fill="#ffffff"
-                      fontSize="8"
+                      fontSize="9.5"
                       fontFamily="monospace"
                       fontWeight="bold"
                     >
@@ -1252,7 +1265,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
           </div>
 
           {/* Color Scale Legend */}
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-slate-300 pt-0.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-300 pt-0.5">
             {metricMode === 'trend_delta_15d' ? (
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-1">
@@ -1286,8 +1299,9 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
                 </span>
               </div>
             )}
-            <span className="text-slate-400">
-              ☣ Kildenoder · ● Receptorer (antal dage m. S≥1,0)
+            <span className="text-slate-400 inline-flex items-center gap-1">
+              <Biohazard className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              <span>Kildenoder · ● Receptorer (antal dage m. S≥1,0)</span>
             </span>
           </div>
         </div>
@@ -1298,30 +1312,33 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
           {/* Selected Grid Cell Inspector */}
           {activeCell && (
             <div className="p-2.5 rounded bg-slate-950 border border-rose-500/40 space-y-1.5 font-mono">
-              <div className="flex items-center justify-between text-[10.5px]">
-                <span className="font-bold text-rose-300">
-                  📍 Inspiceret 30-Dages Felt ({activeCell.center.lat.toFixed(4)}°N,{' '}
-                  {activeCell.center.lng.toFixed(4)}°E)
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-bold text-rose-300 inline-flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    Inspiceret 30-Dages Felt ({activeCell.center.lat.toFixed(4)}°N,{' '}
+                    {activeCell.center.lng.toFixed(4)}°E)
+                  </span>
                 </span>
-                <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-200 border border-rose-500/40 text-[9.5px] font-bold">
+                <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-200 border border-rose-500/40 text-[11px] font-bold">
                   Kilde: {activeCell.dominantSourceName}
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-1.5 text-[10.5px]">
+              <div className="grid grid-cols-3 gap-1.5 text-[11px]">
                 <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <div className="text-[9px] text-slate-400">30D KUMULATIV DOSIS</div>
+                  <div className="text-[11px] text-slate-400">30D KUMULATIV DOSIS</div>
                   <div className="font-extrabold text-white">
                     {activeCell.cumulativeDose30d} S·t
                   </div>
                 </div>
                 <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <div className="text-[9px] text-slate-400">DAGE MED S ≥ 1,0</div>
+                  <div className="text-[11px] text-slate-400">DAGE MED S ≥ 1,0</div>
                   <div className="font-extrabold text-amber-300">
                     {activeCell.exceedanceDaysCount} / {activeSliceDays.length} dage
                   </div>
                 </div>
                 <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <div className="text-[9px] text-slate-400">15D → 15D TREND</div>
+                  <div className="text-[11px] text-slate-400">15D → 15D TREND</div>
                   <div
                     className={`font-extrabold ${
                       activeCell.trendPct > 0 ? 'text-rose-400' : 'text-emerald-400'
@@ -1338,10 +1355,10 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
 
           {/* 30-Day Receptor Chronic Exposure Ranking */}
           <div className="p-2.5 rounded bg-slate-950 border border-slate-800 space-y-1.5 flex-1">
-            <div className="text-[10.5px] font-mono font-bold text-amber-300 uppercase">
+            <div className="text-[11px] font-mono font-bold text-amber-300 uppercase">
               Rangliste: Mest Udsatte Receptorer over 30 Dage
             </div>
-            <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5 font-mono text-[10.5px]">
+            <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5 font-mono text-[11px]">
               {receptor30DayRanking.map((item, idx) => {
                 const isSel = selectedReceptorId === item.receptor.id;
                 return (
@@ -1361,7 +1378,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span
-                          className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold ${
+                          className={`px-1.5 py-0.2 rounded text-[11px] font-extrabold ${
                             idx === 0
                               ? 'bg-amber-400 text-slate-950'
                               : 'bg-slate-800 text-slate-300'
@@ -1373,7 +1390,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
                           {item.receptor.code}: {item.receptor.name}
                         </span>
                       </div>
-                      <div className="text-[9.5px] text-slate-400 truncate mt-0.5">
+                      <div className="text-[11px] text-slate-400 truncate mt-0.5">
                         {item.receptor.address} · Spids d. {item.peakDateIso} (S=
                         {item.peakS.toFixed(2)})
                       </div>
@@ -1383,7 +1400,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
                       <div className="font-extrabold text-rose-300">
                         {item.cumulativeDose30d} S·t
                       </div>
-                      <div className="text-[9.5px] text-amber-300">
+                      <div className="text-[11px] text-amber-300">
                         {item.exceedanceDays}d ≥1,0 ·{' '}
                         <span
                           className={
@@ -1411,7 +1428,7 @@ export const ThirtyDayAggregatedHeatmapWidget: React.FC<
           <span className="font-bold text-white">
             30-Dages Tidsserie &amp; 7-Dages Glidende Gennemsnit (Klik på en dag for at indlæse simuleringen på kortet)
           </span>
-          <span className="text-cyan-300 text-[10px]">
+          <span className="text-cyan-300 text-[11px]">
             Valgt dato: {selectedDateIso}
           </span>
         </div>

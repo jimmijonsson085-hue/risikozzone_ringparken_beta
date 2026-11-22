@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import {
   AlertTriangle,
+  Biohazard,
   Camera,
   CheckCircle2,
   FileCheck2,
@@ -576,7 +577,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
   };
 
   return (
-    <div className="p-3.5 bg-gradient-to-b from-cyan-950/35 via-slate-900/90 to-slate-950 border-2 border-cyan-500/60 rounded-md space-y-3 shadow-xl">
+    <div className="p-3.5 bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-sky-400 rounded-md space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
         <div className="flex items-center gap-2">
@@ -588,12 +589,12 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
               <span>AI Foto-Dokumentation &amp; Retsmedicinsk Bevis-Registrering</span>
               <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
             </div>
-            <div className="text-[10.5px] font-mono text-slate-400">
+            <div className="text-[11px] font-mono text-slate-400">
               1. Upload Foto · 2. Gemini Vision AI-Analyse · 3. Registrér som SHA-256 Bevismateriale
             </div>
           </div>
         </div>
-        <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-200 border border-cyan-400/40 text-[10px] font-mono font-bold shrink-0">
+        <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-200 border border-cyan-400/40 text-[11px] font-mono font-bold shrink-0">
           Gemini Vision AI
         </span>
       </div>
@@ -601,14 +602,14 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
       {/* Step 1: Upload Photo or Choose Realistic Field Demo Photo */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-300 font-bold">
+          <span className="text-[11px] font-mono uppercase tracking-wider text-cyan-300 font-bold">
             Trin 1: Upload Foto eller Vælg Felt-Optagelse fra Ringparken
           </span>
           {photoDataUrl && (
             <button
               type="button"
               onClick={handleClearPhoto}
-              className="text-[10px] font-mono text-rose-300 hover:text-rose-200 flex items-center gap-1"
+              className="text-[11px] font-mono text-rose-300 hover:text-rose-200 flex items-center gap-1"
             >
               <Trash2 className="w-3 h-3" />
               <span>Nulstil foto</span>
@@ -669,7 +670,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                 <div className="text-xs font-semibold text-white">
                   Træk foto hertil eller vælg billedfil fra enhed
                 </div>
-                <div className="text-[10.5px] font-mono text-slate-400">
+                <div className="text-[11px] font-mono text-slate-400">
                   Understøtter JPG, PNG, WEBP · Signeres automatisk med SHA-256 og GPS ({pendingPosition.lat.toFixed(4)}°N, {pendingPosition.lng.toFixed(4)}°E)
                 </div>
               </div>
@@ -698,7 +699,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
 
           {/* 1-Click Realistic Ringparken Field Demo Photos for instant testing */}
           <div className="mt-2.5 pt-2 border-t border-slate-800/80 space-y-1">
-            <div className="text-[9.5px] font-mono uppercase text-slate-400">
+            <div className="text-[11px] font-mono uppercase text-slate-400">
               Eller indlæs et kalibreret felt-foto fra Ringparken til direkte AI-analyse:
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
@@ -707,10 +708,13 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                   key={sc.id}
                   type="button"
                   onClick={() => handleLoadDemoScenarioPhoto(sc)}
-                  className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-cyan-400/60 text-left text-[10px] font-mono text-cyan-200 transition-colors truncate"
+                  className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-cyan-400/60 text-left text-[11px] font-mono text-cyan-200 transition-colors truncate"
                   title={sc.label}
                 >
-                  📸 {sc.shortTag}
+                  <span className="inline-flex items-center gap-1 truncate">
+                    <Camera className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{sc.shortTag}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -728,12 +732,15 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                 alt={uploadedFileName || 'Uploaded fotodokumentation'}
                 className="w-full max-h-52 object-cover"
               />
-              <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-slate-950/90 border border-cyan-400/60 text-[10px] font-mono font-bold text-cyan-300">
-                📸 {uploadedFileName} ({(uploadedFileSize / 1024).toFixed(1)} KB)
+              <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-slate-950/90 border border-cyan-400/60 text-[11px] font-mono font-bold text-cyan-300 flex items-center gap-1">
+                <Camera className="w-3 h-3 shrink-0" />
+                <span>
+                  {uploadedFileName} ({(uploadedFileSize / 1024).toFixed(1)} KB)
+                </span>
               </div>
               {aiAnalysis && (
                 <div
-                  className={`absolute top-2 right-2 px-2 py-0.5 rounded font-mono text-[10px] font-extrabold border ${
+                  className={`absolute top-2 right-2 px-2 py-0.5 rounded font-mono text-[11px] font-extrabold border ${
                     aiAnalysis.severityAssessment === 'KRITISK'
                       ? 'bg-rose-600/95 text-white border-rose-300'
                       : aiAnalysis.severityAssessment === 'FORHØJET'
@@ -746,7 +753,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[10.5px] font-mono text-slate-300">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] font-mono text-slate-300">
               <div className="truncate">
                 <span className="text-slate-400">GPS &amp; Tid:</span>{' '}
                 {pendingPosition.lat.toFixed(4)}°N, {pendingPosition.lng.toFixed(4)}°E · {dateIso}{' '}
@@ -797,12 +804,12 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
           {/* Step 2: AI Analysis & Visual Description Output */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-amber-300 font-bold flex items-center gap-1.5">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-amber-300 font-bold flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                 <span>Trin 2: AI Analyse &amp; Visuel Beskrivelse</span>
               </span>
               {aiAnalysis && (
-                <span className="text-[10px] font-mono text-slate-400">
+                <span className="text-[11px] font-mono text-slate-400">
                   {aiAnalysis.modelUsed}
                 </span>
               )}
@@ -829,7 +836,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
               <div className="p-3 bg-slate-950/95 border border-cyan-500/40 rounded-md space-y-2.5">
                 <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-2">
                   <div>
-                    <div className="text-[10px] font-mono uppercase text-cyan-400 font-bold">
+                    <div className="text-[11px] font-mono uppercase text-cyan-400 font-bold">
                       AI VISUEL KONKLUSION &amp; HÆNDELSESTITEL
                     </div>
                     <div className="text-xs font-bold text-white mt-0.5">
@@ -837,7 +844,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                     </div>
                   </div>
                   <span
-                    className={`px-2 py-0.5 rounded font-mono text-[10px] font-extrabold shrink-0 ${
+                    className={`px-2 py-0.5 rounded font-mono text-[11px] font-extrabold shrink-0 ${
                       aiAnalysis.severityAssessment === 'KRITISK'
                         ? 'bg-rose-500/25 text-rose-300 border border-rose-500/50'
                         : aiAnalysis.severityAssessment === 'FORHØJET'
@@ -850,7 +857,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                 </div>
 
                 {/* INTERACTIVE USER PROMPT: "Ønsker du at tilføje, eller passer beskrivelsen (y/n)?" */}
-                <div className="p-3 rounded-lg bg-gradient-to-r from-amber-950/60 via-slate-900 to-indigo-950/50 border-2 border-amber-400/80 space-y-2.5 shadow-md">
+                <div className="p-3 rounded-lg bg-[var(--surface-panel)] border border-[var(--border-subtle)] border-l-4 border-l-amber-400 space-y-2.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-xs font-mono font-extrabold text-amber-300 flex items-center gap-1.5">
                       <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
@@ -859,7 +866,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                       </span>
                     </div>
                     <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                      className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
                         descriptionPromptDecision === 'pending_yn'
                           ? 'bg-amber-400 text-slate-950'
                           : descriptionPromptDecision === 'editing_y'
@@ -879,7 +886,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
 
                   {/* Current AI Description Preview */}
                   <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-1 text-xs">
-                    <div className="font-mono text-[10px] text-cyan-300 font-semibold">
+                    <div className="font-mono text-[11px] text-cyan-300 font-semibold">
                       Foreslået titel: {editableVisualTitle || aiAnalysis.visualTitle}
                     </div>
                     <p className="text-slate-200 leading-relaxed">
@@ -919,7 +926,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                     </button>
 
                     <div className="flex items-center gap-1.5 ml-auto">
-                      <span className="text-[10px] font-mono text-slate-400">Tast y/n:</span>
+                      <span className="text-[11px] font-mono text-slate-400">Tast y/n:</span>
                       <input
                         type="text"
                         maxLength={1}
@@ -944,13 +951,13 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                   {(descriptionPromptDecision === 'editing_y' ||
                     descriptionPromptDecision === 'adjusted_saved') && (
                     <div className="p-3 rounded-lg bg-slate-950 border border-cyan-500/50 space-y-2.5 pt-2.5">
-                      <div className="text-[10.5px] font-mono uppercase text-cyan-300 font-bold">
+                      <div className="text-[11px] font-mono uppercase text-cyan-300 font-bold">
                         Ret Justeringer &amp; Tilføj til Beskrivelsen inden Bevis-Registrering:
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div>
-                          <label className="block text-[10px] font-mono uppercase text-slate-400 mb-1">
+                          <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">
                             Hændelsestitel:
                           </label>
                           <input
@@ -961,7 +968,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-mono uppercase text-slate-400 mb-1">
+                          <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">
                             Observationstype:
                           </label>
                           <input
@@ -974,7 +981,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-mono uppercase text-slate-400 mb-1">
+                        <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">
                           Ret AI-Visuel Beskrivelse:
                         </label>
                         <textarea
@@ -987,7 +994,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-mono uppercase text-amber-300 mb-1">
+                        <label className="block text-[11px] font-mono uppercase text-amber-300 mb-1">
                           Tilføj supplerende observation / præcisering til beviset (valgfrit):
                         </label>
                         <input
@@ -1014,7 +1021,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
 
                 {/* Detected Visual Hazards */}
                 <div className="space-y-1">
-                  <div className="text-[10px] font-mono uppercase text-rose-300 font-semibold">
+                  <div className="text-[11px] font-mono uppercase text-rose-300 font-semibold">
                     AI-Identificerede Miljø- &amp; Arbejdsmiljøfarer på Foto:
                   </div>
                   <ul className="space-y-1 text-xs text-slate-200">
@@ -1033,7 +1040,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                 {/* Suspected Substances & Statutory References */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                   <div className="p-2 bg-slate-900/90 rounded border border-slate-800 space-y-1">
-                    <div className="text-[9.5px] font-mono uppercase text-slate-400">
+                    <div className="text-[11px] font-mono uppercase text-slate-400">
                       Mistænkte Stoffer (BEK 613/2026):
                     </div>
                     <div className="flex flex-wrap gap-1">
@@ -1042,9 +1049,10 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                         return (
                           <span
                             key={subKey}
-                            className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-200 border border-rose-500/40 text-[10px] font-mono font-semibold"
+                            className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-200 border border-rose-500/40 text-[11px] font-mono font-semibold inline-flex items-center gap-1"
                           >
-                            ☣ {spec ? spec.shortName : subKey}
+                            <Biohazard className="w-3 h-3 shrink-0" />
+                            <span>{spec ? spec.shortName : subKey}</span>
                           </span>
                         );
                       })}
@@ -1052,10 +1060,10 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                   </div>
 
                   <div className="p-2 bg-slate-900/90 rounded border border-slate-800 space-y-1">
-                    <div className="text-[9.5px] font-mono uppercase text-slate-400">
+                    <div className="text-[11px] font-mono uppercase text-slate-400">
                       Relevante Lovhjemler:
                     </div>
-                    <div className="space-y-0.5 text-[10px] font-mono text-amber-200">
+                    <div className="space-y-0.5 text-[11px] font-mono text-amber-200">
                       {aiAnalysis.statutoryReferences.slice(0, 3).map((ref, i) => (
                         <div key={i} className="truncate" title={ref}>
                           • {ref}
@@ -1076,10 +1084,10 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                 {/* Step 3: Register Photo Documentation as Cryptographically Signed Evidence */}
                 <div className="pt-2 border-t border-slate-800 space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="text-[10px] font-mono uppercase tracking-wider text-emerald-300 font-bold">
+                    <div className="text-[11px] font-mono uppercase tracking-wider text-emerald-300 font-bold">
                       Trin 3: Vælg Bevis-Kategori &amp; Registrér Foto-Dokumentation
                     </div>
-                    <span className="text-[10px] font-mono text-slate-400">
+                    <span className="text-[11px] font-mono text-slate-400">
                       {descriptionPromptDecision === 'pending_yn'
                         ? 'Besvar (y/n) ovenfor eller registrér direkte'
                         : '✓ Beskrivelse verificeret'}
@@ -1088,7 +1096,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
 
                   {/* Evidence Category Selector */}
                   <div className="p-2 rounded bg-slate-950/90 border border-slate-800 space-y-1.5">
-                    <div className="text-[10px] font-mono text-slate-300 font-semibold">
+                    <div className="text-[11px] font-mono text-slate-300 font-semibold">
                       Tilknyt specifik bevis-kategori (vises på Bevis-Tidslinjen):
                     </div>
                     <div className="flex flex-wrap gap-1">
@@ -1105,7 +1113,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                           key={cat}
                           type="button"
                           onClick={() => setSelectedEvidenceCategory(cat)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-colors cursor-pointer ${
+                          className={`px-2 py-0.5 rounded text-[11px] font-mono border transition-colors cursor-pointer ${
                             selectedEvidenceCategory === cat
                               ? 'bg-emerald-500 text-slate-950 border-emerald-300 font-bold'
                               : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500'
@@ -1121,7 +1129,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                     type="button"
                     disabled={isRegisteringEvidence}
                     onClick={handleRegisterAsForensicEvidence}
-                    className="w-full py-2.5 px-3 rounded bg-gradient-to-r from-emerald-500 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-slate-950 font-mono font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
+                    className="w-full py-2.5 px-3 rounded bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-mono font-extrabold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
                   >
                     <FileCheck2 className="w-4 h-4 shrink-0" />
                     <span>
@@ -1139,7 +1147,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
 
       {/* Confirmation Banner when Registered */}
       {registeredSuccessBanner && (
-        <div className="p-2.5 rounded bg-emerald-950/75 border-2 border-emerald-400 text-emerald-100 text-xs space-y-1.5">
+        <div className="p-2.5 rounded bg-[var(--surface-panel)] border border-emerald-500/50 border-l-4 border-l-emerald-400 text-emerald-100 text-xs space-y-1.5">
           <div className="flex items-center gap-2 font-bold">
             <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
             <span>{registeredSuccessBanner}</span>
@@ -1163,7 +1171,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
       {observationsWithPhotos.length > 0 && (
         <div className="pt-2 border-t border-slate-800 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-300 font-bold flex items-center gap-1.5">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-cyan-300 font-bold flex items-center gap-1.5">
               <ImageIcon className="w-3.5 h-3.5 text-cyan-400" />
               <span>
                 Registreret Foto-Bevismateriale ({observationsWithPhotos.length} stk.)
@@ -1172,7 +1180,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
             <button
               type="button"
               onClick={onOpenReportModal}
-              className="text-[10.5px] font-mono text-cyan-400 underline hover:text-cyan-300"
+              className="text-[11px] font-mono text-cyan-400 underline hover:text-cyan-300"
             >
               Se i Bevis-Rapport (PDF) →
             </button>
@@ -1194,9 +1202,12 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                     className="w-20 h-16 object-cover rounded border border-slate-700 shrink-0"
                   />
                   <div className="min-w-0 flex-1 space-y-0.5">
-                    <div className="flex items-center justify-between gap-1 font-mono text-[10px]">
-                      <span className="font-bold text-cyan-300 truncate">
-                        📸 {obs.code} · {pe.aiAnalysis.visualTitle}
+                    <div className="flex items-center justify-between gap-1 font-mono text-[11px]">
+                      <span className="font-bold text-cyan-300 truncate inline-flex items-center gap-1">
+                        <Camera className="w-3 h-3 shrink-0" />
+                        <span className="truncate">
+                          {obs.code} · {pe.aiAnalysis.visualTitle}
+                        </span>
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
                         <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold">
@@ -1210,7 +1221,7 @@ export const ForensicPhotoEvidencePanel: React.FC<ForensicPhotoEvidencePanelProp
                     <p className="text-[11px] text-slate-300 line-clamp-2 leading-snug">
                       {pe.aiAnalysis.visualDescription}
                     </p>
-                    <div className="text-[9.5px] font-mono text-slate-400 flex flex-wrap items-center gap-2 pt-0.5">
+                    <div className="text-[11px] font-mono text-slate-400 flex flex-wrap items-center gap-2 pt-0.5">
                       <span className="flex items-center gap-0.5 text-fuchsia-300">
                         <MapPin className="w-2.5 h-2.5" />
                         {obs.locationLabel}

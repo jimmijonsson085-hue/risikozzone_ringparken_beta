@@ -699,7 +699,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
 
           {/* 24-Hour Segmented Forecast Timeline Bar showing exact hour of daily WHO budget exhaustion */}
           <div className="p-2 rounded bg-slate-950/90 border border-slate-800/90 space-y-1.5 font-mono">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-300">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300">
               <span>
                 24-Timers Prognose-Tidslinje for WHO Døgnbudget (00:00 → 23:00):
               </span>
@@ -744,7 +744,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
             </div>
 
             {activeReceptorProfile.breachWeatherForecast && (
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400 pt-0.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400 pt-0.5">
                 <div>
                   <span className="text-slate-300 font-semibold">
                     Meteorologisk årsag kl.{' '}
@@ -787,7 +787,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
 
           {/* Multi-receptor breach overview when multiple selected receptors exceed before end of day */}
           {breachingSelectedProfiles.length > 1 && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] font-mono">
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] font-mono">
               <span className="text-slate-300">
                 Øvrige valgte receptorer over WHO døgngrænse før kl. 23:59 (
                 {breachingSelectedProfiles.length} af{' '}
@@ -830,7 +830,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
       {/* Top KPI Summary Strip for Active Receptor */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
         <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-          <div className="text-[10px] text-slate-400 uppercase truncate">
+          <div className="text-[11px] text-slate-400 uppercase truncate">
             KES_WHO ({currentWeather.hourLabel} / 24t)
           </div>
           <div className="flex items-baseline gap-1.5 tabular-nums">
@@ -851,13 +851,13 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
               / {activeReceptorProfile.score24hTotal.toFixed(1)} pt
             </span>
           </div>
-          <div className="text-[10px] text-slate-400 truncate">
+          <div className="text-[11px] text-slate-400 truncate">
             WHO 24t AQG tærskel = 25,0 pt
           </div>
         </div>
 
         <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-          <div className="text-[10px] text-slate-400 uppercase truncate">
+          <div className="text-[11px] text-slate-400 uppercase truncate">
             PM2.5 Døgnmiddel (WHO ≤ 15)
           </div>
           <div className="flex items-baseline gap-1.5 tabular-nums">
@@ -872,14 +872,14 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
             </span>
             <span className="text-[11px] text-slate-400">µg/m³</span>
           </div>
-          <div className="text-[10px] text-amber-300 truncate tabular-nums">
+          <div className="text-[11px] text-amber-300 truncate tabular-nums">
             {activeReceptorProfile.pm25WhoRatio}× WHO AQG · Peak:{' '}
             {activeReceptorProfile.peakPm25UgM3} µg/m³
           </div>
         </div>
 
         <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-          <div className="text-[10px] text-slate-400 uppercase truncate">
+          <div className="text-[11px] text-slate-400 uppercase truncate">
             PM10 Døgnmiddel (WHO ≤ 45)
           </div>
           <div className="flex items-baseline gap-1.5 tabular-nums">
@@ -894,14 +894,14 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
             </span>
             <span className="text-[11px] text-slate-400">µg/m³</span>
           </div>
-          <div className="text-[10px] text-cyan-300 truncate tabular-nums">
+          <div className="text-[11px] text-cyan-300 truncate tabular-nums">
             {activeReceptorProfile.pm10WhoRatio}× WHO AQG ·{' '}
             {activeReceptorProfile.hoursExceedingWhoPm25}t &gt; AQG
           </div>
         </div>
 
         <div className="p-2.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5">
-          <div className="text-[10px] text-slate-400 uppercase truncate">
+          <div className="text-[11px] text-slate-400 uppercase truncate">
             WHO AirQ+ Relativ Risiko (RR)
           </div>
           <div className="flex items-baseline gap-1.5 tabular-nums">
@@ -912,7 +912,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
               (+{activeReceptorProfile.excessRiskPct}%)
             </span>
           </div>
-          <div className="text-[10px] text-slate-300 truncate">
+          <div className="text-[11px] text-slate-300 truncate">
             {activeReceptorProfile.shortName}
           </div>
         </div>
@@ -934,21 +934,21 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
             <button
               type="button"
               onClick={handleSelectTop3Receptors}
-              className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono transition-colors whitespace-nowrap shrink-0"
+              className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono transition-colors whitespace-nowrap shrink-0"
             >
               Top 3 Mest Eksponerede
             </button>
             <button
               type="button"
               onClick={handleSelectAllReceptors}
-              className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono transition-colors whitespace-nowrap shrink-0"
+              className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono transition-colors whitespace-nowrap shrink-0"
             >
               Vælg Alle ({receptorWhoProfiles.length})
             </button>
             <button
               type="button"
               onClick={handleSelectOnlyActiveReceptor}
-              className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono transition-colors whitespace-nowrap shrink-0"
+              className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono transition-colors whitespace-nowrap shrink-0"
             >
               Kun Aktiv Receptor
             </button>
@@ -988,7 +988,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
 
                 <div className="flex items-center gap-1.5 shrink-0 tabular-nums">
                   <span
-                    className={`text-[10px] font-bold ${
+                    className={`text-[11px] font-bold ${
                       prof.score24hTotal >= 75
                         ? 'text-rose-400'
                         : prof.score24hTotal >= 50
@@ -1003,7 +1003,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
                   <button
                     type="button"
                     onClick={() => onSelectReceptor(prof.receptorId)}
-                    className={`px-1.5 py-0.5 rounded text-[9px] uppercase transition-colors whitespace-nowrap shrink-0 ${
+                    className={`px-1.5 py-0.5 rounded text-[11px] uppercase transition-colors whitespace-nowrap shrink-0 ${
                       isPrimaryActive
                         ? 'bg-teal-500 text-slate-950 font-bold'
                         : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -1090,7 +1090,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
             </button>
           </div>
 
-          <span className="text-[10px] font-mono text-slate-400">
+          <span className="text-[11px] font-mono text-slate-400">
             Klik på et tidspunkt i grafen for at synkronisere simulationstimen (
             {currentWeather.hourLabel})
           </span>
@@ -1103,7 +1103,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
               <span className="text-slate-300 font-semibold">
                 Udvikling i Kumulativ Eksponeringsscore (KES_WHO) over 24 timer
               </span>
-              <div className="flex flex-wrap items-center gap-3 text-[10px]">
+              <div className="flex flex-wrap items-center gap-3 text-[11px]">
                 <span className="text-emerald-400">
                   ── WHO AQG 24t Budget (25 pt)
                 </span>
@@ -1283,7 +1283,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
                 </strong>{' '}
                 mod WHO 2021 AQG
               </span>
-              <div className="flex items-center gap-3 text-[10px]">
+              <div className="flex items-center gap-3 text-[11px]">
                 <span className="text-emerald-400">
                   ── WHO PM2.5 24t AQG (15 µg/m³)
                 </span>
@@ -1426,7 +1426,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
                 Sammenligning af 24-Timers Kumulativ WHO Eksponeringsscore pr.
                 Receptor
               </span>
-              <span className="text-[10px] text-slate-400">
+              <span className="text-[11px] text-slate-400">
                 Klik på en søjle for at vælge receptoren i Bio-Toks
               </span>
             </div>
@@ -1530,7 +1530,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
 
       {/* Detailed Receptor WHO AirQ+ & AQG Table */}
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-[10px] font-mono uppercase text-slate-400 font-semibold">
+        <div className="flex items-center justify-between text-[11px] font-mono uppercase text-slate-400 font-semibold">
           <span>
             WHO AirQ+ Toksikologisk Eksponerings-Matrix (Valgte Receptorer)
           </span>
@@ -1542,7 +1542,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
         <div className="overflow-x-auto rounded border border-slate-800 bg-slate-950/90">
           <table className="w-full text-left border-collapse font-mono text-[11px] tabular-nums">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/90 text-[10px] text-slate-400 uppercase">
+              <tr className="border-b border-slate-800 bg-slate-900/90 text-[11px] text-slate-400 uppercase">
                 <th className="py-2 px-2.5">Receptor</th>
                 <th className="py-2 px-2 text-right">
                   KES_WHO ({currentWeather.hourLabel})
@@ -1593,7 +1593,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
                       >
                         {prof.mean24hPm25UgM3} µg/m³
                       </span>{' '}
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[11px] text-slate-400">
                         ({prof.pm25WhoRatio}×)
                       </span>
                     </td>
@@ -1607,7 +1607,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
                       >
                         {prof.mean24hPm10UgM3} µg/m³
                       </span>{' '}
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[11px] text-slate-400">
                         ({prof.pm10WhoRatio}×)
                       </span>
                     </td>
@@ -1618,7 +1618,7 @@ export const WhoCumulativeExposureScoreWidget: React.FC<
                       {prof.airQPlusRelativeRisk.toFixed(3)} (+
                       {prof.excessRiskPct}%)
                     </td>
-                    <td className="py-2 px-2.5 text-[10px]">
+                    <td className="py-2 px-2.5 text-[11px]">
                       <span
                         className={
                           prof.whoTierSeverity === 'critical'

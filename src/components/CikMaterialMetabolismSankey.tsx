@@ -252,7 +252,7 @@ export const CikMaterialMetabolismSankey: React.FC<
   }, [metabolism]);
 
   return (
-    <div className="p-4 rounded-md bg-slate-950/95 border-2 border-cyan-500/60 space-y-4 shadow-xl">
+    <div className="p-4 rounded-md bg-[var(--surface-panel)] border border-[var(--border-subtle)] border-l-4 border-l-sky-400 space-y-4">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-3">
         <div className="space-y-1">
@@ -273,7 +273,7 @@ export const CikMaterialMetabolismSankey: React.FC<
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px]">
+        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
           <button
             type="button"
             onClick={() => setUnitDisplayMode('ton_gj')}
@@ -339,7 +339,7 @@ export const CikMaterialMetabolismSankey: React.FC<
             onChange={(e) => setPcbLeadStrippingCompliancePct(Number(e.target.value))}
             className="w-44 accent-cyan-400 cursor-pointer"
           />
-          <div className="flex items-center gap-1 font-mono text-[10px]">
+          <div className="flex items-center gap-1 font-mono text-[11px]">
             <button
               type="button"
               onClick={() => setPcbLeadStrippingCompliancePct(100)}
@@ -665,7 +665,7 @@ export const CikMaterialMetabolismSankey: React.FC<
                 <td className="py-1.5 px-2.5 text-right text-amber-300 font-bold tabular-nums">
                   {sub.embodiedEnergyGj.toLocaleString('da-DK', { maximumFractionDigits: 0 })} GJ
                 </td>
-                <td className="py-1.5 px-2.5 text-slate-300 text-[10px]">
+                <td className="py-1.5 px-2.5 text-slate-300 text-[11px]">
                   {sub.specificContaminantNoteDa}
                 </td>
               </tr>

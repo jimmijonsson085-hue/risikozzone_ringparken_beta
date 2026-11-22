@@ -18,6 +18,7 @@ import {
   BookOpen,
   Copy,
   Check,
+  FileText,
 } from 'lucide-react';
 import {
   IndoorClimateTelemetryResult,
@@ -217,7 +218,7 @@ export const ForensicChatbotPanel: React.FC<ForensicChatbotPanelProps> = ({
       amr: {
         id: 'amr',
         title: 'Arbejdsmiljørepræsentanten (AMR)',
-        shortLabel: '🦺 AMR',
+        shortLabel: 'AMR',
         subtitle:
           'Arbejdsmiljøloven, BEK 613/2026, Sumformlen, § 25 standsningsret, værnemidler & akut støv-/støjbekæmpelse',
         badgeText: 'PSS Sag W22085 · § 25 Standsningsret',
@@ -229,19 +230,19 @@ export const ForensicChatbotPanel: React.FC<ForensicChatbotPanelProps> = ({
           'Fokus på akut arbejdsmiljøsikkerhed, vandkanon-vinkel, H-klasse sug, undertrykssluser, P3/turbo-åndedrætsværn, tredjeparts-asbestprøver og beskyttelse af både håndværkere og beboere.',
         quickPrompts: [
           {
-            label: '🦺 Akut AMR Standsnings-Vurdering',
+            label: 'Akut AMR Standsnings-Vurdering',
             prompt: `Som Arbejdsmiljørepræsentant (AMR): Vurdér om Sumformel S_out = ${telemetryContext.sumQuotient.toFixed(2)} og indendørs S_in = ${indoorClimateData.indoorSumQuotientSin.toFixed(2)} (C_in = ${indoorClimateData.indoorAsbestosFibrePerCm3.toFixed(4)} fibre/cm³, ${indoorClimateData.indoorAsbestosPctOfGv} % af GV) ved ${indoorClimateData.primaryFocusReceptor} kræver øjeblikkelig arbejdsstandsning på ${telemetryContext.selectedSourceName} og hvilke konkrete tiltag der skal iværksættes nu.`,
             tier: 'general',
             grounding: 'none',
           },
           {
-            label: '💧 Vandkanon, H-Sug & Værnemidler',
+            label: 'Vandkanon, H-Sug & Værnemidler',
             prompt: `Giv en konkret teknisk instruks til justering af vandkanoner, støjskærme, undertrykssluser og P3/TM3 åndedrætsværn på ${telemetryContext.selectedSourceName} ved aktuel vind (${telemetryContext.windSpeedMs.toFixed(1)} m/s @ ${telemetryContext.windDirDeg}°).`,
             tier: 'fast',
             grounding: 'none',
           },
           {
-            label: '📋 Kræv Tredjeparts-Asbestprøver',
+            label: 'Kræv Tredjeparts-Asbestprøver',
             prompt: `Formulér et skriftligt AMR-krav til byggeledelsen og Arbejdstilsynet om udlevering af akkrediterede tredjeparts-asbestprøver jf. reglerne pr. 1. juli 2026 og BEK 613/2026.`,
             tier: 'complex',
             grounding: 'none',
@@ -251,10 +252,10 @@ export const ForensicChatbotPanel: React.FC<ForensicChatbotPanelProps> = ({
       jurist: {
         id: 'jurist',
         title: 'Juristen (Almenlejeloven, Byfornyelsesloven & BEK 613/2026)',
-        shortLabel: '⚖️ Juristen',
+        shortLabel: 'Juristen',
         subtitle:
           'Almenlejeloven (LBK nr. 928) §§ 11, 15, 17, 18, 81, 86 stk. 3 & 90 · Byfornyelseslovens § 75 (Kondemnering) · BEK 613/2026 · BR18 § 443 / DS 447',
-        badgeText: '💣 Liability Bomb · ALL §§ 11-18, 81-90 · ByfornL § 75',
+        badgeText: 'Liability Bomb · ALL §§ 11-18, 81-90 · ByfornL § 75',
         accentClasses: 'border-amber-500/50 bg-amber-950/25 text-amber-100',
         activeButtonClasses:
           'bg-amber-500/25 border-amber-400 text-amber-100 shadow-xs font-bold',
@@ -263,7 +264,7 @@ export const ForensicChatbotPanel: React.FC<ForensicChatbotPanelProps> = ({
           'Når S_in ≥ 0,5 (aktuelt S_in = 3,15), asbestfibre fra kælder/nedrivning påvises i indeluften (C_in = 0,0071 fibre/cm³, 237 % af GV), skimmel overstiger 500 CFU/m³ (685 CFU/m³), eller BR18 § 443 / DS 447 tilsidesættes (ΔP_CAV = -45,3 Pa), genererer Juristen automatisk retskrav efter Almenlejeloven (LBK nr. 928) §§ 11, 15, 17 og 18 (forholdsmæssigt afslag i huslejen 25–100 %, huslejedeponering i Beboerklagenævnet), §§ 81, 86, stk. 3 og § 90 (midlertidig/permanent genhusning inkl. flytteudgifter) samt Byfornyelseslovens § 75 (kommunal kondemneringspligt ved sundhedsfare).',
         quickPrompts: [
           {
-            label: '⚖️ Generér Retskrav: ALL §§ 11, 15, 17, 18, 81-90 & ByfornL § 75',
+            label: 'Generér Retskrav: ALL §§ 11, 15, 17, 18, 81-90 & ByfornL § 75',
             prompt: `Generér det fulde retskrav for "${indoorClimateData.primaryFocusReceptor}" baseret på IndoorReceptorClimateExposure:
 - Indendørs Sumkvotient: S_in = ∑ (C_in,i / GV_i) = ${indoorClimateData.indoorSumQuotientSin.toFixed(2)} (ULOVLIG ≥ 1,0; S_in ≥ 0,5)
 - Indendørs Asbest: C_in = ${indoorClimateData.indoorAsbestosFibrePerCm3.toFixed(4)} fibre/cm³ (${indoorClimateData.indoorAsbestosPctOfGv} % af GV = 0,003 fibre/cm³ jf. BEK 613/2026)
@@ -277,13 +278,13 @@ Udarbejd konkrete retskrav efter:
             grounding: 'none',
           },
           {
-            label: '💣 Smid "The Liability Bomb" (Mala Fides Varsling)',
+            label: 'Smid "The Liability Bomb" (Mala Fides Varsling)',
             prompt: `Forklar hvordan jeg smider "The Liability Bomb" lige nu over for boligorganisationen, bygherre, hovedentreprenør og Slagelse Kommune baseret på S_out = ${telemetryContext.sumQuotient.toFixed(2)} og S_in = ${indoorClimateData.indoorSumQuotientSin.toFixed(2)} (C_in = ${indoorClimateData.indoorAsbestosFibrePerCm3.toFixed(4)} fibre/cm³, ΔP_CAV = ${indoorClimateData.deltaPCavPa.toFixed(1)} Pa) ved ${indoorClimateData.primaryFocusReceptor}, og udarbejd det præcise varslingsbrev der sætter dem i dokumenteret ond tro (mala fides).`,
             tier: 'complex',
             grounding: 'none',
           },
           {
-            label: '🏛️ Byfornyelseslovens § 75 Kondemneringsbegæring',
+            label: 'Byfornyelseslovens § 75 Kondemneringsbegæring',
             prompt: `Udarbejd en formel begæring til Slagelse Kommunes kommunalbestyrelse om straks-undersøgelse og kondemnering (forbud mod beboelse + genhusningspligt) efter Byfornyelseslovens § 75 samt Almenlejelovens §§ 81, 86, stk. 3 og § 90 på baggrund af indendørs asbest C_in = ${indoorClimateData.indoorAsbestosFibrePerCm3.toFixed(4)} fibre/cm³ (237 % af GV), skimmel (${indoorClimateData.moldCfuPerM3} CFU/m³ > 500 CFU/m³) og S_in = ${indoorClimateData.indoorSumQuotientSin.toFixed(2)}.`,
             tier: 'complex',
             grounding: 'none',
@@ -293,7 +294,7 @@ Udarbejd konkrete retskrav efter:
       fysiker: {
         id: 'fysiker',
         title: 'Fysikeren / Matematikeren',
-        shortLabel: '⚛️ Fysiker/Mat.',
+        shortLabel: 'Fysiker/Mat.',
         subtitle:
           'Termodynamisk & matematisk forklaring af spredningsmekanismerne (Advektion-diffusion, Gaussisk Puff, Clausius-Clapeyron & Stokes)',
         badgeText: 'Termodynamik · Partielle Differentialligninger',
@@ -305,19 +306,19 @@ Udarbejd konkrete retskrav efter:
           'Forklarer spredningsmekanismerne matematisk og termodynamisk: Advektions-diffusionsligningen, 3D Gaussisk Puff-integration, Clausius-Clapeyron damptryk for PCB, Stokes faldhastighed og akustisk refraktion.',
         quickPrompts: [
           {
-            label: '📐 Matematisk Udledning af Aktuel Fane',
+            label: 'Matematisk Udledning af Aktuel Fane',
             prompt: `Giv en fuld matematisk og termodynamisk forklaring af spredningsmekanismerne fra ${telemetryContext.selectedSourceName} mod ${telemetryContext.peakAddress} ved vind u = ${telemetryContext.windSpeedMs.toFixed(1)} m/s (${telemetryContext.windDirDeg}°), Pasquill-klasse ${telemetryContext.stabilityClass} og Sumformel S = ${telemetryContext.sumQuotient.toFixed(2)}.`,
             tier: 'complex',
             grounding: 'none',
           },
           {
-            label: '🔥 Termodynamisk PCB-Afgasning & Stokes',
+            label: 'Termodynamisk PCB-Afgasning & Stokes',
             prompt: `Udled hvordan solindstråling og temperatur styrer PCB-afgasning via Clausius-Clapeyron ligningen, og hvorfor respirable asbestfibre (<3 µm) og kvartspartikler forbliver svævende jf. Stokes' lov ved ${telemetryContext.windSpeedMs.toFixed(1)} m/s.`,
             tier: 'complex',
             grounding: 'none',
           },
           {
-            label: '🔊 Lydbølgebøjning (Akustisk Refraktion)',
+            label: 'Lydbølgebøjning (Akustisk Refraktion)',
             prompt: `Forklar matematisk hvordan vertikal vindgradient ∂u/∂z og temperaturgradient ∂T/∂z bøjer lydbølgerne hen over støjskærmene mod ${telemetryContext.peakAddress}.`,
             tier: 'general',
             grounding: 'none',
@@ -327,7 +328,7 @@ Udarbejd konkrete retskrav efter:
       laege: {
         id: 'laege',
         title: 'Lægen (Sundhedsfaglige Råd & Vejledning)',
-        shortLabel: '🩺 Lægen',
+        shortLabel: 'Lægen',
         subtitle:
           'Lægefaglig forklaring af kroppens reaktion på målt eksponering, sundhedsfaglige råd, sårbare grupper & klinisk dokumentation',
         badgeText: 'Arbejds- & Miljømedicin · ICD-10',
@@ -339,19 +340,19 @@ Udarbejd konkrete retskrav efter:
           'Speciallæge i arbejds-, miljø- og lungemedicin. Forklarer akut slimhindeirritation, alveolær deponering, frustreret fagocytose, NLRP3-inflammasom, cocktaileffekt (Sumformlen) og giver sundhedsfaglig vejledning.',
         quickPrompts: [
           {
-            label: '🫁 Kroppens Reaktion & Sundhedsråd Nu',
+            label: 'Kroppens Reaktion & Sundhedsråd Nu',
             prompt: `Som læge: Forklar kroppens akutte og cellulære reaktion ved den målte eksponering S = ${telemetryContext.sumQuotient.toFixed(2)} ved ${telemetryContext.peakAddress}, og giv konkrete sundhedsfaglige råd til beboere, børn og lungesyge.`,
             tier: 'general',
             grounding: 'none',
           },
           {
-            label: '👶 Råd til Børn (<7 år), Gravide & Astma',
+            label: 'Råd til Børn (<7 år), Gravide & Astma',
             prompt: `Hvorfor er børn under 7 år, gravide og patienter med astma eller KOL særligt udsatte ved kombineret eksponering for asbestfibre, respirabelt kvarts (SiO₂) og PCB i Ringparken, og hvordan skal de forholde sig?`,
             tier: 'complex',
             grounding: 'none',
           },
           {
-            label: '📄 Guide til Lægejournal & Bevis-Bilag',
+            label: 'Guide til Lægejournal & Bevis-Bilag',
             prompt: `Hvilke præcise oplysninger, ICD-10 koder og kliniske undersøgelser (spirometri, biomarkører, eksponeringslog) bør en beboer bede egen læge om at journalføre til brug for bevisførelse?`,
             tier: 'general',
             grounding: 'none',
@@ -361,7 +362,7 @@ Udarbejd konkrete retskrav efter:
       kybernetiker: {
         id: 'kybernetiker',
         title: 'Kybernetikeren (VSM, Ashbys Lov & Systemisk Tetanus)',
-        shortLabel: '🕸️ Kybernetiker',
+        shortLabel: 'Kybernetiker',
         subtitle:
           "Stafford Beers VSM · Ashbys Lov · CAV-Undertryk (ΔP_CAV = -45,3 Pa) & Termisk Opdrift (ΔP_s = +5,0 Pa) ⇒ Systemisk Tetanus (T_r > Δt ⇒ Q → ∞)",
         badgeText: 'VSM · Ashby V_R ≥ V_D/V_C · T_r > Δt ⇒ Q → ∞',
@@ -373,19 +374,19 @@ Udarbejd konkrete retskrav efter:
           'Indregner CAV-undertryk (ΔP_CAV = -45,3 Pa), termisk opdrift (ΔP_s = +5,0 Pa, 1,04 Pa/m, z_NPL = 12,0 m / 12,0 m) og uforseglede rørskakter (Q_op = 78,1 m³/h) direkte i beregningen af Krise-Intervallet Δt (= 1,08 t) kontra byggeledelsens Afslapningstid T_r (= 18,5 t). Dokumenterer matematisk hvordan manglende overtryksfiltrering reducerer Δt og inducerer Systemisk Tetanus (T_r > Δt ⇒ Q → ∞).',
         quickPrompts: [
           {
-            label: '🕸️ CAV-Undertryk & Termisk Opdrift ⇒ Systemisk Tetanus (T_r > Δt ⇒ Q → ∞)',
+            label: 'CAV-Undertryk & Termisk Opdrift ⇒ Systemisk Tetanus (T_r > Δt ⇒ Q → ∞)',
             prompt: `Indregn CAV-undertryk (ΔP_CAV = ${indoorClimateData.deltaPCavPa.toFixed(1)} Pa), termisk opdrift (ΔP_s = +${indoorClimateData.deltaPsSpanPa.toFixed(1)} Pa, ${indoorClimateData.stackGradientPaPerM.toFixed(2)} Pa/m, z_NPL = ${indoorClimateData.zNplEffectiveMeters.toFixed(1)} m / ${indoorClimateData.buildingHeightMeters.toFixed(1)} m) og uforseglede rørskakter (Q_op = ${indoorClimateData.shaftAndCrackInflowQopM3PerH.toFixed(1)} m³/h, q_75,deg = ${indoorClimateData.degradedPermeabilityQ75DegM3PerHm2.toFixed(2)} m³/(h·m²) ved PPV = ${indoorClimateData.ppvFoundationMmPerSec.toFixed(1)} mm/s @ 3 Hz, d = ${indoorClimateData.distanceMeters} m) direkte i beregningen af Krise-Intervallet Δt (${indoorClimateData.crisisIntervalDeltaTHours} t) kontra byggeledelsens Afslapningstid T_r (${indoorClimateData.relaxationTimeTrHours} t). Dokumentér matematisk, hvordan manglende overtryksfiltrering og uforseglede rørskakter i "${indoorClimateData.primaryFocusReceptor}" reducerer Δt og inducerer Systemisk Tetanus (T_r > Δt ⇒ Q → ∞) med S_in = ${indoorClimateData.indoorSumQuotientSin.toFixed(2)} og C_in = ${indoorClimateData.indoorAsbestosFibrePerCm3.toFixed(4)} fibre/cm³ (237 % af GV).`,
             tier: 'complex',
             grounding: 'none',
           },
           {
-            label: '⚖️ Ashbys Lov: Varians-Dræn via ΔP_CAV = -45,3 Pa & Q_op = 78,1 m³/h',
+            label: 'Ashbys Lov: Varians-Dræn via ΔP_CAV = -45,3 Pa & Q_op = 78,1 m³/h',
             prompt: `Forklar ud fra W. Ross Ashbys Lov om nødvendig varians \\[V_R \\geq \\frac{V_D}{V_C}\\] (simplificeret \\(V_R \\geq V_D\\)), hvordan den koblede udendørs forstyrrelsesvarians (S_out = ${telemetryContext.sumQuotient.toFixed(2)}) og bygningsfysiske vakuumpumpe (ΔP_CAV = ${indoorClimateData.deltaPCavPa.toFixed(1)} Pa + ΔP_s = +${indoorClimateData.deltaPsSpanPa.toFixed(1)} Pa, Q_op = ${indoorClimateData.shaftAndCrackInflowQopM3PerH.toFixed(1)} m³/h) overstiger byggeledelsens styringsvarians V_R og administrativt varians-dæmpes ved ${indoorClimateData.primaryFocusReceptor}.`,
             tier: 'complex',
             grounding: 'none',
           },
           {
-            label: '⏳ Matematisk Bevis: T_r > Δt ⇒ Q → ∞ & Algedonisk Bypass',
+            label: 'Matematisk Bevis: T_r > Δt ⇒ Q → ∞ & Algedonisk Bypass',
             prompt: `Bevis matematisk og kybernetisk hvorfor forholdet mellem byggeledelsens afslapningstid T_r = ${indoorClimateData.relaxationTimeTrHours} timer og det af CAV-undertryk forkortede krise-interval Δt = ${indoorClimateData.crisisIntervalDeltaTHours} timer (\\[T_r > \\Delta t \\Longrightarrow Q \\to \\infty\\]) fører til Systemisk Tetanus og uendelig toksisk akkumulering i indeluften (S_in = ${indoorClimateData.indoorSumQuotientSin.toFixed(2)}), og hvorfor det Algedoniske Signal skal udløse Interlock #5 (BR18 § 443 / DS 447).`,
             tier: 'complex',
             grounding: 'none',
@@ -422,7 +423,7 @@ Udarbejd konkrete retskrav efter:
         modelUsed: 'gemini-4-argon',
         timestamp: nowTime,
         text:
-          `### 💣 VIGTIGSTE JURIDISKE SKRIDT: SMID "THE LIABILITY BOMB" & AKTIVÉR LEJERETLIGE KRAV (S_in = ${indoorClimateData.indoorSumQuotientSin.toFixed(2)} ≥ 0,5)\n` +
+          `### VIGTIGSTE JURIDISKE SKRIDT: SMID "THE LIABILITY BOMB" & AKTIVÉR LEJERETLIGE KRAV (S_in = ${indoorClimateData.indoorSumQuotientSin.toFixed(2)} ≥ 0,5)\n` +
           `For primær fokus-receptor **"${indoorClimateData.primaryFocusReceptor}"** viser den koblede retsmedicinske telemetri (` +
           `Afstand $d = ${indoorClimateData.distanceMeters}\\text{ m}$, Vibrations-PPV $= ${indoorClimateData.ppvFoundationMmPerSec.toFixed(1)}\\text{ mm/s}$ @ $3\\text{ Hz}$, Degraderet Permeabilitet $q_{75,\\text{deg}} = ${indoorClimateData.degradedPermeabilityQ75DegM3PerHm2.toFixed(2)}\\text{ m}^3/(\\text{h}\\cdot\\text{m}^2)$, ` +
           `Mekanisk CAV-Undertryk $\\Delta P_{\\text{CAV}} = ${indoorClimateData.deltaPCavPa.toFixed(1)}\\text{ Pa}$, Skakt-indsugning $Q_{\\text{op}} = ${indoorClimateData.shaftAndCrackInflowQopM3PerH.toFixed(1)}\\text{ m}^3/\\text{h}$, ` +
@@ -443,7 +444,7 @@ Udarbejd konkrete retskrav efter:
         modelUsed: 'gemini-4-argon',
         timestamp: nowTime,
         text:
-          `### 🕸️ Kybernetikeren — VSM, Ashbys Lov & Systemisk Tetanus ($T_r > \\Delta t \\Longrightarrow Q \\to \\infty$)\n` +
+          `### Kybernetikeren — VSM, Ashbys Lov & Systemisk Tetanus ($T_r > \\Delta t \\Longrightarrow Q \\to \\infty$)\n` +
           `Jeg indregner direkte det mekaniske **CAV-undertryk ($\\Delta P_{\\text{CAV}} = ${indoorClimateData.deltaPCavPa.toFixed(1)}\\text{ Pa}$)** og **termiske skorstenstryk ($\\Delta P_s = +${indoorClimateData.deltaPsSpanPa.toFixed(1)}\\text{ Pa}$, $${indoorClimateData.stackGradientPaPerM.toFixed(2)}\\text{ Pa/m}$, $z_{\\text{NPL}} = ${indoorClimateData.zNplEffectiveMeters.toFixed(1)}\\text{ m} / ${indoorClimateData.buildingHeightMeters.toFixed(1)}\\text{ m}$)** i **${indoorClimateData.primaryFocusReceptor}** i forholdet mellem **Krise-Intervallet $\\Delta t$** og byggeledelsens **Afslapningstid $T_r$**:\n\n` +
           `\\[T_r > \\Delta t \\Longrightarrow Q \\to \\infty \\quad (\\text{Systemisk Tetanus \\& Administrativ Varians-Dæmpning})\\]\n\n` +
           `- **Komprimeret Krise-Interval ($\\Delta t$):** Manglende overtryksfiltrering og uforseglede rørskakter ($Q_{\\text{op}} = ${indoorClimateData.shaftAndCrackInflowQopM3PerH.toFixed(1)}\\text{ m}^3/\\text{h}$ samt vibrations-degraderet klimaskærm $q_{75,\\text{deg}} = ${indoorClimateData.degradedPermeabilityQ75DegM3PerHm2.toFixed(2)}\\text{ m}^3/(\\text{h}\\cdot\\text{m}^2)$ ved $PPV = ${indoorClimateData.ppvFoundationMmPerSec.toFixed(1)}\\text{ mm/s}$ @ $3\\text{ Hz}$, $d = ${indoorClimateData.distanceMeters}\\text{ m}$) komprimerer det kritiske infiltrationsinterval fra $6,0\\text{ timer}$ ned til **$\\Delta t = ${indoorClimateData.crisisIntervalDeltaTHours}\\text{ timer}$**.\n` +
@@ -460,7 +461,7 @@ Udarbejd konkrete retskrav efter:
         modelUsed: 'gemini-4-argon',
         timestamp: nowTime,
         text:
-          `### ⚛️ Fysikeren / Matematikeren — Termodynamik & Matematisk Spredningsmekanik\n` +
+          `### Fysikeren / Matematikeren — Termodynamik & Matematisk Spredningsmekanik\n` +
           `Klar til stringent fysisk-matematisk analyse af **${telemetryContext.selectedSourceName} → ${telemetryContext.peakAddress}** ved **$u = ${telemetryContext.windSpeedMs.toFixed(1)}\\text{ m/s}$** (${telemetryContext.windDirDeg}° → fane mod ${plumeDirDeg}°), Pasquill-Gifford stabilitetsklasse **${telemetryContext.stabilityClass}** og Sumformel **$S = ${telemetryContext.sumQuotient.toFixed(2)}$**.\n\n` +
           `- **Advektions-Diffusions-PDE:** \\[\\frac{\\partial C_i}{\\partial t} + \\mathbf{u}\\cdot\\nabla C_i = \\nabla\\cdot(\\mathbf{K}\\nabla C_i) + Q_i - S_{\\text{sink}}\\]\n` +
           `- **Termodynamisk PCB-desorption (Clausius-Clapeyron):** \\[\\ln\\left(\\frac{P_2}{P_1}\\right) = -\\frac{\\Delta H_{\\text{vap}}}{R}\\left(\\frac{1}{T_2}-\\frac{1}{T_1}\\right)\\]\n` +
@@ -477,7 +478,7 @@ Udarbejd konkrete retskrav efter:
         modelUsed: 'gemini-3.8-flash',
         timestamp: nowTime,
         text:
-          `### 🩺 Lægen — Sundhedsfaglige Råd, Patofysiologi & Klinisk Vejledning\n` +
+          `### Lægen — Sundhedsfaglige Råd, Patofysiologi & Klinisk Vejledning\n` +
           `Velkommen til den lægefaglige rådgivning for **Ringparken, 4200 Slagelse**.\n` +
           `Ved den aktuelle eksponering (**Sumformel S = ${telemetryContext.sumQuotient.toFixed(2)}** ved **${telemetryContext.peakAddress}**, vind **${telemetryContext.windSpeedMs.toFixed(1)} m/s** fra **${telemetryContext.windDirDeg}°**) rådgiver jeg om:\n` +
           `- **Kroppens reaktion på målt eksponering:** Akut luftvejsirritation, alveolær deponering af asbestfibre og respirabelt kvarts ($\\text{SiO}_2$), frustreret fagocytose og NLRP3-inflammasom aktivering.\n` +
@@ -493,7 +494,7 @@ Udarbejd konkrete retskrav efter:
       modelUsed: 'gemini-3.8-flash',
       timestamp: nowTime,
       text:
-        `### 🦺 Arbejdsmiljørepræsentanten (AMR) — Sikkerhed, Værnemidler & Standsningsret\n` +
+        `### Arbejdsmiljørepræsentanten (AMR) — Sikkerhed, Værnemidler & Standsningsret\n` +
         `AMR-vagten er aktiv for **PSS Sag W22085 (Ringparken, 4200 Slagelse)**.\n` +
         `Aktuel måling ved **${telemetryContext.peakAddress}**: **Sumformel S = ${telemetryContext.sumQuotient.toFixed(2)}** (Kilde: **${telemetryContext.selectedSourceName}**, vind **${telemetryContext.windSpeedMs.toFixed(1)} m/s** fra **${telemetryContext.windDirDeg}°**, fane mod **${plumeDirDeg}°**).\n\n` +
         `Jeg hjælper med:\n` +
@@ -807,7 +808,7 @@ Udarbejd konkrete retskrav efter:
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-white">
                 Dedikeret Gemini Chat Bot — 5 Specialiserede AI Eksperter
               </h3>
-              <p className="text-[10.5px] font-mono text-slate-400">
+              <p className="text-[11px] font-mono text-slate-400">
                 Multi-turn samtalehistorik · Live Ringparken-telemetri (S ={' '}
                 {telemetryContext.sumQuotient.toFixed(2)}) · SystemInstructions
               </p>
@@ -822,7 +823,7 @@ Udarbejd konkrete retskrav efter:
                 [personaRole]: [buildInitialWelcomeForRole(personaRole)],
               }))
             }
-            className="text-[10px] font-mono text-slate-400 hover:text-rose-400 flex items-center gap-1 px-2 py-1 rounded border border-slate-800 hover:border-rose-500/40 transition-colors cursor-pointer"
+            className="text-[11px] font-mono text-slate-400 hover:text-rose-400 flex items-center gap-1 px-2 py-1 rounded border border-slate-800 hover:border-rose-500/40 transition-colors cursor-pointer"
             title="Nulstil samtalehistorik for den valgte AI Ekspert"
           >
             <Trash2 className="w-3 h-3" />
@@ -834,14 +835,14 @@ Udarbejd konkrete retskrav efter:
         {selectedLegalViolations && (
           <div className="p-2.5 rounded-md bg-rose-950/35 border border-rose-500/50 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-[10.5px] font-mono uppercase tracking-wider text-rose-200 font-bold flex items-center gap-1.5">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-rose-200 font-bold flex items-center gap-1.5">
                 <Scale className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span>
                   AUTOMATISK AI JURIDISK TOLKNING AF VALGTE LOVOVERTRÆDELSER (
                   {selectedLegalViolations.length} VALGT)
                 </span>
               </div>
-              <span className="px-1.5 py-0.5 rounded bg-slate-950/90 border border-rose-500/40 text-[9.5px] font-mono text-amber-300">
+              <span className="px-1.5 py-0.5 rounded bg-slate-950/90 border border-rose-500/40 text-[11px] font-mono text-amber-300">
                 Klik for straks-tolkning via valgt ekspert
               </span>
             </div>
@@ -851,10 +852,13 @@ Udarbejd konkrete retskrav efter:
                 {selectedLegalViolations.map((v) => (
                   <span
                     key={`sel-chip-${v.id}`}
-                    className="px-1.5 py-0.5 rounded bg-slate-950/90 border border-rose-500/40 text-[9.5px] font-mono text-slate-200 truncate max-w-[260px]"
+                    className="px-1.5 py-0.5 rounded bg-slate-950/90 border border-rose-500/40 text-[11px] font-mono text-slate-200 truncate max-w-[260px] inline-flex items-center gap-1"
                     title={`${v.statuteTitle} — ${v.receptorName}`}
                   >
-                    ⚖️ {v.receptorName}: {v.statuteReference.split('(')[0].trim()}
+                    <Scale className="w-3 h-3 text-amber-300 shrink-0" />
+                    <span className="truncate">
+                      {v.receptorName}: {v.statuteReference.split('(')[0].trim()}
+                    </span>
                   </span>
                 ))}
               </div>
@@ -894,7 +898,7 @@ Udarbejd konkrete retskrav efter:
               >
                 <Scale className="w-3.5 h-3.5 shrink-0" />
                 <span>
-                  ⚖️ Fuld Jurist-Tolkning (Liability Bomb &amp; Sanktioner)
+                  Fuld Jurist-Tolkning (Liability Bomb &amp; Sanktioner)
                 </span>
               </button>
             </div>
@@ -903,7 +907,7 @@ Udarbejd konkrete retskrav efter:
 
         {/* 1. AI Expert Role Selector (5 Experts) */}
         <div>
-          <label className="block text-[10px] font-mono uppercase text-slate-400 mb-1.5">
+          <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1.5">
             1. Vælg AI Ekspert (SystemInstruction Rolle):
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
@@ -931,11 +935,11 @@ Udarbejd konkrete retskrav efter:
                 >
                   <div className="flex items-center gap-1">
                     {getExpertIcon(roleKey, 'w-3.5 h-3.5 shrink-0')}
-                    <span className="truncate">{def.shortLabel.replace(/^[^\s]+\s/, '')}</span>
+                    <span className="truncate">{def.shortLabel}</span>
                   </div>
-                  <span className="text-[9px] opacity-80 truncate max-w-full">
+                  <span className="text-[11px] opacity-80 truncate max-w-full">
                     {roleKey === 'jurist'
-                      ? '💣 Liability Bomb'
+                      ? 'Liability Bomb'
                       : roleKey === 'kybernetiker'
                       ? 'VSM & Ashby'
                       : roleKey === 'fysiker'
@@ -959,7 +963,7 @@ Udarbejd konkrete retskrav efter:
               {getExpertIcon(personaRole, 'w-4 h-4 shrink-0')}
               <span>{activeExpert.title}</span>
             </div>
-            <span className="px-2 py-0.5 rounded bg-slate-950/80 border border-white/15 font-mono text-[10px]">
+            <span className="px-2 py-0.5 rounded bg-slate-950/80 border border-white/15 font-mono text-[11px]">
               {activeExpert.badgeText}
             </span>
           </div>
@@ -969,7 +973,7 @@ Udarbejd konkrete retskrav efter:
 
           {/* JURISTEN SPECIAL MANDATORY BANNER: THE LIABILITY BOMB + ALMENLEJELOVEN §§ 11-18, 81-90 & BYFORNYELSESLOVENS § 75 */}
           {personaRole === 'jurist' && (
-            <div className="p-2.5 rounded bg-amber-950/90 border-2 border-amber-400/90 text-amber-100 space-y-2 shadow-md">
+            <div className="p-2.5 rounded bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-amber-400 text-amber-100 space-y-2">
               <div className="flex items-center justify-between gap-2 font-mono text-[11px] font-extrabold uppercase tracking-wider text-amber-300">
                 <span className="flex items-center gap-1.5">
                   <Flame className="w-4 h-4 text-rose-400 shrink-0" />
@@ -977,19 +981,19 @@ Udarbejd konkrete retskrav efter:
                     AUTOMATISK LEJERETLIGT RETSKRAV VED S_in = {indoorClimateData.indoorSumQuotientSin.toFixed(2)} ≥ 0,5 (ALL §§ 11-18, 81-90 &amp; ByfornL § 75)
                   </span>
                 </span>
-                <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9.5px]">
+                <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[11px]">
                   S_in = {indoorClimateData.indoorSumQuotientSin.toFixed(2)} · C_in = {indoorClimateData.indoorAsbestosFibrePerCm3.toFixed(4)} f/cm³ (237 % GV)
                 </span>
               </div>
-              <div className="p-2 rounded bg-slate-950/90 border border-amber-500/40 font-mono text-[10.5px] text-amber-200 space-y-1">
+              <div className="p-2 rounded bg-slate-950/90 border border-amber-500/40 font-mono text-[11px] text-amber-200 space-y-1">
                 <div className="font-bold text-white">
                   S_in = ∑ (C_in,i / GV_i) ≥ 0,5 → Krav om forholdsmæssigt afslag i lejen (25–100 %) jf. ALL §§ 11, 17, 18
                 </div>
-                <div className="text-[10px] text-slate-300">
+                <div className="text-[11px] text-slate-300">
                   Primær Fokus-Receptor: <strong className="text-amber-300">{indoorClimateData.primaryFocusReceptor}</strong> · Afstand d = {indoorClimateData.distanceMeters} m · PPV = {indoorClimateData.ppvFoundationMmPerSec.toFixed(1)} mm/s (@ 3 Hz) · q_75,deg = {indoorClimateData.degradedPermeabilityQ75DegM3PerHm2.toFixed(2)} m³/(h·m²) · ΔP_CAV = {indoorClimateData.deltaPCavPa.toFixed(1)} Pa · Q_op = {indoorClimateData.shaftAndCrackInflowQopM3PerH.toFixed(1)} m³/h · ΔP_s = +{indoorClimateData.deltaPsSpanPa.toFixed(1)} Pa (1,04 Pa/m) · z_NPL = {indoorClimateData.zNplEffectiveMeters.toFixed(1)} m / 12,0 m · Skimmel = {indoorClimateData.moldCfuPerM3} CFU/m³ (&gt; 500 CFU/m³).
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 font-mono text-[10px]">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 font-mono text-[11px]">
                 <div className="p-1.5 rounded bg-slate-950/85 border border-amber-500/40">
                   <div className="font-bold text-amber-300">1. ALL §§ 11, 15, 17 &amp; 18</div>
                   <div className="text-slate-200">
@@ -1015,7 +1019,7 @@ Udarbejd konkrete retskrav efter:
           {/* KYBERNETIKEREN SPECIAL MANDATORY MATHEMATICAL & VSM BANNER */}
           {personaRole === 'kybernetiker' && (
             <div className="p-2.5 rounded bg-slate-950/95 border border-fuchsia-400/60 text-fuchsia-100 space-y-2 font-mono text-[11px]">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-fuchsia-300 flex items-center gap-1.5">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-fuchsia-300 flex items-center gap-1.5">
                 <Network className="w-3.5 h-3.5 text-fuchsia-400" />
                 <span>
                   Kybernetisk Indeklima-Kobling (VSM · Ashbys Lov · ΔP_CAV = -45,3 Pa &amp; ΔP_s = +5,0 Pa ⇒ Systemisk Tetanus)
@@ -1023,24 +1027,24 @@ Udarbejd konkrete retskrav efter:
               </div>
               <div className="grid grid-cols-1 gap-1.5">
                 <div className="p-2 rounded bg-slate-900/90 border border-fuchsia-500/30">
-                  <div className="text-[10px] text-fuchsia-300 font-bold">
+                  <div className="text-[11px] text-fuchsia-300 font-bold">
                     1. Indlejret Matematisk Formel — Systemisk Tetanus &amp; Administrativ Varians-Dæmpning:
                   </div>
                   <div className="text-xs font-bold text-white mt-0.5 bg-slate-950 px-2 py-1 rounded border border-slate-800">
                     T_r &gt; Δt ⇒ Q → ∞ (Systemisk Tetanus &amp; Administrativ Varians-Dæmpning)
                   </div>
-                  <div className="text-[10px] text-slate-200 mt-1">
+                  <div className="text-[11px] text-slate-200 mt-1">
                     Ukompenseret CAV-undertryk (<strong>ΔP_CAV = {indoorClimateData.deltaPCavPa.toFixed(1)} Pa</strong>), termisk opdrift (<strong>ΔP_s = +{indoorClimateData.deltaPsSpanPa.toFixed(1)} Pa, {indoorClimateData.stackGradientPaPerM.toFixed(2)} Pa/m, z_NPL = {indoorClimateData.zNplEffectiveMeters.toFixed(1)} m / 12,0 m</strong>) og uforseglede rørskakter (<strong>Q_op = {indoorClimateData.shaftAndCrackInflowQopM3PerH.toFixed(1)} m³/h</strong>) komprimerer Krise-Intervallet til <strong>Δt = {indoorClimateData.crisisIntervalDeltaTHours} timer</strong>, mens byggeledelsens Afslapningstid er <strong>T_r = {indoorClimateData.relaxationTimeTrHours} timer</strong> (T_r / Δt = {indoorClimateData.systemicTetanusRatio}×).
                   </div>
                 </div>
                 <div className="p-2 rounded bg-slate-900/90 border border-cyan-500/30">
-                  <div className="text-[10px] text-cyan-300 font-bold">
+                  <div className="text-[11px] text-cyan-300 font-bold">
                     2. W. Ross Ashby&apos;s Lov om nødvendig varians:
                   </div>
                   <div className="text-xs font-bold text-white mt-0.5 bg-slate-950 px-2 py-1 rounded border border-slate-800">
                     \[V_R \geq \frac{'{'}V_D{'}'}{'{'}V_C{'}'}\] &nbsp; (eller simplificeret: \(V_R \geq V_D\))
                   </div>
-                  <div className="text-[10px] text-slate-300 mt-0.5">
+                  <div className="text-[11px] text-slate-300 mt-0.5">
                     Manglende overtryksfiltrering (HEPA H14 ΔP = +10 Pa) i {indoorClimateData.primaryFocusReceptor} medfører V_R ≪ V_D og S_in = {indoorClimateData.indoorSumQuotientSin.toFixed(2)} (C_in = {indoorClimateData.indoorAsbestosFibrePerCm3.toFixed(4)} fibre/cm³, 237 % af GV).
                   </div>
                 </div>
@@ -1050,7 +1054,7 @@ Udarbejd konkrete retskrav efter:
 
           {/* FYSIKEREN SPECIAL THERMODYNAMIC & PDE BANNER */}
           {personaRole === 'fysiker' && (
-            <div className="p-2 rounded bg-slate-950/90 border border-cyan-500/40 font-mono text-[10.5px] text-cyan-200 space-y-1">
+            <div className="p-2 rounded bg-slate-950/90 border border-cyan-500/40 font-mono text-[11px] text-cyan-200 space-y-1">
               <div className="font-bold text-cyan-300">
                 Termodynamisk &amp; Matematisk Spredningskerne:
               </div>
@@ -1061,12 +1065,13 @@ Udarbejd konkrete retskrav efter:
           )}
 
           {/* RAPPORTVERIFICERET BYGNINGS- & DMA-PRØVEGRUNDLAG INJICERET I SYSTEMPROMPT */}
-          <div className="p-2.5 rounded bg-slate-950/90 border border-amber-500/45 space-y-1.5 text-[10.5px] font-mono">
+          <div className="p-2.5 rounded bg-slate-950/90 border border-amber-500/45 space-y-1.5 text-[11px] font-mono">
             <div className="flex flex-wrap items-center justify-between gap-1.5">
-              <span className="text-amber-300 font-bold uppercase">
-                📋 Injiceret Miljørapport &amp; DMA-Grundlag ({activeBuildingProfile.buildingCode}):
+              <span className="text-amber-300 font-bold uppercase inline-flex items-center gap-1">
+                <FileText className="w-3.5 h-3.5 shrink-0" />
+                <span>Injiceret Miljørapport &amp; DMA-Grundlag ({activeBuildingProfile.buildingCode}):</span>
               </span>
-              <span className="px-1.5 py-0.2 rounded bg-slate-900 border border-amber-500/40 text-amber-200 text-[9.5px]">
+              <span className="px-1.5 py-0.2 rounded bg-slate-900 border border-amber-500/40 text-amber-200 text-[11px]">
                 {activeBuildingProfile.reportIds[0]}
               </span>
             </div>
@@ -1075,7 +1080,7 @@ Udarbejd konkrete retskrav efter:
               {activeBuildingProfile.dmaAndPssHeadlineRecommendationDa}
             </div>
             <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800">
-              <span className="text-[9.5px] text-cyan-300 truncate max-w-[320px]">
+              <span className="text-[11px] text-cyan-300 truncate max-w-[320px]">
                 Grounding: Blok 1 (krybekælder), Bygning 1 (vægfliser), Bygning 2 (kældermembran), Bygning 3 (vindspærreplade), Blok 2-20 (sanering vs. indkapsling)
               </span>
               <button
@@ -1089,7 +1094,7 @@ Udarbejd konkrete retskrav efter:
                     personaRole
                   )
                 }
-                className="px-2 py-0.5 rounded bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-slate-950 font-bold text-[10px] cursor-pointer shrink-0"
+                className="px-2 py-0.5 rounded bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-slate-950 font-bold text-[11px] cursor-pointer shrink-0"
               >
                 Spørg {activeExpert.shortLabel} om DMA-Prøver
               </button>
@@ -1099,7 +1104,7 @@ Udarbejd konkrete retskrav efter:
 
         {/* 2. Gemini Model Tier Selector */}
         <div>
-          <label className="block text-[10px] font-mono uppercase text-slate-400 mb-1">
+          <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">
             2. Gemini Model-Arkitektur (Vælg Ræsonnementsdybde)
           </label>
           <div className="grid grid-cols-3 gap-1.5">
@@ -1109,7 +1114,7 @@ Udarbejd konkrete retskrav efter:
                 setModelTier('complex');
                 setGroundingTool('none');
               }}
-              className={`px-2 py-1.5 rounded text-[10px] font-mono border text-left transition-colors cursor-pointer ${
+              className={`px-2 py-1.5 rounded text-[11px] font-mono border text-left transition-colors cursor-pointer ${
                 modelTier === 'complex' && groundingTool === 'none'
                   ? 'bg-purple-500/25 border-purple-400 text-purple-100 font-bold'
                   : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -1119,13 +1124,13 @@ Udarbejd konkrete retskrav efter:
                 <Cpu className="w-3 h-3 text-purple-400 shrink-0" />
                 <span className="truncate">Argon (Kompleks)</span>
               </div>
-              <div className="text-[9px] text-slate-400 truncate">gemini-4-argon</div>
+              <div className="text-[11px] text-slate-400 truncate">gemini-4-argon</div>
             </button>
 
             <button
               type="button"
               onClick={() => setModelTier('general')}
-              className={`px-2 py-1.5 rounded text-[10px] font-mono border text-left transition-colors cursor-pointer ${
+              className={`px-2 py-1.5 rounded text-[11px] font-mono border text-left transition-colors cursor-pointer ${
                 modelTier === 'general' || groundingTool !== 'none'
                   ? 'bg-cyan-500/25 border-cyan-400 text-cyan-100 font-bold'
                   : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -1135,7 +1140,7 @@ Udarbejd konkrete retskrav efter:
                 <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
                 <span className="truncate">Flash 3.8 (Generel)</span>
               </div>
-              <div className="text-[9px] text-slate-400 truncate">gemini-3.8-flash</div>
+              <div className="text-[11px] text-slate-400 truncate">gemini-3.8-flash</div>
             </button>
 
             <button
@@ -1144,7 +1149,7 @@ Udarbejd konkrete retskrav efter:
                 setModelTier('fast');
                 setGroundingTool('none');
               }}
-              className={`px-2 py-1.5 rounded text-[10px] font-mono border text-left transition-colors cursor-pointer ${
+              className={`px-2 py-1.5 rounded text-[11px] font-mono border text-left transition-colors cursor-pointer ${
                 modelTier === 'fast' && groundingTool === 'none'
                   ? 'bg-emerald-500/25 border-emerald-400 text-emerald-100 font-bold'
                   : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -1154,7 +1159,7 @@ Udarbejd konkrete retskrav efter:
                 <Sparkles className="w-3 h-3 text-emerald-400 shrink-0" />
                 <span className="truncate">Flash-Lite (Hurtig)</span>
               </div>
-              <div className="text-[9px] text-slate-400 truncate">
+              <div className="text-[11px] text-slate-400 truncate">
                 gemini-3.1-flash-lite
               </div>
             </button>
@@ -1163,14 +1168,14 @@ Udarbejd konkrete retskrav efter:
 
         {/* 3. Grounding Tool Mode */}
         <div>
-          <label className="block text-[10px] font-mono uppercase text-slate-400 mb-1">
+          <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">
             3. Tilkobl Live Grounding-Værktøj (Valgfrit)
           </label>
           <div className="grid grid-cols-3 gap-1.5">
             <button
               type="button"
               onClick={() => setGroundingTool('none')}
-              className={`px-2 py-1 rounded text-[10px] font-mono flex items-center justify-center gap-1 border transition-colors cursor-pointer ${
+              className={`px-2 py-1 rounded text-[11px] font-mono flex items-center justify-center gap-1 border transition-colors cursor-pointer ${
                 groundingTool === 'none'
                   ? 'bg-slate-700/80 border-slate-400 text-white font-semibold'
                   : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -1185,7 +1190,7 @@ Udarbejd konkrete retskrav efter:
                 setGroundingTool('search');
                 setModelTier('general');
               }}
-              className={`px-2 py-1 rounded text-[10px] font-mono flex items-center justify-center gap-1 border transition-colors cursor-pointer ${
+              className={`px-2 py-1 rounded text-[11px] font-mono flex items-center justify-center gap-1 border transition-colors cursor-pointer ${
                 groundingTool === 'search'
                   ? 'bg-blue-500/25 border-blue-400 text-blue-100 font-semibold'
                   : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -1200,7 +1205,7 @@ Udarbejd konkrete retskrav efter:
                 setGroundingTool('maps');
                 setModelTier('general');
               }}
-              className={`px-2 py-1 rounded text-[10px] font-mono flex items-center justify-center gap-1 border transition-colors cursor-pointer ${
+              className={`px-2 py-1 rounded text-[11px] font-mono flex items-center justify-center gap-1 border transition-colors cursor-pointer ${
                 groundingTool === 'maps'
                   ? 'bg-emerald-500/25 border-emerald-400 text-emerald-100 font-semibold'
                   : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -1215,7 +1220,7 @@ Udarbejd konkrete retskrav efter:
 
       {/* Role-Specific Quick Prompts for the Active Expert */}
       <div className="space-y-1">
-        <div className="text-[10px] font-mono uppercase text-slate-400 flex items-center gap-1.5">
+        <div className="text-[11px] font-mono uppercase text-slate-400 flex items-center gap-1.5">
           <BookOpen className="w-3 h-3 text-cyan-400" />
           <span>Hurtige Ekspert-Spørgsmål til {activeExpert.shortLabel}:</span>
         </div>
@@ -1230,7 +1235,7 @@ Udarbejd konkrete retskrav efter:
                 sendChatMessage(qp.prompt, qp.grounding, qp.tier);
               }}
               disabled={isLoading}
-              className="text-[10.5px] font-mono px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 hover:border-cyan-400/60 transition-colors cursor-pointer text-left"
+              className="text-[11px] font-mono px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 hover:border-cyan-400/60 transition-colors cursor-pointer text-left"
             >
               {qp.label}
             </button>
@@ -1252,7 +1257,7 @@ Udarbejd konkrete retskrav efter:
                   : 'bg-slate-900/95 border-slate-800 mr-3 text-slate-200'
               }`}
             >
-              <div className="flex items-center justify-between gap-2 text-[10px] font-mono text-slate-400 mb-1.5 pb-1 border-b border-slate-800/80">
+              <div className="flex items-center justify-between gap-2 text-[11px] font-mono text-slate-400 mb-1.5 pb-1 border-b border-slate-800/80">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span
                     className={
@@ -1271,7 +1276,7 @@ Udarbejd konkrete retskrav efter:
                     )}
                   </span>
                   {msg.modelUsed && (
-                    <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-[9px] text-slate-300">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-[11px] text-slate-300">
                       {msg.modelUsed}
                     </span>
                   )}
@@ -1303,7 +1308,7 @@ Udarbejd konkrete retskrav efter:
               {/* Verified Web Sources from Google Search Grounding */}
               {msg.webSources && msg.webSources.length > 0 && (
                 <div className="mt-2.5 pt-2 border-t border-slate-800/80">
-                  <div className="text-[10px] font-mono uppercase text-blue-400 mb-1 flex items-center gap-1">
+                  <div className="text-[11px] font-mono uppercase text-blue-400 mb-1 flex items-center gap-1">
                     <Globe className="w-3 h-3" />
                     Verificerede Google Search Kilder ({msg.webSources.length}):
                   </div>
@@ -1327,7 +1332,7 @@ Udarbejd konkrete retskrav efter:
               {/* Verified Google Maps Grounding Places */}
               {msg.mapPlaces && msg.mapPlaces.length > 0 && (
                 <div className="mt-2.5 pt-2 border-t border-slate-800/80">
-                  <div className="text-[10px] font-mono uppercase text-emerald-400 mb-1 flex items-center gap-1">
+                  <div className="text-[11px] font-mono uppercase text-emerald-400 mb-1 flex items-center gap-1">
                     <MapPin className="w-3 h-3" />
                     Google Maps Grounding Lokationer ({msg.mapPlaces.length}):
                   </div>
@@ -1413,7 +1418,7 @@ Udarbejd konkrete retskrav efter:
       {/* Dedicated Google Search & Maps Grounding Bar */}
       <div className="bg-slate-900/75 border border-blue-500/30 rounded p-2.5 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-blue-300 flex items-center gap-1.5">
+          <span className="text-[11px] font-mono uppercase tracking-wider text-blue-300 flex items-center gap-1.5">
             <Globe className="w-3.5 h-3.5 text-blue-400" />
             Google Search &amp; Maps Grounding (Almenlejeloven, BEK 613/2026 &amp; Matrikler)
           </span>
@@ -1422,7 +1427,7 @@ Udarbejd konkrete retskrav efter:
               type="button"
               onClick={onRunMapsGrounding}
               disabled={mapsGroundingLoading}
-              className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 cursor-pointer"
+              className="px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 cursor-pointer"
             >
               <MapPin className="w-3 h-3" />
               {mapsGroundingLoading ? 'Scanner Maps...' : 'Scan Maps Matrikler'}

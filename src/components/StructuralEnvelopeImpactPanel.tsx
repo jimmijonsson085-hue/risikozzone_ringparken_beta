@@ -620,15 +620,15 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800 pb-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-400/60 text-rose-200 text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-400/60 text-rose-200 text-[11px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
               <Activity className="w-3 h-3 text-rose-400" />
               Byggeteknisk Påvirkning · DIN 4150-3 &amp; Indeklima-Infiltration
             </span>
-            <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-200 text-[10px] font-mono font-semibold">
+            <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-200 text-[11px] font-mono font-semibold">
               COWI Sag A205732 Screening
             </span>
             <span
-              className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+              className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border ${
                 metrics.indoorSumQuotientSin >= 1.0
                   ? 'bg-rose-600/30 border-rose-400 text-rose-100 s-quotient-warning-pulse'
                   : 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200'
@@ -671,7 +671,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
             setCowiLeakyEntrances(true);
             setFocusReceptorId('ALL_INHABITED_NEIGHBORS');
           }}
-          className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-mono text-cyan-300 shrink-0 transition-colors"
+          className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] font-mono text-cyan-300 shrink-0 transition-colors"
           title="Gendan kalibrerede referenceværdier (d = 32 m, Betonknuser @ 3 Hz, PPV = 8.7 mm/s, q_75,deg = 6.57 m³/(h·m²), S_in = 3.15)"
         >
           ↺ Kalibreret Reference (d = 32 m · S_in = 3,15)
@@ -681,56 +681,56 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
       {/* Calibrated Telemetry KPI Ribbon */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <div className="bg-slate-900/90 border border-rose-500/40 rounded p-2.5">
-          <div className="text-[10px] font-mono uppercase text-slate-400 flex items-center justify-between">
+          <div className="text-[11px] font-mono uppercase text-slate-400 flex items-center justify-between">
             <span>Vibrations-PPV (@ {machinerySpec.dominantFreqHz} Hz)</span>
             <Activity className="w-3.5 h-3.5 text-rose-400" />
           </div>
           <div className="text-base font-mono font-bold text-rose-300 mt-0.5">
             {metrics.ppvMmPerSec.toFixed(1)} mm/s
           </div>
-          <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+          <div className="text-[11px] font-mono text-slate-400 mt-0.5">
             Afstand d = {metrics.d} m · DIN Rk.2: {metrics.dinRow2Limit} mm/s (Rk.3:{' '}
             {metrics.dinRow3Limit} mm/s)
           </div>
         </div>
 
         <div className="bg-slate-900/90 border border-amber-500/40 rounded p-2.5">
-          <div className="text-[10px] font-mono uppercase text-slate-400 flex items-center justify-between">
+          <div className="text-[11px] font-mono uppercase text-slate-400 flex items-center justify-between">
             <span>Degraderet Permeabilitet q₇₅</span>
             <Wind className="w-3.5 h-3.5 text-amber-400" />
           </div>
           <div className="text-base font-mono font-bold text-amber-300 mt-0.5">
             {metrics.q75DegM3PerHm2.toFixed(2)} m³/(h·m²)
           </div>
-          <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+          <div className="text-[11px] font-mono text-slate-400 mt-0.5">
             {metrics.q75DegLPerSm2.toFixed(2)} l/(s·m²) &gt; 2,00 l/(s·m²) @ 75 Pa · P_pen ={' '}
             {metrics.penetrationFactorAsbestos}
           </div>
         </div>
 
         <div className="bg-slate-900/90 border border-cyan-500/40 rounded p-2.5">
-          <div className="text-[10px] font-mono uppercase text-slate-400 flex items-center justify-between">
+          <div className="text-[11px] font-mono uppercase text-slate-400 flex items-center justify-between">
             <span>CAV-Undertryk &amp; Neutralplan</span>
             <Gauge className="w-3.5 h-3.5 text-cyan-400" />
           </div>
           <div className="text-base font-mono font-bold text-cyan-300 mt-0.5">
             {metrics.deltaPCavPa.toFixed(1)} Pa · z_NPL {metrics.zNplMeters.toFixed(1)} m
           </div>
-          <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+          <div className="text-[11px] font-mono text-slate-400 mt-0.5">
             Skakt-sug Q_op = {metrics.shaftSuctionQopM3PerH.toFixed(1)} m³/h · ΔP_s = +
             {metrics.thermalStackDeltaPsPa.toFixed(1)} Pa
           </div>
         </div>
 
         <div className="bg-slate-900/90 border border-rose-500/60 rounded p-2.5">
-          <div className="text-[10px] font-mono uppercase text-slate-400 flex items-center justify-between">
+          <div className="text-[11px] font-mono uppercase text-slate-400 flex items-center justify-between">
             <span>Indendørs Asbest &amp; S_in</span>
             <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
           </div>
           <div className="text-base font-mono font-bold text-rose-200 mt-0.5">
             {metrics.indoorAsbestosFibrePerCm3.toFixed(4)} fibre/cm³
           </div>
-          <div className="text-[10px] font-mono text-rose-300 font-semibold mt-0.5">
+          <div className="text-[11px] font-mono text-rose-300 font-semibold mt-0.5">
             {metrics.indoorAsbestosPctOfGv}% af GV (0,003) → S_in ={' '}
             {metrics.indoorSumQuotientSin.toFixed(2)}
           </div>
@@ -742,7 +742,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           {/* Focus Receptor Selector */}
           <div>
-            <label className="block text-[10px] font-mono uppercase text-slate-400 mb-1">
+            <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">
               Primær Fokus-Receptor (Beboede Naboblokke · Kat. a):
             </label>
             <select
@@ -773,14 +773,14 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
                 ))}
               </optgroup>
             </select>
-            <div className="text-[10px] font-mono text-cyan-300/90 mt-1">
+            <div className="text-[11px] font-mono text-cyan-300/90 mt-1">
               Status: {activePreset.cowiStatus}
             </div>
           </div>
 
           {/* Active Demolition Source Selector */}
           <div>
-            <label className="block text-[10px] font-mono uppercase text-slate-400 mb-1">
+            <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">
               Aktiv Nedrivnings-/Vibrationskilde (Kat. d / c):
             </label>
             <select
@@ -794,7 +794,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
                 </option>
               ))}
             </select>
-            <div className="text-[10px] font-mono text-amber-300/90 mt-1">
+            <div className="text-[11px] font-mono text-amber-300/90 mt-1">
               Kilde-højde z ={' '}
               {selectedSourceBuilding ? Math.round(selectedSourceBuilding.floors * 3.5) : 16} m ·
               Moræneler bølgelednings-eksponent n = 1,35
@@ -804,7 +804,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
 
         {/* Machine Selector Buttons */}
         <div className="space-y-1.5">
-          <div className="text-[10px] font-mono uppercase text-slate-400">
+          <div className="text-[11px] font-mono uppercase text-slate-400">
             Vælg Nedrivningsmaskine &amp; Dominerende Excitationsfrekvens f [Hz]:
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -831,7 +831,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
                   <div className="flex items-center justify-between gap-1 font-mono text-[11px] font-bold">
                     <span>{spec.shortLabel}</span>
                     <span
-                      className="px-1.5 py-0.5 rounded text-[10px]"
+                      className="px-1.5 py-0.5 rounded text-[11px]"
                       style={{
                         backgroundColor: `${spec.colorHex}25`,
                         color: spec.colorHex,
@@ -841,7 +841,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
                       PPV = {machinePpv.toFixed(1)} mm/s
                     </span>
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-1 line-clamp-2">
+                  <div className="text-[11px] text-slate-400 mt-1 line-clamp-2">
                     F_mach = {spec.fMachFactor.toFixed(2)} · {spec.resonanceBandDescription}
                   </div>
                 </button>
@@ -874,7 +874,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
                   key={presetD}
                   type="button"
                   onClick={() => setDistanceMeters(presetD)}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                  className={`px-1.5 py-0.5 rounded text-[11px] font-mono border ${
                     distanceMeters === presetD
                       ? 'bg-rose-500/25 border-rose-400 text-rose-200 font-bold'
                       : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -901,7 +901,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
               className="w-full accent-cyan-400 cursor-pointer"
             />
             <div className="flex items-center justify-between gap-2">
-              <label className="inline-flex items-center gap-1.5 text-[10px] font-mono text-slate-300 cursor-pointer">
+              <label className="inline-flex items-center gap-1.5 text-[11px] font-mono text-slate-300 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={hadRecentFreezeThaw}
@@ -914,7 +914,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
               <button
                 type="button"
                 onClick={() => setCavNegativePressurePa(-45.3)}
-                className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-[10px] font-mono text-cyan-300 hover:bg-slate-800"
+                className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-[11px] font-mono text-cyan-300 hover:bg-slate-800"
               >
                 -45,3 Pa
               </button>
@@ -932,13 +932,13 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
               1. Interaktivt DIN 4150-3 Tabel 1 Frekvens- og Vibrationsdiagram (f ∈ [1, 100] Hz ·
               PPV ∈ [0, 60] mm/s)
             </h4>
-            <p className="text-[10px] text-slate-400 font-mono">
+            <p className="text-[11px] text-slate-400 font-mono">
               Viser grænsekurver ved fundament (Række 1–3), øverste etage horisontalt (15 mm/s)
               samt aktuelt driftspunkt ved d = {metrics.d} m
             </p>
           </div>
           <span
-            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+            className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border ${
               exceedsRow2
                 ? 'bg-rose-500/25 border-rose-400 text-rose-200'
                 : exceedsRow3
@@ -980,7 +980,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
               x={xForFreq(1) + 4}
               y={padTop + 12}
               fill="#FDA4AF"
-              fontSize="8.5"
+              fontSize="9.5"
               fontFamily="monospace"
               fontWeight="bold"
             >
@@ -1081,7 +1081,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
               x={xForFreq(52)}
               y={yForPpv(42) - 5}
               fill="#38BDF8"
-              fontSize="9"
+              fontSize="9.5"
               fontFamily="monospace"
               fontWeight="bold"
             >
@@ -1102,7 +1102,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
               x={xForFreq(14)}
               y={yForPpv(15) - 5}
               fill="#C084FC"
-              fontSize="8.5"
+              fontSize="9.5"
               fontFamily="monospace"
               fontWeight="bold"
             >
@@ -1120,7 +1120,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
               x={xForFreq(52)}
               y={yForPpv(16.5) - 5}
               fill="#FBBF24"
-              fontSize="9"
+              fontSize="9.5"
               fontFamily="monospace"
               fontWeight="bold"
             >
@@ -1138,7 +1138,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
               x={xForFreq(52)}
               y={yForPpv(8.8) + 12}
               fill="#FDA4AF"
-              fontSize="9"
+              fontSize="9.5"
               fontFamily="monospace"
               fontWeight="bold"
             >
@@ -1175,7 +1175,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
                     x={cx + 6}
                     y={cy - 4}
                     fill={spec.colorHex}
-                    fontSize="8.5"
+                    fontSize="9.5"
                     fontFamily="monospace"
                   >
                     {spec.dominantFreqHz}Hz: {ppvVal.toFixed(1)}mm/s
@@ -1208,7 +1208,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
               x={Math.min(svgWidth - 195, activeOpX + 9)}
               y={Math.max(padTop + 12, activeTopFloorY + 3)}
               fill="#E9D5FF"
-              fontSize="8.5"
+              fontSize="9.5"
               fontFamily="monospace"
               fontWeight="bold"
             >
@@ -1265,20 +1265,20 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
               <Layers className="w-3.5 h-3.5 text-amber-400" />
               Indlejrede Matematiske Formler &amp; Kalibrerede Værdier
             </h4>
-            <span className="text-[10px] font-mono text-amber-300">
+            <span className="text-[11px] font-mono text-amber-300">
               P_pen(Asbest) = {metrics.penetrationFactorAsbestos}
             </span>
           </div>
 
-          <div className="space-y-1.5 font-mono text-[10.5px] bg-slate-950 border border-slate-800/90 rounded p-2.5 text-slate-200">
+          <div className="space-y-1.5 font-mono text-[11px] bg-slate-950 border border-slate-800/90 rounded p-2.5 text-slate-200">
             <div className="border-b border-slate-800/80 pb-1.5">
-              <div className="text-slate-400 text-[9.5px]">
+              <div className="text-slate-400 text-[11px]">
                 1. Bølgeudbredelse &amp; Egenfrekvens-Resonans i Moræneler:
               </div>
               <div className="text-rose-300 font-semibold">
                 PPV(d) = PPV₀ · (d₀ / d)^1.35 · F_mach [mm/s]
               </div>
-              <div className="text-[10px] text-slate-300">
+              <div className="text-[11px] text-slate-300">
                 ⇒ Afstand d = {metrics.d} m → Vibrations-PPV ={' '}
                 <strong className="text-white">{metrics.ppvMmPerSec.toFixed(1)} mm/s</strong> (@{' '}
                 {machinerySpec.dominantFreqHz} Hz)
@@ -1286,13 +1286,13 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
             </div>
 
             <div className="border-b border-slate-800/80 pb-1.5">
-              <div className="text-slate-400 text-[9.5px]">
+              <div className="text-slate-400 text-[11px]">
                 2. Mikrorevner, Adhæsionssvigt i PCB-fuger &amp; Permeabilitetsstigning:
               </div>
               <div className="text-amber-300 font-semibold">
                 q₇₅,deg = q₇₅,₀ · (1 + α_vib · max(0, PPV - 2.5) + β_ft · I_ft)
               </div>
-              <div className="text-[10px] text-slate-300">
+              <div className="text-[11px] text-slate-300">
                 ⇒ Degraderet Permeabilitet q₇₅,deg ={' '}
                 <strong className="text-white">
                   {metrics.q75DegM3PerHm2.toFixed(2)} m³/(h·m²)
@@ -1302,13 +1302,13 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
             </div>
 
             <div className="border-b border-slate-800/80 pb-1.5">
-              <div className="text-slate-400 text-[9.5px]">
+              <div className="text-slate-400 text-[11px]">
                 3. Luftinfiltration gennem Klimaskærm, CAV-Undertryk &amp; Skorstenseffekt:
               </div>
               <div className="text-cyan-300 font-semibold">
                 Q_inf = C_flow · (ΔP)^n = A_env · q₇₅,deg · (ΔP / 75)^0.65
               </div>
-              <div className="text-[10px] text-slate-300">
+              <div className="text-[11px] text-slate-300">
                 ⇒ Mekanisk CAV-Undertryk ΔP_CAV ={' '}
                 <strong className="text-white">{metrics.deltaPCavPa.toFixed(1)} Pa</strong>,
                 Skakt-sug Q_op ={' '}
@@ -1316,7 +1316,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
                   {metrics.shaftSuctionQopM3PerH.toFixed(1)} m³/h
                 </strong>
               </div>
-              <div className="text-[10px] text-slate-300">
+              <div className="text-[11px] text-slate-300">
                 ⇒ Termisk Skorstenseffekt ΔP_s ={' '}
                 <strong className="text-white">
                   +{metrics.thermalStackDeltaPsPa.toFixed(1)} Pa ({metrics.stackGradientPaPerM}{' '}
@@ -1330,7 +1330,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
             </div>
 
             <div>
-              <div className="text-slate-400 text-[9.5px]">
+              <div className="text-slate-400 text-[11px]">
                 4. Indendørs Asbestkoncentration (&lt;1997) &amp; Total Indendørs Sumkvotient:
               </div>
               <div className="text-rose-200 font-bold">
@@ -1349,7 +1349,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
               <Building2 className="w-3.5 h-3.5 text-cyan-400" />
               2. COWI Byggeteknisk Screening (Sag A205732) &amp; Klimaskærms-Defekter
             </h4>
-            <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/50 text-[9.5px] font-mono text-cyan-200">
+            <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/50 text-[11px] font-mono text-cyan-200">
               Rapport-Verificeret
             </span>
           </div>
@@ -1372,7 +1372,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
                 <div className="font-mono font-bold text-rose-200">
                   1. Manglende tætning ved rørgennemføringer mellem kælder/krybekælder og stueetage
                 </div>
-                <div className="text-slate-400 text-[10px] mt-0.5">
+                <div className="text-slate-400 text-[11px] mt-0.5">
                   Skaber direkte vertikal sugekanal (Q_op = {metrics.shaftSuctionQopM3PerH.toFixed(1)}{' '}
                   m³/h) drevet af det mekaniske CAV-undertryk ({metrics.deltaPCavPa} Pa), hvorved
                   asbestfibre fra rørbøjninger og skimmel fra krybekælder trækkes direkte op i
@@ -1392,7 +1392,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
                 <div className="font-mono font-bold text-amber-200">
                   2. Vandrette og lodrette sætninger i brystninger og PCB-fuger
                 </div>
-                <div className="text-slate-400 text-[10px] mt-0.5">
+                <div className="text-slate-400 text-[11px] mt-0.5">
                   Lavfrekvent 3 Hz resonans ({metrics.ppvMmPerSec} mm/s) kombineret med frost-tø
                   stress udløser adhæsionssvigt i udtjente elastiske PCB-fuger og kalkmørtel.
                   Hæver permeabiliteten over 2,00 l/(s·m²) ved 75 Pa og P_pen til{' '}
@@ -1413,7 +1413,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
                 <div className="font-mono font-bold text-cyan-200">
                   3. Utætte indgangspartier, trappeopgange og vinduesrammer
                 </div>
-                <div className="text-slate-400 text-[10px] mt-0.5">
+                <div className="text-slate-400 text-[11px] mt-0.5">
                   Forstærker termisk skorstenseffekt (ΔP_s = +{metrics.thermalStackDeltaPsPa} Pa ·{' '}
                   {metrics.stackGradientPaPerM} Pa/m) og fastholder neutralplanet ved tagkanten
                   (z_NPL = {metrics.zNplMeters.toFixed(1)} m /{' '}
@@ -1427,22 +1427,22 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
       </div>
 
       {/* 3. CRYPTOGRAPHIC PROOF-OF-STATE & MERKLE-ROOT INTEGRATION + ACTION BUTTON */}
-      <div className="bg-gradient-to-r from-slate-900 via-rose-950/30 to-slate-900 border border-rose-500/50 rounded-lg p-3 space-y-2.5">
+      <div className="bg-[var(--surface-card)] border border-[var(--border-subtle)] border-l-4 border-l-rose-500 rounded-lg p-3 space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-rose-200">
             <Lock className="w-3.5 h-3.5 text-rose-400" />
             Kryptografisk Proof-of-State &amp; Merkle-Root Beviskæde (Retsplejelovens § 823 &amp;
             ISO/IEC 27037)
           </div>
-          <span className="text-[10px] font-mono text-slate-400">
+          <span className="text-[11px] font-mono text-slate-400">
             Tidsstempel: {dateIso} · kl. {currentWeather.hourLabel} ({currentWeather.isoTime})
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] font-mono">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] font-mono">
           <div className="bg-slate-950/90 border border-slate-800 rounded p-2 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="text-slate-400 text-[9px] uppercase">
+              <div className="text-slate-400 text-[11px] uppercase">
                 SHA-256 Proof-of-State Signatur (S_in, ΔP_CAV, z_NPL, PPV &amp; q₇₅):
               </div>
               <div className="text-emerald-300 truncate font-semibold" title={proofSha256}>
@@ -1470,7 +1470,7 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
           </div>
 
           <div className="bg-slate-950/90 border border-slate-800 rounded p-2">
-            <div className="text-slate-400 text-[9px] uppercase">
+            <div className="text-slate-400 text-[11px] uppercase">
               Forankret Merkle-Root / Seneste Bevis-Hash i Observations-kæden ({observations.length}{' '}
               beviser):
             </div>
@@ -1485,10 +1485,10 @@ export const StructuralEnvelopeImpactPanel: React.FC<StructuralEnvelopeImpactPan
             type="button"
             onClick={handleRegisterStructuralEvidence}
             disabled={isLoggingEvidence}
-            className="w-full sm:w-auto flex-1 px-3.5 py-2 rounded bg-gradient-to-r from-rose-600 via-amber-600 to-rose-600 hover:from-rose-500 hover:via-amber-500 hover:to-rose-500 text-white font-mono text-xs font-bold shadow-lg border border-rose-300/50 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            className="w-full sm:w-auto flex-1 px-3.5 py-2 rounded bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs font-bold border border-rose-400/60 flex items-center justify-center gap-2 transition-colors cursor-pointer"
           >
             <PlusCircle className="w-4 h-4 shrink-0" />
-            <span>➕ Føj Byggeteknisk Revne- &amp; Vibrationsbevis til Beviser (SHA-256)</span>
+            <span>Føj Byggeteknisk Revne- &amp; Vibrationsbevis til Beviser (SHA-256)</span>
           </button>
 
           {loggedSuccessBanner && (

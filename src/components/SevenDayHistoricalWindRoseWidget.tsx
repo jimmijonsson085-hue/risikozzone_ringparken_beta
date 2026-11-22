@@ -457,11 +457,11 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
   const curMeanTip = toCartesian(currentDayVectorMeanDeg, maxRadius + 5);
 
   return (
-    <div className="p-3.5 bg-gradient-to-b from-slate-900/95 via-[#0B0E17] to-slate-950 border-2 border-indigo-500/50 rounded-md space-y-3 shadow-xl">
+    <div className="p-3.5 bg-[var(--surface-card)] border border-[var(--border-subtle)] rounded-md space-y-3">
       {/* Top Header & Orientation Mode Switcher */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
         <div>
-          <div className="text-[10px] font-mono uppercase tracking-wider text-indigo-300 font-bold flex items-center gap-1.5">
+          <div className="text-[11px] font-mono uppercase tracking-wider text-indigo-300 font-bold flex items-center gap-1.5">
             <History className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
             <span>
               7-DAGES HISTORISK VIND-ROSE &amp; SLAGELSE KLIMANORMAL (
@@ -476,7 +476,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
         </div>
 
         {/* Toggle between Dispersion TO and Wind FROM */}
-        <div className="flex items-center bg-slate-950 border border-slate-800 rounded p-0.5 text-[10px] font-mono">
+        <div className="flex items-center bg-slate-950 border border-slate-800 rounded p-0.5 text-[11px] font-mono">
           <button
             type="button"
             onClick={() => setOrientationMode('dispersion_to')}
@@ -507,7 +507,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
       </div>
 
       {/* Layer Visibility Toggles */}
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/90 border border-slate-800/90 rounded px-2.5 py-1.5 text-[10px] font-mono">
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/90 border border-slate-800/90 rounded px-2.5 py-1.5 text-[11px] font-mono">
         <div className="flex flex-wrap items-center gap-3">
           <span className="flex items-center gap-1.5 text-slate-200 font-semibold">
             <span className="w-2.5 h-2.5 rounded-xs bg-emerald-500 inline-block border border-white/40" />
@@ -576,7 +576,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
                       x={cx + 3}
                       y={cy - r + 8}
                       fill="#64748b"
-                      fontSize="7.5"
+                      fontSize="9.5"
                       fontFamily="monospace"
                     >
                       {pctVal}%
@@ -640,7 +640,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
                           ? '#c7d2fe'
                           : '#cbd5e1'
                       }
-                      fontSize="8.5"
+                      fontSize="9.5"
                       fontWeight="bold"
                       fontFamily="monospace"
                     >
@@ -826,7 +826,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
               y={cy + 3}
               textAnchor="middle"
               fill="#e2e8f0"
-              fontSize="7.5"
+              fontSize="9.5"
               fontWeight="bold"
               fontFamily="monospace"
             >
@@ -835,7 +835,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
           </svg>
 
           {/* Bottom Legend inside Polar Box */}
-          <div className="w-full pt-1.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-1 text-[9px] font-mono text-slate-300 px-1">
+          <div className="w-full pt-1.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-1 text-[11px] font-mono text-slate-300 px-1">
             <span className="flex items-center gap-1 text-indigo-300">
               <span className="w-2.5 h-0.5 bg-indigo-400 inline-block" />
               <span>
@@ -862,7 +862,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
                 : 'bg-amber-950/30 border-amber-500/60'
             }`}
           >
-            <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+            <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
               <span
                 className={`font-extrabold flex items-center gap-1 ${
                   isTypicalCorridorMatch ? 'text-emerald-300' : 'text-amber-300'
@@ -879,7 +879,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
             <p className="text-[11px] text-slate-200 leading-snug">{forensicVerdictText}</p>
 
             {histHighRiskHours > 0 && (
-              <div className="pt-1 flex items-center gap-1.5 text-[10px] font-mono text-rose-300 font-bold">
+              <div className="pt-1 flex items-center gap-1.5 text-[11px] font-mono text-rose-300 font-bold">
                 <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
                 <span>
                   {histHighRiskHours} af 168 timer (&gt;10 m/s højrisiko-vind) registreret i
@@ -890,33 +890,33 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
           </div>
 
           {/* 3-Column Summary Cards: Current Day vs. 7-Day History vs. Typical Slagelse */}
-          <div className="grid grid-cols-3 gap-1.5 font-mono text-[10px]">
+          <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px]">
             <div className="p-2 bg-slate-950/90 rounded border border-cyan-500/40">
-              <div className="text-[9px] text-cyan-400 font-bold">AKTUEL DAG (24T)</div>
+              <div className="text-[11px] text-cyan-400 font-bold">AKTUEL DAG (24T)</div>
               <div className="text-xs font-extrabold text-white mt-0.5">
                 {dominantCurrentDaySector.sector.code} ({dominantCurrentDaySector.currentDayPct}%)
               </div>
-              <div className="text-[9.5px] text-slate-400">
+              <div className="text-[11px] text-slate-400">
                 Maks {dominantCurrentDaySector.currentDayMaxSpeedMs} m/s
               </div>
             </div>
 
             <div className="p-2 bg-slate-950/90 rounded border border-indigo-500/40">
-              <div className="text-[9px] text-indigo-300 font-bold">7-DAGES HISTORIK</div>
+              <div className="text-[11px] text-indigo-300 font-bold">7-DAGES HISTORIK</div>
               <div className="text-xs font-extrabold text-white mt-0.5">
                 {dominant7DaySector.sector.code} ({dominant7DaySector.histPct}%)
               </div>
-              <div className="text-[9.5px] text-slate-400">
+              <div className="text-[11px] text-slate-400">
                 Maks {dominant7DaySector.histMaxSpeedMs} m/s
               </div>
             </div>
 
             <div className="p-2 bg-slate-950/90 rounded border border-amber-500/40">
-              <div className="text-[9px] text-amber-300 font-bold">TYPISK SLAGELSE</div>
+              <div className="text-[11px] text-amber-300 font-bold">TYPISK SLAGELSE</div>
               <div className="text-xs font-extrabold text-white mt-0.5">
                 {dominantTypicalSector.sector.code} ({dominantTypicalSector.typicalSlagelsePct}%)
               </div>
-              <div className="text-[9.5px] text-slate-400">
+              <div className="text-[11px] text-slate-400">
                 Normal {dominantTypicalSector.typicalMeanSpeedMs} m/s
               </div>
             </div>
@@ -933,7 +933,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
                 </span>
               </div>
               <span
-                className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                className={`text-[11px] font-mono px-1.5 py-0.5 rounded font-bold ${
                   Math.abs(inspectedStat.deltaVsTypicalPctPoints) <= 8
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                     : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
@@ -946,7 +946,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
             </div>
 
             {/* Comparative Progress Bars for Selected Sector */}
-            <div className="space-y-1.5 font-mono text-[10px]">
+            <div className="space-y-1.5 font-mono text-[11px]">
               <div className="space-y-0.5">
                 <div className="flex justify-between text-cyan-300">
                   <span>Aktuel Dag ({dateIso}):</span>
@@ -996,7 +996,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
               </div>
             </div>
 
-            <div className="text-[10.5px] text-slate-300 leading-snug pt-0.5 border-t border-slate-800/80">
+            <div className="text-[11px] text-slate-300 leading-snug pt-0.5 border-t border-slate-800/80">
               <strong className="text-cyan-300 font-mono">Berørte matrikler:</strong>{' '}
               {inspectedStat.sector.downwindReceptorsLabel}.{' '}
               <span className="text-slate-400">{inspectedStat.typicalNote}.</span>
@@ -1008,7 +1008,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
       {/* 7-Day Daily Timeline Strip (Click any day to load its 24h profile in the simulator) */}
       {history7d && history7d.days.length > 0 && (
         <div className="pt-2 border-t border-slate-800 space-y-1.5">
-          <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
             <span className="flex items-center gap-1.5 text-indigo-300 font-semibold">
               <Calendar className="w-3.5 h-3.5 text-cyan-400" />
               <span>
@@ -1037,18 +1037,18 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
                   }`}
                   title={`Indlæs ${day.dateIso}: Gns ${day.meanWindSpeedMs} m/s (Maks ${day.maxWindSpeedMs} m/s) · Fane mod ${day.dominantDispersionSectorCode} (${day.dominantDispersionToDeg}°)`}
                 >
-                  <div className="flex items-center justify-between text-[9.5px]">
+                  <div className="flex items-center justify-between text-[11px]">
                     <span className={isSelectedDay ? 'text-cyan-300 font-bold' : 'text-slate-400'}>
                       {day.dayLabelShort}
                     </span>
                     {isSelectedDay && (
-                      <span className="px-1 rounded bg-cyan-400 text-slate-950 text-[8px] font-extrabold">
+                      <span className="px-1 rounded bg-cyan-400 text-slate-950 text-[11px] font-extrabold">
                         VALGT
                       </span>
                     )}
                   </div>
 
-                  <div className="my-1 flex items-center gap-1 text-[10.5px] font-bold text-white">
+                  <div className="my-1 flex items-center gap-1 text-[11px] font-bold text-white">
                     <Navigation
                       className="w-3 h-3 text-cyan-400 shrink-0"
                       style={{
@@ -1066,7 +1066,7 @@ export const SevenDayHistoricalWindRoseWidget: React.FC<
                     </span>
                   </div>
 
-                  <div className="text-[9px] text-slate-400 flex items-center justify-between">
+                  <div className="text-[11px] text-slate-400 flex items-center justify-between">
                     <span>{day.meanWindSpeedMs}m/s</span>
                     <span className={hasHighRisk ? 'text-rose-400 font-bold' : 'text-amber-300'}>
                       ↑{day.maxWindSpeedMs}
