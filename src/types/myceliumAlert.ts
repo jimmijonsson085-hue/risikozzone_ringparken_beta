@@ -424,3 +424,29 @@ export interface SimultaneousAlgedonicDispatch {
   system3State: SimultaneousAlgedonicSystem3State;
 }
 
+/** Tidsstemplet historikpost for aktiverede System B Mycelium nødbremse-hændelser (S1+S3 simultan-dispatch). */
+export interface SimultaneousEmergencyBrakeLogEntry {
+  id: string;
+  observationCode: string;
+  eventId: string;
+  scenarioId: AlgedonicTestScenarioId | 'live_auto_trigger';
+  scenarioTitleDa: string;
+  t0DetectedIso: string;
+  t1DispatchedIso: string;
+  dispatchedTimeLabel: string;
+  latencyMs: number;
+  bureaucraticDelayDeltaTMs: 0;
+  corroboratingNodes: number;
+  totalNodes: number;
+  corroborationPct: number;
+  lockedValveCodes: Array<'V-VEST' | 'V-MIDT'>;
+  islandModeBlockCount: number;
+  haltedMachineCount: number;
+  zkpRightToOpacityHash: string;
+  sha256Signature: string;
+  triggerReasonsDa: string[];
+  acknowledged: boolean;
+  acknowledgedAtIso: string | null;
+}
+
+

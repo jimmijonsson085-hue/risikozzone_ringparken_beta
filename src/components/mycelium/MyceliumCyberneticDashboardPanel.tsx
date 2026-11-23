@@ -1,15 +1,22 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   BellRing,
+  Check,
+  Copy,
   Cpu,
   GitBranch,
+  History,
   Network,
   Radio,
   RotateCcw,
+  ShieldAlert,
   ShieldCheck,
   TimerReset,
 } from 'lucide-react';
-import { MyceliumNetworkSimulationSnapshot } from '../../types/myceliumAlert';
+import {
+  MyceliumNetworkSimulationSnapshot,
+  SimultaneousEmergencyBrakeLogEntry,
+} from '../../types/myceliumAlert';
 import { Cik20SankeyTransducerSvg } from './Cik20SankeyTransducerSvg';
 
 export interface MyceliumCyberneticDashboardPanelProps {
@@ -17,6 +24,8 @@ export interface MyceliumCyberneticDashboardPanelProps {
   disabledNodeIds: Record<string, boolean>;
   byzantineFaultNodeIds: Record<string, boolean>;
   unacknowledgedAlertCount: number;
+  emergencyBrakeHistory?: SimultaneousEmergencyBrakeLogEntry[];
+  onOpenSimultaneousModal?: () => void;
   onToggleNodeOffline: (receptorId: string) => void;
   onToggleByzantineFault: (receptorId: string) => void;
   onResetFaultSimulations: () => void;
@@ -24,7 +33,12 @@ export interface MyceliumCyberneticDashboardPanelProps {
   onSelectReceptor: (receptorId: string) => void;
 }
 
-type MyceliumTabId = 'bft_gate1' | 'lora_dijkstra' | 'cik20_sankey' | 'apoptosis';
+type MyceliumTabId =
+  | 'bft_gate1'
+  | 'emergency_brake_log'
+  | 'lora_dijkstra'
+  | 'cik20_sankey'
+  | 'apoptosis';
 
 export const MyceliumCyberneticDashboardPanel: React.FC<
   MyceliumCyberneticDashboardPanelProps
@@ -33,6 +47,8 @@ export const MyceliumCyberneticDashboardPanel: React.FC<
   disabledNodeIds,
   byzantineFaultNodeIds,
   unacknowledgedAlertCount,
+  emergencyBrakeHistory = [],
+  onOpenSimultaneousModal,
   onToggleNodeOffline,
   onToggleByzantineFault,
   onResetFaultSimulations,
@@ -40,10 +56,35 @@ export const MyceliumCyberneticDashboardPanel: React.FC<
   onSelectReceptor,
 }) => {
   const [subTab, setSubTab] = useState<MyceliumTabId>('bft_gate1');
+  const [brakeSearchQuery, setBrakeSearchQuery] = useState<string>('');
+  const [copiedHashId, setCopiedHashId] = useState<string | null>(null);
 
   const hasInjectedSim =
     Object.values(disabledNodeIds).some(Boolean) ||
     Object.values(byzantineFaultNodeIds).some(Boolean);
+
+  const filteredBrakeHistory = useMemo(() => {
+    const q = brakeSearchQuery.trim().toLowerCase();
+    if (!q) return emergencyBrakeHistory;
+    return emergencyBrakeHistory.filter(
+      (entry) =>
+        entry.scenarioTitleDa.toLowerCase().includes(q) ||
+        entry.observationCode.toLowerCase().includes(q) ||
+        entry.sha256Signature.toLowerCase().includes(q) ||
+        entry.zkpRightToOpacityHash.toLowerCase().includes(q) ||
+        entry.lockedValveCodes.join(' ').toLowerCase().includes(q)
+    );
+  }, [emergencyBrakeHistory, brakeSearchQuery]);
+
+  const handleCopyHash = (entryId: string, hashText: string) => {
+    try {
+      void navigator.clipboard.writeText(hashText);
+      setCopiedHashId(entryId);
+      window.setTimeout(() => setCopiedHashId(null), 2000);
+    } catch {
+      // ignore clipboard restriction
+    }
+  };
 
   return (
     <div
@@ -60,7 +101,8 @@ export const MyceliumCyberneticDashboardPanel: React.FC<
             </h3>
           </div>
           <p className="text-[11px] text-slate-400">
-            BFT Gate 1 (3f+1) · EU868 LoRa Duty-Cycle · Dijkstra P2P Selvheling · CiK 2.0 · Regulatorisk Apoptose
+            BFT Gate 1 (3f+1) · S1+S3 Nødbremse-Log · EU868 LoRa · Dijkstra P2P · CiK 2.0 ·
+            Regulatorisk Apoptose
           </p>
         </div>
 
@@ -102,9 +144,10 @@ export const MyceliumCyberneticDashboardPanel: React.FC<
           </div>
         </div>
         <div className="p-2 rounded bg-[#07090E] border border-slate-800">
-          <div className="text-slate-400">Dijkstra P2P Failover</div>
-          <div className="text-sm font-bold text-amber-300 mt-0.5">
-            {snapshot.selfHealedRouteCount} selvhelede ruter
+          <div className="text-slate-400">Nødbremser (S1+S3)</div>
+          <div className="text-sm font-bold text-rose-300 mt-0.5">
+            {emergencyBrakeHistory.length} logget
+            {emergencyBrakeHistory[0] ? ` · ${emergencyBrakeHistory[0].latencyMs} ms` : ''}
           </div>
         </div>
         <div className="p-2 rounded bg-[#07090E] border border-slate-800">
@@ -116,11 +159,16 @@ export const MyceliumCyberneticDashboardPanel: React.FC<
       </div>
 
       {/* Sub-Navigation Tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 bg-[#07090E] p-1 rounded border border-slate-800 text-[11px]">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1 bg-[#07090E] p-1 rounded border border-slate-800 text-[11px]">
         {(
           [
-            { id: 'bft_gate1', label: 'BFT Gate 1 (3f+1)', icon: ShieldCheck },
-            { id: 'lora_dijkstra', label: 'EU868 & P2P Ruter', icon: GitBranch },
+            { id: 'bft_gate1', label: 'BFT Gate 1', icon: ShieldCheck },
+            {
+              id: 'emergency_brake_log',
+              label: `Nødbremse-Log (${emergencyBrakeHistory.length})`,
+              icon: History,
+            },
+            { id: 'lora_dijkstra', label: 'EU868 & P2P', icon: GitBranch },
             { id: 'cik20_sankey', label: 'CiK 2.0 Sankey', icon: Cpu },
             { id: 'apoptosis', label: 'Reg. Apoptose', icon: TimerReset },
           ] as const
@@ -131,15 +179,18 @@ export const MyceliumCyberneticDashboardPanel: React.FC<
             <button
               key={tab.id}
               type="button"
+              data-testid={`mycelium-tab-${tab.id}`}
               onClick={() => setSubTab(tab.id)}
-              className={`px-2 py-1.5 rounded flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap ${
+              className={`px-2 py-1.5 rounded flex items-center justify-center gap-1 cursor-pointer transition-colors whitespace-nowrap ${
                 active
-                  ? 'bg-cyan-500/20 border border-cyan-400/60 text-cyan-200 font-bold'
+                  ? tab.id === 'emergency_brake_log'
+                    ? 'bg-rose-500/25 border border-rose-400/70 text-rose-100 font-bold'
+                    : 'bg-cyan-500/20 border border-cyan-400/60 text-cyan-200 font-bold'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Icon className="w-3.5 h-3.5 shrink-0" />
-              <span>{tab.label}</span>
+              <span className="truncate">{tab.label}</span>
             </button>
           );
         })}
@@ -149,8 +200,9 @@ export const MyceliumCyberneticDashboardPanel: React.FC<
       {subTab === 'bft_gate1' && (
         <div className="space-y-2 max-h-[290px] overflow-y-auto pr-1">
           <div className="text-[11px] text-slate-400">
-            Klik <strong className="text-amber-300">Afbryd Node</strong> for at teste Dijkstra P2P selvheling, eller{' '}
-            <strong className="text-rose-300">Byzantinsk Fejl</strong> for at verificere at BFT Gate 1 afviser falske enkelt-sensor udsving:
+            Klik <strong className="text-amber-300">Afbryd Node</strong> for at teste Dijkstra P2P
+            selvheling, eller <strong className="text-rose-300">Byzantinsk Fejl</strong> for at
+            verificere at BFT Gate 1 afviser falske enkelt-sensor udsving:
           </div>
           {snapshot.bftAudits.map((audit) => (
             <div
@@ -163,7 +215,8 @@ export const MyceliumCyberneticDashboardPanel: React.FC<
                   onClick={() => onSelectReceptor(audit.receptorId)}
                   className="font-bold text-white hover:text-cyan-300 cursor-pointer text-left"
                 >
-                  {audit.receptorCode} — {audit.receptorName} (S={audit.reportedSumQuotient.toFixed(2)})
+                  {audit.receptorCode} — {audit.receptorName} (S=
+                  {audit.reportedSumQuotient.toFixed(2)})
                 </button>
                 <span
                   className={`px-1.5 py-0.5 rounded text-[11px] font-bold border ${
@@ -209,7 +262,141 @@ export const MyceliumCyberneticDashboardPanel: React.FC<
         </div>
       )}
 
-      {/* TAB 2: EU868 LoRa Duty-Cycle & Dijkstra Self-Healing Routes */}
+      {/* TAB 2 (Dedikeret Log-sektion): Nødbremse-Hændelser (S1+S3 Simultan-Dispatch) inkl. Latens & Validerings-Hashes */}
+      {subTab === 'emergency_brake_log' && (
+        <div
+          data-testid="mycelium-emergency-brake-history-section"
+          className="space-y-2.5 text-[11px] tabular-nums"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <input
+              type="search"
+              value={brakeSearchQuery}
+              onChange={(e) => setBrakeSearchQuery(e.target.value)}
+              placeholder="Filtrér scenarie, ventiler eller SHA-256 / ZKP hash..."
+              aria-label="Filtrér nødbremse-hændelser"
+              className="flex-1 min-w-[200px] bg-[#07090E] border border-slate-800 rounded px-2.5 py-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-cyan-400"
+            />
+            {onOpenSimultaneousModal && (
+              <button
+                type="button"
+                onClick={onOpenSimultaneousModal}
+                className="px-2.5 py-1.5 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/60 text-rose-100 font-bold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-300" />
+                <span>Åbn S1+S3 Simultan-Konsol</span>
+              </button>
+            )}
+          </div>
+
+          {filteredBrakeHistory.length === 0 ? (
+            <div className="p-3 rounded bg-[#07090E] border border-slate-800 text-slate-300 space-y-2">
+              <div className="font-bold text-slate-100">
+                Ingen aktiverede nødbremse-hændelser (S1+S3 simultan-dispatch) registreret endnu.
+              </div>
+              <p className="text-slate-400 font-sans">
+                Når System B aktiverer en atomar S1+S3 nødstop-dispatch (f.eks. ved S ≥ 0,8, CAV
+                vakuum &lt; -25 Pa, rørbrud eller høj-vind impulsstøj), logges tidsstempel, T0→T1
+                latens (ms), BFT-kvorum og kryptografiske validerings-hashes automatisk her.
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-[270px] overflow-y-auto space-y-2 pr-1">
+              {filteredBrakeHistory.map((entry) => (
+                <div
+                  key={entry.id}
+                  data-testid="emergency-brake-log-entry"
+                  className="p-2.5 rounded bg-[#07090E] border border-rose-500/45 space-y-1.5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-bold text-rose-200">
+                      {entry.observationCode} · {entry.scenarioTitleDa}
+                    </span>
+                    <span className="text-emerald-300 font-bold">
+                      Latens: {entry.latencyMs} ms (Δt={entry.bureaucraticDelayDeltaTMs} ms)
+                    </span>
+                  </div>
+
+                  <div className="text-slate-300 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                    <span>
+                      T0: <strong className="text-white">{entry.t0DetectedIso.slice(11, 23)}</strong>
+                    </span>
+                    <span>
+                      T1: <strong className="text-cyan-300">{entry.t1DispatchedIso.slice(11, 23)}</strong>
+                    </span>
+                    <span>
+                      Gate 1: {entry.corroboratingNodes}/{entry.totalNodes} ({entry.corroborationPct}%)
+                    </span>
+                    <span>
+                      Ventiler spærret:{' '}
+                      <strong className="text-amber-300">
+                        {entry.lockedValveCodes.join(' + ')}
+                      </strong>
+                    </span>
+                    <span>Ø-drift: {entry.islandModeBlockCount} blokke</span>
+                    <span>
+                      Status:{' '}
+                      <strong className={entry.acknowledged ? 'text-emerald-300' : 'text-rose-300'}>
+                        {entry.acknowledged ? 'KVITTERET' : 'AKTIV P1'}
+                      </strong>
+                    </span>
+                  </div>
+
+                  {entry.triggerReasonsDa.length > 0 && (
+                    <div className="text-slate-400">
+                      Trigger: {entry.triggerReasonsDa.join(' · ')}
+                    </div>
+                  )}
+
+                  <div className="pt-1 border-t border-slate-800/80 space-y-1">
+                    <div className="flex items-center justify-between gap-2 text-emerald-300">
+                      <span className="truncate">
+                        SHA-256: <span className="text-slate-200">{entry.sha256Signature}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyHash(`${entry.id}-sha`, entry.sha256Signature)}
+                        className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] text-slate-200 inline-flex items-center gap-1 cursor-pointer shrink-0"
+                        title="Kopiér SHA-256 validerings-hash"
+                      >
+                        {copiedHashId === `${entry.id}-sha` ? (
+                          <Check className="w-2.5 h-2.5 text-emerald-300" />
+                        ) : (
+                          <Copy className="w-2.5 h-2.5" />
+                        )}
+                        <span>SHA</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-cyan-300">
+                      <span className="truncate">
+                        ZKP Hash:{' '}
+                        <span className="text-slate-300">{entry.zkpRightToOpacityHash}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleCopyHash(`${entry.id}-zkp`, entry.zkpRightToOpacityHash)
+                        }
+                        className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] text-slate-200 inline-flex items-center gap-1 cursor-pointer shrink-0"
+                        title="Kopiér ZKP Right-to-Opacity validerings-hash"
+                      >
+                        {copiedHashId === `${entry.id}-zkp` ? (
+                          <Check className="w-2.5 h-2.5 text-emerald-300" />
+                        ) : (
+                          <Copy className="w-2.5 h-2.5" />
+                        )}
+                        <span>ZKP</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: EU868 LoRa Duty-Cycle & Dijkstra Self-Healing Routes */}
       {subTab === 'lora_dijkstra' && (
         <div className="space-y-2 max-h-[290px] overflow-y-auto pr-1 text-[11px] tabular-nums">
           {snapshot.dijkstraRoutes.map((route) => {
@@ -255,7 +442,10 @@ export const MyceliumCyberneticDashboardPanel: React.FC<
                     <span>ToA: {lora.timeOnAirMs} ms</span>
                     <span>
                       Duty: {lora.dutyCycleUtilizedPct}% / {lora.dutyCycleLimitPct}% (
-                      {lora.subBand === 'G3_869_525MHZ_10PCT_ALGEDONIC' ? '869,525 MHz g3' : '868,1 MHz g1'})
+                      {lora.subBand === 'G3_869_525MHZ_10PCT_ALGEDONIC'
+                        ? '869,525 MHz g3'
+                        : '868,1 MHz g1'}
+                      )
                     </span>
                     <span>
                       RSSI {lora.rssiDbm} dBm · SNR {lora.snrDb} dB
@@ -268,7 +458,7 @@ export const MyceliumCyberneticDashboardPanel: React.FC<
         </div>
       )}
 
-      {/* TAB 3: Calculation in Kind 2.0 (CiK 2.0) Sankey Transducer */}
+      {/* TAB 4: Calculation in Kind 2.0 (CiK 2.0) Sankey Transducer */}
       {subTab === 'cik20_sankey' && (
         <Cik20SankeyTransducerSvg
           cik20={snapshot.cik20}
@@ -276,7 +466,7 @@ export const MyceliumCyberneticDashboardPanel: React.FC<
         />
       )}
 
-      {/* TAB 4: Regulatory Apoptosis */}
+      {/* TAB 5: Regulatory Apoptosis */}
       {subTab === 'apoptosis' && (
         <div className="space-y-2.5 text-[11px] tabular-nums">
           <div className="p-2.5 rounded bg-[#07090E] border border-slate-800 flex flex-wrap items-center justify-between gap-2">

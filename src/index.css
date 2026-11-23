@@ -917,6 +917,100 @@ html {
   will-change: stroke-dashoffset;
 }
 
+/* ============================================================================
+ * NEIGHBOR BLOCK >85 dB(A) HIGH-WIND VISUAL PULSE WARNINGS (2D MAP)
+ * ============================================================================ */
+@keyframes neighbor85DbPolygonPulse {
+  0%,
+  100% {
+    stroke-opacity: 0.96;
+    fill-opacity: 0.44;
+  }
+  50% {
+    stroke-opacity: 0.38;
+    fill-opacity: 0.16;
+  }
+}
+
+@keyframes neighbor85DbRingSvg {
+  0% {
+    transform: scale3d(0.45, 0.45, 1);
+    opacity: 0.95;
+  }
+  70% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale3d(2.35, 2.35, 1);
+    opacity: 0;
+  }
+}
+
+@keyframes neighbor85DbRingHtml {
+  0% {
+    transform: translate3d(-50%, -50%, 0) scale3d(0.35, 0.35, 1);
+    opacity: 0.95;
+  }
+  70% {
+    opacity: 0.42;
+  }
+  100% {
+    transform: translate3d(-50%, -50%, 0) scale3d(2.4, 2.4, 1);
+    opacity: 0;
+  }
+}
+
+#main-workspace-anchor .map-neighbor-85db-block-pulse {
+  animation: neighbor85DbPolygonPulse var(--neighbor-pulse-dur, 1.1s) ease-in-out infinite;
+  will-change: opacity;
+}
+
+#main-workspace-anchor .map-neighbor-85db-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
+  animation-name: neighbor85DbRingSvg;
+  animation-duration: var(--neighbor-pulse-dur, 1.15s);
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-iteration-count: infinite;
+}
+
+#main-workspace-anchor .map-neighbor-85db-ring--1 {
+  animation-delay: 0s;
+}
+
+#main-workspace-anchor .map-neighbor-85db-ring--2 {
+  animation-delay: calc(var(--neighbor-pulse-dur, 1.15s) * 0.48);
+}
+
+#main-workspace-anchor .map-gmp-neighbor-85db-wrap {
+  position: relative;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+#main-workspace-anchor .map-gmp-neighbor-85db-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 84px;
+  height: 84px;
+  border-radius: 9999px;
+  border: 3px solid rgba(244, 63, 94, 0.92);
+  box-shadow: 0 0 22px rgba(244, 63, 94, 0.6);
+  will-change: transform, opacity;
+  animation-name: neighbor85DbRingHtml;
+  animation-duration: var(--neighbor-pulse-dur, 1.15s);
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-iteration-count: infinite;
+}
+
+#main-workspace-anchor .map-gmp-neighbor-85db-ring--2 {
+  border-color: rgba(251, 191, 36, 0.88);
+  animation-delay: calc(var(--neighbor-pulse-dur, 1.15s) * 0.48);
+}
+
 @media (prefers-reduced-motion: reduce) {
   #main-workspace-anchor .map-svg-pressure-ring,
   #main-workspace-anchor .map-svg-pressure-cone,
@@ -926,6 +1020,9 @@ html {
   #main-workspace-anchor .map-source-wavefront-ring,
   #main-workspace-anchor .map-gmp-source-wavefront-ring,
   #main-workspace-anchor .map-evac-flow-path,
+  #main-workspace-anchor .map-neighbor-85db-block-pulse,
+  #main-workspace-anchor .map-neighbor-85db-ring,
+  #main-workspace-anchor .map-gmp-neighbor-85db-ring,
   .dust-impact-threshold-chart .recharts-reference-line,
   .dust-impact-alert-gradient-pulse {
     animation: none !important;

@@ -127,8 +127,10 @@ import { SystemBFormulaSimulatorModal } from './mycelium/SystemBFormulaSimulator
 import {
   WindDirectionalNoiseHudCard,
   WindDirectionalNoiseSvgLayer,
+  computeLatest6hGustMetrics,
   computeWindDirectionalNoiseCells,
 } from './WindDirectionalNoiseHeatmapLayer';
+import { computeHighWindNeighborNoisePulseTargets } from '../utils/neighborNoisePulse';
 
 export type MapOverlayWindowId =
   | 'wind_hud'
@@ -978,23 +980,63 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
     }
   };
   const [overrideNoiseWindFromDeg, setOverrideNoiseWindFromDeg] = useState<number | null>(null);
+  const [selectedHeatmapNeighborBlockIds, setSelectedHeatmapNeighborBlockIds] = useState<
+    string[]
+  >(() => receptors.map((r) => r.id));
 
-  const effectiveNoiseWindFromDeg = overrideNoiseWindFromDeg ?? currentWeather.windDirection10m;
+  const effectiveSelectedHeatmapBlockIds = useMemo(() => {
+    const validIds = new Set(receptors.map((r) => r.id));
+    const filtered = selectedHeatmapNeighborBlockIds.filter((id) => validIds.has(id));
+    return filtered.length > 0 ? filtered : receptors.map((r) => r.id);
+  }, [selectedHeatmapNeighborBlockIds, receptors]);
+
+  const handleToggleHeatmapNeighborBlock = (receptorId: string) => {
+    setSelectedHeatmapNeighborBlockIds((prev) => {
+      if (prev.includes(receptorId)) {
+        return prev.length > 1 ? prev.filter((id) => id !== receptorId) : prev;
+      }
+      return [...prev, receptorId];
+    });
+  };
+
+  const latest6hGustSummary = useMemo(
+    () =>
+      computeLatest6hGustMetrics(
+        weatherHours,
+        currentWeather.hourIndex ?? 0,
+        currentWeather
+      ),
+    [weatherHours, currentWeather]
+  );
+
+  const selectedHeatmapSourceNodes = useMemo(() => {
+    const activeVisible = visibleSources.filter((s) => s.active);
+    return activeVisible.length > 0 ? activeVisible : visibleSources;
+  }, [visibleSources]);
+
+  const effectiveNoiseWindFromDeg =
+    overrideNoiseWindFromDeg ?? currentWeather.windDirection10m;
   const windDirectionalNoiseCells = useMemo(
     () =>
       computeWindDirectionalNoiseCells({
-        sources,
+        sources: selectedHeatmapSourceNodes,
         receptors,
+        selectedNeighborBlockIds: effectiveSelectedHeatmapBlockIds,
         windFromDeg: effectiveNoiseWindFromDeg,
         windSpeedMs: currentWeather.windSpeed10m,
         windGustMs: currentWeather.windGusts10m,
+        latest6hWeatherHours: latest6hGustSummary.windowHours,
+        baseMachineLwaDb: machineNoiseOutputDb,
       }),
     [
-      sources,
+      selectedHeatmapSourceNodes,
       receptors,
+      effectiveSelectedHeatmapBlockIds,
       effectiveNoiseWindFromDeg,
       currentWeather.windSpeed10m,
       currentWeather.windGusts10m,
+      latest6hGustSummary.windowHours,
+      machineNoiseOutputDb,
     ]
   );
 
@@ -1252,6 +1294,26 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
     currentWeather.windGusts10m,
     machineNoiseOutputDb,
   ]);
+
+  // Visuel 'puls'-effekt på berørte naboblokke når maskinstøjen overstiger 85 dB(A) under højvind
+  const highWind85DbNeighborPulseTargets = useMemo(
+    () =>
+      computeHighWindNeighborNoisePulseTargets({
+        sources: visibleSources,
+        receptors,
+        currentWeather,
+        machineNoiseOutputDb,
+      }),
+    [visibleSources, receptors, currentWeather, machineNoiseOutputDb]
+  );
+
+  const highWind85DbPulseByReceptorId = useMemo(() => {
+    const map: Record<string, (typeof highWind85DbNeighborPulseTargets)[number]> = {};
+    highWind85DbNeighborPulseTargets.forEach((item) => {
+      map[item.receptor.id] = item;
+    });
+    return map;
+  }, [highWind85DbNeighborPulseTargets]);
 
   // Item 7: High-Wind Dispersion Correlation (triggered when windGusts10m > 12 m/s)
   const isHighGustAlert = currentWeather.windGusts10m > 12;
@@ -4983,11 +5045,11 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                 ? 'bg-amber-500/25 text-amber-200 border border-amber-400/80 font-bold shadow-xs'
                 : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
             }`}
-            title="2D Taktisk Kort: Vis/skjul varmegraf over støjniveauer (dB) korreleret med vindretning, så de mest udsatte naboblokke fremhæves ved specifikke vindvinkler"
+            title="2D Taktisk Kort: Vis/skjul dedikeret 6-timers vindstøds- og støjheatmap for de valgte naboblokke og aktive kilde-noder"
           >
             <Volume2 className="w-3.5 h-3.5 shrink-0 text-amber-400" />
             <span className="font-mono tabular-nums">
-              Vind-Støj Varmegraf ({Math.round(effectiveNoiseWindFromDeg)}°)
+              Støj/Vind Heatmap (6t · {effectiveSelectedHeatmapBlockIds.length} bl.)
             </span>
           </button>
 
@@ -7100,6 +7162,33 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                   </React.Fragment>
                 ))}
 
+              {/* Visuel 'puls'-effekt på berørte naboblokke (>85 dB(A) maskinstøj under højvindsscenarier) på Google Maps */}
+              {highWind85DbNeighborPulseTargets.map((item) => (
+                <AdvancedMarker
+                  key={`gmp-neighbor-85db-pulse-${item.receptor.id}`}
+                  position={item.receptor.center}
+                  onClick={() => onSelectReceptor(item.receptor.id)}
+                >
+                  <div
+                    className="relative flex items-center justify-center pointer-events-auto cursor-pointer"
+                    data-testid={`gmp-neighbor-85db-pulse-${item.receptor.code}`}
+                    style={
+                      {
+                        '--neighbor-pulse-dur': `${item.pulseDurationSec.toFixed(2)}s`,
+                      } as React.CSSProperties
+                    }
+                  >
+                    <div className="map-gmp-neighbor-85db-wrap">
+                      <span className="map-gmp-neighbor-85db-ring" />
+                      <span className="map-gmp-neighbor-85db-ring map-gmp-neighbor-85db-ring--2" />
+                    </div>
+                    <div className="px-1.5 py-0.5 rounded bg-rose-950/95 border border-rose-400 text-rose-100 font-mono text-[10px] font-extrabold shadow-lg whitespace-nowrap tabular-nums">
+                      &gt;85 dB PULS · {item.receptor.code} ({item.estimatedLafmaxDb.toFixed(0)} dB)
+                    </div>
+                  </div>
+                </AdvancedMarker>
+              ))}
+
               {/* Item 7: High-Wind Gust (>12 m/s) Affected Receptor Highlight Markers on Google Maps */}
               {isHighGustAlert &&
                 highGustCorrelationData.affectedReceptors.map((item) => (
@@ -8989,7 +9078,10 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
               const isRed = exp?.riskLevel === 'red';
               const isOrange = exp?.riskLevel === 'orange';
 
-              const strokeColor = hwRank
+              const pulse85Target = highWind85DbPulseByReceptorId[rec.id];
+              const strokeColor = pulse85Target
+                ? '#f43f5e'
+                : hwRank
                 ? '#fbbf24'
                 : isHighGustHit
                 ? '#f59e0b'
@@ -8998,7 +9090,9 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                 : isOrange
                 ? '#fb923c'
                 : '#38bdf8';
-              const fillColor = hwRank
+              const fillColor = pulse85Target
+                ? 'rgba(244, 63, 94, 0.36)'
+                : hwRank
                 ? 'rgba(225, 29, 72, 0.34)'
                 : isHighGustHit
                 ? 'rgba(245, 158, 11, 0.28)'
@@ -9021,9 +9115,17 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                     points={memoizedSvgBaseGeometry.receptorSvgPointsById[rec.id] || ''}
                     fill={fillColor}
                     stroke={strokeColor}
-                    strokeWidth={hwRank || isHighGustHit ? 3.2 : isSelected ? 2.6 : 1.5}
+                    strokeWidth={pulse85Target || hwRank || isHighGustHit ? 3.4 : isSelected ? 2.6 : 1.5}
+                    className={pulse85Target ? 'map-neighbor-85db-block-pulse' : undefined}
+                    style={
+                      pulse85Target
+                        ? ({
+                            '--neighbor-pulse-dur': `${pulse85Target.pulseDurationSec.toFixed(2)}s`,
+                          } as React.CSSProperties)
+                        : undefined
+                    }
                     strokeDasharray={
-                      hwRank || isHighGustHit
+                      pulse85Target || hwRank || isHighGustHit
                         ? undefined
                         : rec.category === 'residential_block'
                         ? undefined
@@ -9033,6 +9135,70 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                 </g>
               );
             })}
+
+            {/* Visuel 'puls'-effekt på berørte naboblokke (>85 dB(A) maskinstøj under højvindsscenarier) i 2D-kort */}
+            {highWind85DbNeighborPulseTargets.length > 0 && (
+              <g
+                className="pointer-events-none"
+                data-testid="svg-neighbor-85db-pulse-layer"
+              >
+                {highWind85DbNeighborPulseTargets.map((item) => {
+                  const pt = projectLatLng(item.receptor.center);
+                  return (
+                    <g
+                      key={`svg-neighbor-85db-${item.receptor.id}`}
+                      transform={`translate(${pt.x}, ${pt.y})`}
+                      data-testid={`svg-neighbor-85db-pulse-${item.receptor.code}`}
+                      style={
+                        {
+                          '--neighbor-pulse-dur': `${item.pulseDurationSec.toFixed(2)}s`,
+                        } as React.CSSProperties
+                      }
+                    >
+                      <circle
+                        cx={0}
+                        cy={0}
+                        r={20}
+                        fill="none"
+                        stroke="#f43f5e"
+                        strokeWidth={2.6}
+                        className="map-neighbor-85db-ring map-neighbor-85db-ring--1"
+                      />
+                      <circle
+                        cx={0}
+                        cy={0}
+                        r={20}
+                        fill="none"
+                        stroke="#fbbf24"
+                        strokeWidth={2.0}
+                        className="map-neighbor-85db-ring map-neighbor-85db-ring--2"
+                      />
+                      <g transform="translate(0, -28)">
+                        <rect
+                          x={-54}
+                          y={-8}
+                          width={108}
+                          height={15}
+                          rx={3}
+                          fill="#881337"
+                          fillOpacity={0.95}
+                          stroke="#fda4af"
+                          strokeWidth={1.1}
+                        />
+                        <text
+                          x={0}
+                          y={3}
+                          textAnchor="middle"
+                          className="fill-rose-50 text-[10px] font-mono font-extrabold tabular-nums"
+                        >
+                          &gt;85 dB PULS · {item.estimatedLafmaxDb.toFixed(0)} dB
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
+              </g>
+            )}
 
             {/* CONNECTED AUTONOMOUS RECEPTOR MESH NETWORK (Connects ALL Receptors + Live Nabotest Consensus Links) */}
             {showAutonomousMesh && (
@@ -11658,11 +11824,11 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
               );
             })()}
 
-            {/* 2D Taktisk Kort: Varmegraf over støjniveauer korreleret med vindretning pr. naboblok */}
+            {/* 2D Taktisk Kort: Dedikeret heatmap over korreleret støj- og vindpåvirkning (seneste 6t vindstød + valgte kilde-noder + valgte naboblokke) */}
             {showWindNoiseHeatmapLayer && (
               <WindDirectionalNoiseSvgLayer
                 cells={windDirectionalNoiseCells}
-                sources={sources}
+                sources={selectedHeatmapSourceNodes}
                 effectiveWindFromDeg={effectiveNoiseWindFromDeg}
                 projectLatLng={projectLatLng}
                 onSelectReceptor={onSelectReceptor}
@@ -12248,11 +12414,27 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
           </div>
         )}
 
-        {/* 2D Taktisk Kort HUD-kort for Vind-Støj Varmegraf & Vindvinkel-Simulator */}
+        {/* 2D Taktisk Kort HUD-kort for 6t Vindstød & Støj Heatmap for Valgte Naboblokke */}
         {showWindNoiseHeatmapLayer && !useGoogleMapsEngine && (
           <div className="absolute bottom-14 left-3 z-20 pointer-events-auto max-w-[calc(100%-24px)]">
             <WindDirectionalNoiseHudCard
               cells={windDirectionalNoiseCells}
+              allReceptors={receptors}
+              selectedNeighborBlockIds={effectiveSelectedHeatmapBlockIds}
+              onToggleNeighborBlock={handleToggleHeatmapNeighborBlock}
+              onSelectAllNeighborBlocks={() =>
+                setSelectedHeatmapNeighborBlockIds(receptors.map((r) => r.id))
+              }
+              onSelectResidentialBlocksOnly={() => {
+                const residential = receptors
+                  .filter((r) => r.category === 'residential_block')
+                  .map((r) => r.id);
+                setSelectedHeatmapNeighborBlockIds(
+                  residential.length > 0 ? residential : receptors.map((r) => r.id)
+                );
+              }}
+              selectedSourceCodes={selectedHeatmapSourceNodes.map((s) => s.code)}
+              latest6hSummary={latest6hGustSummary}
               currentWeather={currentWeather}
               overrideWindFromDeg={overrideNoiseWindFromDeg}
               onChangeOverrideWindFromDeg={setOverrideNoiseWindFromDeg}

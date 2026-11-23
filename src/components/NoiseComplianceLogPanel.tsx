@@ -4,12 +4,15 @@
  * med direkte CSV-eksport i Slagelse Kommune ESDH-format.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
-  Download,
+  CheckCircle2,
+  FastForward,
   FileSpreadsheet,
   RefreshCw,
+  ShieldCheck,
+  Timer,
   Trash2,
   Volume2,
 } from 'lucide-react';
@@ -26,6 +29,14 @@ import {
   distanceBetweenPointsMeters,
 } from '../services/dispersionEngine';
 import { exportSlagelseViolationsEsdhCsv } from '../services/exportHubHelpers';
+import {
+  NOISE_HYSTERESIS_RESET_COMPLIANCE_MS,
+  NOISE_HYSTERESIS_TRIGGER_THRESHOLD_DB,
+  NoiseComplianceHysteresisState,
+  createInitialNoiseHysteresisState,
+  evaluateNoiseComplianceHysteresisStep,
+  formatDurationMmSs,
+} from '../utils/noiseComplianceHysteresis';
 
 export interface NoiseComplianceLogEntry {
   id: string;
@@ -253,6 +264,13 @@ export const NoiseComplianceLogPanel: React.FC<NoiseComplianceLogPanelProps> = (
 }) => {
   const [logEntries, setLogEntries] = useState<NoiseComplianceLogEntry[]>([]);
   const [esdhExportedJustNow, setEsdhExportedJustNow] = useState(false);
+  const [hysteresisByReceptorId, setHysteresisByReceptorId] = useState<
+    Record<string, NoiseComplianceHysteresisState>
+  >({});
+  const [simulatedOffsetMs, setSimulatedOffsetMs] = useState<number>(0);
+  const [tickerMs, setTickerMs] = useState<number>(() => Date.now());
+  const hysteresisRef = useRef<Record<string, NoiseComplianceHysteresisState>>({});
+  const lastReadingSigRef = useRef<string>('');
 
   const liveReading = useMemo(
     () =>
@@ -274,19 +292,80 @@ export const NoiseComplianceLogPanel: React.FC<NoiseComplianceLogPanelProps> = (
     ]
   );
 
+  const currentMaxDb = Number(
+    Math.max(liveReading.laeqDb, liveReading.lafmaxDb).toFixed(1)
+  );
+
   const isCurrentExceeding55 =
     liveReading.laeqDb > NOISE_COMPLIANCE_THRESHOLD_DB ||
     liveReading.lafmaxDb > NOISE_COMPLIANCE_THRESHOLD_DB;
 
-  // Automatically log every real-time L_Aeq or L_AFmax reading above 55 dB(A) for the selected receptor
-  useEffect(() => {
-    if (!isCurrentExceeding55) return;
+  const activeReceptorId = selectedReceptorExposure.receptorId;
+  const activeHysteresis =
+    hysteresisByReceptorId[activeReceptorId] ??
+    createInitialNoiseHysteresisState(activeReceptorId, tickerMs);
 
-    const maxReading = Math.max(liveReading.laeqDb, liveReading.lafmaxDb);
-    const exceedanceDb = Number((maxReading - NOISE_COMPLIANCE_THRESHOLD_DB).toFixed(1));
-    const entryId = `ncl-${dateIso}-${selectedHourIndex}-${selectedReceptorExposure.receptorId}-${liveReading.laeqDb.toFixed(
+  const recoveryProgress = useMemo(() => {
+    if (activeHysteresis.phase !== 'COMPLIANCE_RECOVERY') {
+      return {
+        elapsedMs: 0,
+        remainingMs:
+          activeHysteresis.phase === 'ALARM_LATCHED'
+            ? NOISE_HYSTERESIS_RESET_COMPLIANCE_MS
+            : 0,
+        progressPct: activeHysteresis.phase === 'MONITORING_IDLE' ? 100 : 0,
+      };
+    }
+    const startedAt = activeHysteresis.complianceStartedAtMs ?? tickerMs;
+    const elapsedMs = Math.max(0, tickerMs - startedAt);
+    const remainingMs = Math.max(0, NOISE_HYSTERESIS_RESET_COMPLIANCE_MS - elapsedMs);
+    const progressPct = Math.min(
+      100,
+      Math.round((elapsedMs / NOISE_HYSTERESIS_RESET_COMPLIANCE_MS) * 100)
+    );
+    return { elapsedMs, remainingMs, progressPct };
+  }, [activeHysteresis, tickerMs]);
+
+  const readingSig = `${activeReceptorId}|${dateIso}|${selectedHourIndex}|${currentMaxDb.toFixed(1)}`;
+
+  // Avanceret støjalarm-hysterese: låser ved >55 dB, dæmper fluktuationer, og nulstiller først efter 15 min overholdelse
+  useEffect(() => {
+    if (lastReadingSigRef.current === readingSig) return;
+    lastReadingSigRef.current = readingSig;
+
+    const nowMs = Date.now() + simulatedOffsetMs;
+    const prevHys =
+      hysteresisRef.current[activeReceptorId] ??
+      createInitialNoiseHysteresisState(activeReceptorId, nowMs);
+
+    const step = evaluateNoiseComplianceHysteresisStep(prevHys, {
+      currentMaxDb,
+      nowMs,
+      hourLabel: currentWeather.hourLabel,
+      receptorId: activeReceptorId,
+      receptorCode: selectedReceptorExposure.receptorCode,
+      thresholdDb: NOISE_HYSTERESIS_TRIGGER_THRESHOLD_DB,
+      complianceResetMs: NOISE_HYSTERESIS_RESET_COMPLIANCE_MS,
+    });
+
+    hysteresisRef.current = {
+      ...hysteresisRef.current,
+      [activeReceptorId]: step.nextState,
+    };
+    setHysteresisByReceptorId((prev) => ({
+      ...prev,
+      [activeReceptorId]: step.nextState,
+    }));
+    setTickerMs(nowMs);
+
+    if (!step.shouldEmitAlarmNotification || !isCurrentExceeding55) return;
+
+    const exceedanceDb = Number(
+      (currentMaxDb - NOISE_COMPLIANCE_THRESHOLD_DB).toFixed(1)
+    );
+    const entryId = `ncl-${dateIso}-${selectedHourIndex}-${activeReceptorId}-${liveReading.laeqDb.toFixed(
       1
-    )}-${liveReading.lafmaxDb.toFixed(1)}`;
+    )}-${liveReading.lafmaxDb.toFixed(1)}-r${step.nextState.resetCount}`;
 
     setLogEntries((prev) => {
       if (prev.some((item) => item.id === entryId)) {
@@ -298,7 +377,7 @@ export const NoiseComplianceLogPanel: React.FC<NoiseComplianceLogPanelProps> = (
         dateIso,
         hourIndex: selectedHourIndex,
         hourLabel: currentWeather.hourLabel,
-        receptorId: selectedReceptorExposure.receptorId,
+        receptorId: activeReceptorId,
         receptorCode: selectedReceptorExposure.receptorCode,
         receptorName: selectedReceptorExposure.receptorName,
         receptorAddress: selectedReceptorExposure.address,
@@ -317,6 +396,10 @@ export const NoiseComplianceLogPanel: React.FC<NoiseComplianceLogPanelProps> = (
       return [nextItem, ...prev].slice(0, 72);
     });
   }, [
+    readingSig,
+    simulatedOffsetMs,
+    activeReceptorId,
+    currentMaxDb,
     isCurrentExceeding55,
     dateIso,
     selectedHourIndex,
@@ -327,6 +410,86 @@ export const NoiseComplianceLogPanel: React.FC<NoiseComplianceLogPanelProps> = (
     selectedReceptorExposure,
     liveReading,
   ]);
+
+  // 1-sekunds live overholdelsestimer under COMPLIANCE_RECOVERY (nulstiller automatisk ved >= 15 min <= 55 dB)
+  useEffect(() => {
+    if (activeHysteresis.phase !== 'COMPLIANCE_RECOVERY') return;
+    const id = window.setInterval(() => {
+      const nowMs = Date.now() + simulatedOffsetMs;
+      setTickerMs(nowMs);
+      const curr = hysteresisRef.current[activeReceptorId];
+      if (!curr || curr.phase !== 'COMPLIANCE_RECOVERY') return;
+      const startedAt = curr.complianceStartedAtMs ?? nowMs;
+      if (nowMs - startedAt >= NOISE_HYSTERESIS_RESET_COMPLIANCE_MS) {
+        const step = evaluateNoiseComplianceHysteresisStep(curr, {
+          currentMaxDb,
+          nowMs,
+          hourLabel: currentWeather.hourLabel,
+          receptorId: activeReceptorId,
+          receptorCode: selectedReceptorExposure.receptorCode,
+          thresholdDb: NOISE_HYSTERESIS_TRIGGER_THRESHOLD_DB,
+          complianceResetMs: NOISE_HYSTERESIS_RESET_COMPLIANCE_MS,
+        });
+        hysteresisRef.current = {
+          ...hysteresisRef.current,
+          [activeReceptorId]: step.nextState,
+        };
+        setHysteresisByReceptorId((prev) => ({
+          ...prev,
+          [activeReceptorId]: step.nextState,
+        }));
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [
+    activeHysteresis.phase,
+    activeReceptorId,
+    simulatedOffsetMs,
+    currentMaxDb,
+    currentWeather.hourLabel,
+    selectedReceptorExposure.receptorCode,
+  ]);
+
+  const handleSimulate15MinComplianceReset = () => {
+    const curr =
+      hysteresisRef.current[activeReceptorId] ??
+      createInitialNoiseHysteresisState(activeReceptorId, Date.now());
+    const jumpMs = NOISE_HYSTERESIS_RESET_COMPLIANCE_MS + 1000;
+    const nextOffset = simulatedOffsetMs + jumpMs;
+    const targetNowMs = Date.now() + nextOffset;
+
+    let working = curr;
+    if (working.phase === 'ALARM_LATCHED') {
+      working = evaluateNoiseComplianceHysteresisStep(working, {
+        currentMaxDb: Math.min(currentMaxDb, 52.0),
+        nowMs: targetNowMs - jumpMs,
+        hourLabel: currentWeather.hourLabel,
+        receptorId: activeReceptorId,
+        receptorCode: selectedReceptorExposure.receptorCode,
+        thresholdDb: NOISE_HYSTERESIS_TRIGGER_THRESHOLD_DB,
+        complianceResetMs: NOISE_HYSTERESIS_RESET_COMPLIANCE_MS,
+      }).nextState;
+    }
+    const resetStep = evaluateNoiseComplianceHysteresisStep(working, {
+      currentMaxDb: Math.min(currentMaxDb, 52.0),
+      nowMs: targetNowMs,
+      hourLabel: currentWeather.hourLabel,
+      receptorId: activeReceptorId,
+      receptorCode: selectedReceptorExposure.receptorCode,
+      thresholdDb: NOISE_HYSTERESIS_TRIGGER_THRESHOLD_DB,
+      complianceResetMs: NOISE_HYSTERESIS_RESET_COMPLIANCE_MS,
+    });
+    hysteresisRef.current = {
+      ...hysteresisRef.current,
+      [activeReceptorId]: resetStep.nextState,
+    };
+    setHysteresisByReceptorId((prev) => ({
+      ...prev,
+      [activeReceptorId]: resetStep.nextState,
+    }));
+    setSimulatedOffsetMs(nextOffset);
+    setTickerMs(targetNowMs);
+  };
 
   const handleScan24HoursForReceptor = () => {
     const scanned: NoiseComplianceLogEntry[] = [];
@@ -487,7 +650,7 @@ export const NoiseComplianceLogPanel: React.FC<NoiseComplianceLogPanelProps> = (
             <span>Realtids Støj-Overholdelseslog (&gt; 55 dB(A))</span>
           </div>
           <p className="text-[11px] font-sans text-[var(--text-secondary)]">
-            Automatisk logning af L_Aeq og L_AFmax over 55,0 dB(A) for valgt receptor:{' '}
+            Automatisk logning med 15-min. alarm-hysterese for valgt receptor:{' '}
             <strong className="text-[var(--text-primary)]">
               {selectedReceptorExposure.receptorCode} ({selectedReceptorExposure.receptorName})
             </strong>
@@ -498,7 +661,7 @@ export const NoiseComplianceLogPanel: React.FC<NoiseComplianceLogPanelProps> = (
           type="button"
           data-testid="export-noise-compliance-esdh-csv-btn"
           onClick={handleExportToSlagelseEsdh}
-          className={`px-2.5 py-1.5 rounded text-[11px] font-bold border transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
+          className={`px-2.5 py-1.5 rounded text-[11px] font-bold border transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
             esdhExportedJustNow
               ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/60'
               : 'bg-[var(--surface-overlay)] hover:bg-slate-700 text-sky-300 border-sky-500/50'
@@ -548,6 +711,97 @@ export const NoiseComplianceLogPanel: React.FC<NoiseComplianceLogPanelProps> = (
         </div>
       </div>
 
+      {/* Avanceret 15-minutters Støjalarm-Hysterese Kontrolkort */}
+      <div
+        data-testid="noise-hysteresis-status-card"
+        className={`p-2.5 rounded-md border space-y-2 text-[11px] tabular-nums ${
+          activeHysteresis.phase === 'ALARM_LATCHED'
+            ? 'bg-rose-950/35 border-rose-500/60 text-rose-100'
+            : activeHysteresis.phase === 'COMPLIANCE_RECOVERY'
+            ? 'bg-amber-950/35 border-amber-500/60 text-amber-100'
+            : 'bg-emerald-950/25 border-emerald-500/45 text-emerald-100'
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 font-bold">
+            {activeHysteresis.phase === 'ALARM_LATCHED' ? (
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            ) : activeHysteresis.phase === 'COMPLIANCE_RECOVERY' ? (
+              <Timer className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            ) : (
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            )}
+            <span>
+              Hysterese (15 min.):{' '}
+              {activeHysteresis.phase === 'ALARM_LATCHED'
+                ? 'ALARM LÅST · FLUKTUATIONSSIKRET'
+                : activeHysteresis.phase === 'COMPLIANCE_RECOVERY'
+                ? `OVERHOLDELSESTIMER (${formatDurationMmSs(recoveryProgress.remainingMs)} tilbage)`
+                : 'KLAR · OVERHOLDELSE (<= 55 dB)'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            data-testid="simulate-15m-compliance-reset-btn"
+            disabled={activeHysteresis.phase === 'MONITORING_IDLE'}
+            onClick={handleSimulate15MinComplianceReset}
+            className="px-2 py-0.5 rounded bg-[var(--surface-panel)] hover:bg-[var(--surface-overlay)] disabled:opacity-45 border border-[var(--border-subtle)] text-[10px] font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+            title="Simulér 15 minutters uafbrudt overholdelse (<= 55,0 dB(A)) for at nulstille støjalarm-hysteresen"
+          >
+            <FastForward className="w-3 h-3 text-emerald-400 shrink-0" />
+            <span>Simulér +15 min overholdelse</span>
+          </button>
+        </div>
+
+        {/* 15-min Overholdelses-fremdrift */}
+        <div className="space-y-1">
+          <div className="w-full h-1.5 rounded-full bg-slate-950/80 overflow-hidden">
+            <div
+              className={`h-full transition-all duration-300 ${
+                activeHysteresis.phase === 'ALARM_LATCHED'
+                  ? 'bg-rose-500'
+                  : activeHysteresis.phase === 'COMPLIANCE_RECOVERY'
+                  ? 'bg-amber-400'
+                  : 'bg-emerald-400'
+              }`}
+              style={{
+                width: `${
+                  activeHysteresis.phase === 'ALARM_LATCHED'
+                    ? 100
+                    : recoveryProgress.progressPct
+                }%`,
+              }}
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] opacity-90">
+            <span>
+              Dæmpede fluktuationer:{' '}
+              <strong>{activeHysteresis.suppressedFluctuationCount}</strong> · 15-min. nulstillinger:{' '}
+              <strong>{activeHysteresis.resetCount}</strong>
+            </span>
+            <span>
+              {activeHysteresis.phase === 'COMPLIANCE_RECOVERY'
+                ? `Nulstilles ved 00:00 (${formatDurationMmSs(recoveryProgress.elapsedMs)} / 15:00)`
+                : activeHysteresis.phase === 'ALARM_LATCHED'
+                ? 'Kræver 15:00 <= 55 dB(A) før ny alarm kan udløses'
+                : 'Klar til næste enkeltstående hændelse'}
+            </span>
+          </div>
+        </div>
+
+        {activeHysteresis.historyEvents.length > 0 && (
+          <div className="pt-1.5 border-t border-white/10 space-y-0.5 text-[10px] font-sans">
+            {activeHysteresis.historyEvents.slice(0, 2).map((ev) => (
+              <div key={ev.id} className="flex items-start justify-between gap-2 opacity-90">
+                <span className="truncate">• {ev.messageDa}</span>
+                <span className="font-mono shrink-0 opacity-75">{ev.timeLabel}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Action Bar */}
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
         <div className="flex items-center gap-1.5 text-[var(--text-secondary)]">
@@ -564,7 +818,10 @@ export const NoiseComplianceLogPanel: React.FC<NoiseComplianceLogPanelProps> = (
               </span>
             </span>
           ) : (
-            <span>Under 55,0 dB(A) tærskel kl. {currentWeather.hourLabel}</span>
+            <span className="inline-flex items-center gap-1 text-emerald-300">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>Under 55,0 dB(A) tærskel kl. {currentWeather.hourLabel}</span>
+            </span>
           )}
         </div>
 
@@ -572,7 +829,7 @@ export const NoiseComplianceLogPanel: React.FC<NoiseComplianceLogPanelProps> = (
           <button
             type="button"
             onClick={handleScan24HoursForReceptor}
-            className="px-2 py-1 rounded bg-[var(--surface-panel)] hover:bg-[var(--surface-overlay)] border border-[var(--border-subtle)] text-[var(--text-primary)] font-semibold flex items-center gap-1 cursor-pointer"
+            className="px-2 py-1 rounded bg-[var(--surface-panel)] hover:bg-[var(--surface-overlay)] border border-[var(--border-subtle)] text-[var(--text-primary)] font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap"
             title="Scan alle 24 timer på den valgte dato for overskridelser > 55 dB(A) ved denne receptor"
           >
             <RefreshCw className="w-3 h-3 text-sky-400" />
@@ -582,7 +839,7 @@ export const NoiseComplianceLogPanel: React.FC<NoiseComplianceLogPanelProps> = (
             <button
               type="button"
               onClick={() => setLogEntries([])}
-              className="px-2 py-1 rounded bg-[var(--surface-panel)] hover:bg-[var(--surface-overlay)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-rose-300 flex items-center gap-1 cursor-pointer"
+              className="px-2 py-1 rounded bg-[var(--surface-panel)] hover:bg-[var(--surface-overlay)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-rose-300 flex items-center gap-1 cursor-pointer whitespace-nowrap"
               title="Ryd støjloggen"
             >
               <Trash2 className="w-3 h-3" />

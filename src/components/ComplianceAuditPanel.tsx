@@ -1,16 +1,29 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  BarChart3,
   Camera,
   CheckCircle2,
   Clock,
   Download,
+  FileDown,
   FileWarning,
   Scale,
   Search,
   ShieldAlert,
 } from 'lucide-react';
 import { RINGPARKEN_BUILDINGS } from '../constants/ringparkenData';
+import { RINGPARKEN_MASTER_BUILDINGS } from '../data/ringparkenData';
+import {
+  DemolitionSourceNode,
+  PuffAccumulationResult,
+  ReceptorZone,
+  RingparkenBuildingUnit,
+} from '../types/dispersion';
+import {
+  buildWeeklyCategoryExceedanceAndTrends,
+  downloadComplianceAuditWeeklyPdfReport,
+} from '../services/complianceAuditWeeklyPdfService';
 import { IncidentAnalyzer } from './IncidentAnalyzer';
 import {
   BEK_496_2024_AREA_THRESHOLD_M2,
@@ -181,10 +194,20 @@ const AUDIT_DISCREPANCIES: AuditDiscrepancyItem[] = [
 
 export interface ComplianceAuditPanelProps {
   onOpenBuildingOnGis?: (buildingId: string) => void;
+  buildings?: RingparkenBuildingUnit[];
+  sources?: DemolitionSourceNode[];
+  receptors?: ReceptorZone[];
+  puff24h?: PuffAccumulationResult | null;
+  dateIso?: string;
 }
 
 export const ComplianceAuditPanel: React.FC<ComplianceAuditPanelProps> = ({
   onOpenBuildingOnGis,
+  buildings = RINGPARKEN_MASTER_BUILDINGS,
+  sources,
+  receptors,
+  puff24h = null,
+  dateIso,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'register' | 'incident'>(
     'register'
@@ -195,6 +218,10 @@ export const ComplianceAuditPanel: React.FC<ComplianceAuditPanelProps> = ({
   >('ALLE');
   const [nowDate, setNowDate] = useState<Date>(() => new Date());
   const [customTestTime, setCustomTestTime] = useState<string>('');
+  const [lastWeeklyPdfExport, setLastWeeklyPdfExport] = useState<{
+    fileName: string;
+    sha256: string;
+  } | null>(null);
 
   useEffect(() => {
     const id = window.setInterval(() => setNowDate(new Date()), 30_000);
@@ -259,6 +286,51 @@ export const ComplianceAuditPanel: React.FC<ComplianceAuditPanelProps> = ({
     });
   }, [caseEvaluations, searchQuery, selectedCaseFilter]);
 
+  const effectiveDateIso = useMemo(
+    () => dateIso ?? nowDate.toISOString().slice(0, 10),
+    [dateIso, nowDate]
+  );
+
+  const weeklyAuditDataset = useMemo(
+    () =>
+      buildWeeklyCategoryExceedanceAndTrends({
+        dateIso: effectiveDateIso,
+        buildings,
+        sources,
+        receptors,
+        puff24h,
+      }),
+    [effectiveDateIso, buildings, sources, receptors, puff24h]
+  );
+
+  const handleExportWeeklyCategoryPdf = () => {
+    const res = downloadComplianceAuditWeeklyPdfReport({
+      dateIso: effectiveDateIso,
+      buildings,
+      sources,
+      receptors,
+      puff24h,
+      permitCases: filteredCases.map(({ record, eval496 }) => ({
+        caseNumber: record.caseNumber,
+        addressLabel: record.addressLabel,
+        titleDa: record.titleDa,
+        areaM2: record.areaM2,
+        bek496StatusDa: eval496.statusLabelDa,
+      })),
+      discrepancies: filteredDiscrepancies.map((d) => ({
+        category: d.category,
+        severity: d.severity,
+        titleDa: d.titleDa,
+        statutoryImpactDa: d.statutoryImpactDa,
+      })),
+      workHoursStatusDa: workHoursCompliance.statusLabelDa,
+    });
+    setLastWeeklyPdfExport({
+      fileName: res.fileName,
+      sha256: res.dataset.reportSha256,
+    });
+  };
+
   const handleExportAuditJson = () => {
     const payload = {
       exportedAtIso: new Date().toISOString(),
@@ -266,6 +338,7 @@ export const ComplianceAuditPanel: React.FC<ComplianceAuditPanelProps> = ({
       workHoursCompliance,
       permitCases: caseEvaluations,
       discrepancies: filteredDiscrepancies,
+      weeklyCategorySummary: weeklyAuditDataset,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: 'application/json;charset=utf-8',
@@ -435,12 +508,171 @@ export const ComplianceAuditPanel: React.FC<ComplianceAuditPanelProps> = ({
 
           <button
             type="button"
+            data-testid="export-compliance-audit-weekly-pdf-btn"
+            onClick={handleExportWeeklyCategoryPdf}
+            className="px-3 py-1.5 rounded-md bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
+            title="Generér PDF-rapport med uge-overskridelser pr. bygningskategori og grafer over S-kvotient tendenser for de mest belastede receptorer"
+          >
+            <FileDown className="w-3.5 h-3.5 shrink-0" />
+            <span>Eksportér Uge-Overskridelser &amp; S-Tendens PDF</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleExportAuditJson}
-            className="px-3 py-1.5 rounded-md bg-[#1E293B] hover:bg-[#293548] border border-[#334155] text-xs font-mono text-cyan-200 flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            className="px-3 py-1.5 rounded-md bg-[#1E293B] hover:bg-[#293548] border border-[#334155] text-xs font-mono text-cyan-200 flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
           >
             <Download className="w-3.5 h-3.5 shrink-0" />
             <span>Eksporter Audit JSON</span>
           </button>
+        </div>
+      </div>
+
+      {/* UGE-OVERSKRIDELSER PR. BYGNINGSKATEGORI & S-KVOTIENT TENDENSER (PDF-FORHÅNDSVISNING) */}
+      <div
+        data-testid="compliance-audit-weekly-summary-card"
+        className="max-w-[1360px] mx-auto bg-[#111827] border border-cyan-500/40 rounded-lg p-4 space-y-4"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#1E293B]">
+          <div className="space-y-0.5">
+            <h2 className="text-sm font-semibold text-slate-50 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-cyan-400 shrink-0" />
+              <span>
+                Uge-Overskridelser pr. Bygningskategori &amp; S-Kvotient Tendenser ({weeklyAuditDataset.periodLabel})
+              </span>
+            </h2>
+            <p className="text-xs text-slate-400">
+              Samlet opgørelse på tværs af alle 5 bygningskategorier inkl. 7-døgns tendensgrafer for de {weeklyAuditDataset.topReceptorTrends.length} mest belastede receptorer til PDF-rapportskabelon.
+            </p>
+          </div>
+          {lastWeeklyPdfExport && (
+            <div
+              data-testid="compliance-audit-weekly-pdf-toast"
+              className="px-2.5 py-1 rounded bg-emerald-950/60 border border-emerald-500/50 text-emerald-200 text-[11px] font-mono tabular-nums"
+            >
+              ✓ PDF gemt · SHA-256: {lastWeeklyPdfExport.sha256.slice(0, 14)}…
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+          {weeklyAuditDataset.categorySummaries.map((cat) => (
+            <div
+              key={cat.category}
+              className="p-2.5 rounded-md bg-[#0B0F19] border border-[#1E293B] space-y-1.5 text-xs"
+            >
+              <div className="flex items-center justify-between gap-1.5">
+                <span className="inline-flex items-center gap-1.5 font-semibold text-slate-100 truncate">
+                  <span
+                    className="w-2.5 h-2.5 rounded-sm shrink-0"
+                    style={{ backgroundColor: cat.colorHex }}
+                  />
+                  <span className="truncate">{cat.labelDa}</span>
+                </span>
+                <span className="font-mono text-[11px] text-slate-400 tabular-nums shrink-0">
+                  {cat.buildingCount} enh.
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1 font-mono text-[11px] tabular-nums">
+                <div>
+                  <span className="text-slate-500">S≥1: </span>
+                  <span
+                    className={
+                      cat.weeklyExceedanceHoursS1 > 0
+                        ? 'text-rose-300 font-bold'
+                        : 'text-emerald-300 font-bold'
+                    }
+                  >
+                    {cat.weeklyExceedanceHoursS1} t ({cat.daysWithSOver1}/7d)
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-500">Maks: </span>
+                  <span
+                    className={
+                      cat.peakSumQuotientS >= 1.0
+                        ? 'text-rose-300 font-bold'
+                        : cat.peakSumQuotientS >= 0.8
+                        ? 'text-amber-300 font-bold'
+                        : 'text-cyan-300 font-bold'
+                    }
+                  >
+                    S={cat.peakSumQuotientS.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-400 truncate font-mono">
+                Spids: {cat.worstBuildingLabel}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2.5">
+          {weeklyAuditDataset.topReceptorTrends.map((trend) => {
+            const pts = trend.daily7DayPeakS;
+            const maxS = Math.max(1.4, ...pts.map((p) => p.maxS));
+            const polyPoints = pts
+              .map((p, idx) => {
+                const x = (idx / Math.max(1, pts.length - 1)) * 136 + 4;
+                const y = 34 - (Math.min(maxS, p.maxS) / maxS) * 28;
+                return `${x.toFixed(1)},${y.toFixed(1)}`;
+              })
+              .join(' ');
+            const limitY = 34 - (1.0 / maxS) * 28;
+            return (
+              <div
+                key={`audit-trend-${trend.receptorId}`}
+                className="p-2.5 rounded-md bg-[#0B0F19] border border-[#1E293B] space-y-1.5"
+              >
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="font-mono font-bold text-cyan-300 truncate">
+                    {trend.receptorCode} · {trend.receptorName}
+                  </span>
+                  <span
+                    className={`font-mono text-[11px] font-bold tabular-nums shrink-0 ${
+                      trend.peakSumQuotientS >= 1.0
+                        ? 'text-rose-300'
+                        : trend.peakSumQuotientS >= 0.8
+                        ? 'text-amber-300'
+                        : 'text-emerald-300'
+                    }`}
+                  >
+                    S={trend.peakSumQuotientS.toFixed(2)}
+                  </span>
+                </div>
+                <svg
+                  viewBox="0 0 144 38"
+                  className="w-full h-9 overflow-visible"
+                  role="img"
+                  aria-label={`7-døgns S-kvotient tendens for ${trend.receptorCode}`}
+                >
+                  <line
+                    x1="4"
+                    y1={limitY}
+                    x2="140"
+                    y2={limitY}
+                    stroke="#f43f5e"
+                    strokeWidth="1"
+                    strokeDasharray="3 2"
+                    strokeOpacity="0.7"
+                  />
+                  <polyline
+                    fill="none"
+                    stroke={trend.peakSumQuotientS >= 1.0 ? '#fb7185' : '#38bdf8'}
+                    strokeWidth="1.8"
+                    points={polyPoints}
+                  />
+                </svg>
+                <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 tabular-nums">
+                  <span>{trend.buildingCategoryLabelDa}</span>
+                  <span>
+                    {trend.weeklyDaysOver1}/7 d S≥1 · {trend.cumulative24hDoseSt.toFixed(1)} S·t
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

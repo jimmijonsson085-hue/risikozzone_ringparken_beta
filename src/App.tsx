@@ -226,6 +226,12 @@ import {
   DispersionForecastBulletinWidget,
   DispersionForecastOptionMode,
 } from './components/DispersionForecastBulletinWidget';
+import { SimultaneousEmergencyBrakeLogEntry } from './types/myceliumAlert';
+import {
+  acousticDustWarningService,
+  shouldResetAcousticWarningHysteresis,
+} from './services/acousticDustWarningService';
+import { GustMachineImpulseStatisticalWidget } from './components/GustMachineImpulseStatisticalWidget';
 import {
   DASHBOARD_WINDOW_REGISTRY,
   DashboardWindowId,
@@ -1913,85 +1919,40 @@ export default function App() {
     handleRestoreAllMinimized,
   ]);
 
-  // Diskret akustisk advarselstone (Web Audio API) når sumkvotienten S > 0,8 under højvindsscenarier (v > 10 m/s)
+  // Diskret akustisk advarselstone (Web Audio API service) når sumkvotienten S > 0,8 under højvindsscenarier (v > 10 m/s)
   const [acousticDustWarningEnabled, setAcousticDustWarningEnabled] = useState<boolean>(true);
   const [forceHighWindDustWarningSim, setForceHighWindDustWarningSim] = useState<boolean>(false);
   const [lastAcousticChimeLabel, setLastAcousticChimeLabel] = useState<string | null>(null);
-  const lastChimedStateKeyRef = useRef<string>('');
-  const webAudioCtxRef = useRef<AudioContext | null>(null);
-  const hasUserAudioGestureRef = useRef<boolean>(false);
 
   useEffect(() => {
-    const unlockAudio = () => {
-      hasUserAudioGestureRef.current = true;
-    };
-    window.addEventListener('pointerdown', unlockAudio, { once: true, passive: true });
-    window.addEventListener('keydown', unlockAudio, { once: true });
-    return () => {
-      window.removeEventListener('pointerdown', unlockAudio);
-      window.removeEventListener('keydown', unlockAudio);
-    };
+    return acousticDustWarningService.attachUserGestureUnlockListeners();
   }, []);
 
   const playAcousticDustDispersionWarningTone = useCallback(
     (sumQuotientVal: number, windSpeedVal: number, receptorLabel: string, forcePlay = false) => {
-      if (!forcePlay && !hasUserAudioGestureRef.current) return;
-      try {
-        const AudioCtx =
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (!AudioCtx) return;
-        if (!webAudioCtxRef.current) {
-          webAudioCtxRef.current = new AudioCtx();
-        }
-        const ctx = webAudioCtxRef.current;
-        if (ctx.state === 'suspended') {
-          void ctx.resume().catch(() => undefined);
-        }
-
-        const now = ctx.currentTime;
-        // Diskret to-tonet harmonisk advarselspuls (D5 587.33 Hz -> A5 880 Hz; strengt positiv ramp >= 0.0001)
-        const freqs = sumQuotientVal >= 1.0 ? [659.25, 987.77] : [587.33, 880.0];
-        freqs.forEach((freq, idx) => {
-          const osc = ctx.createOscillator();
-          const subOsc = ctx.createOscillator();
-          const gain = ctx.createGain();
-
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, now + idx * 0.16);
-
-          subOsc.type = 'triangle';
-          subOsc.frequency.setValueAtTime(freq * 0.5, now + idx * 0.16);
-
-          gain.gain.setValueAtTime(0.0001, now + idx * 0.16);
-          gain.gain.exponentialRampToValueAtTime(0.065, now + idx * 0.16 + 0.025);
-          gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.16 + 0.24);
-
-          osc.connect(gain);
-          subOsc.connect(gain);
-          gain.connect(ctx.destination);
-
-          osc.start(now + idx * 0.16);
-          subOsc.start(now + idx * 0.16);
-          osc.stop(now + idx * 0.16 + 0.26);
-          subOsc.stop(now + idx * 0.16 + 0.26);
-        });
-
-        setLastAcousticChimeLabel(
-          `${new Date().toLocaleTimeString('da-DK')} · ${receptorLabel} (S = ${sumQuotientVal.toFixed(2)}, v = ${windSpeedVal.toFixed(1)} m/s)`
-        );
-      } catch {
-        // Ignorér sandbox autoplay-begrænsninger indtil brugerinteraktion
+      if (forcePlay) {
+        acousticDustWarningService.markUserGestureUnlocked();
+      }
+      const res = acousticDustWarningService.playDiscreteWarningSignal({
+        sumQuotientS: sumQuotientVal,
+        windSpeedMs: windSpeedVal,
+        receptorLabel,
+        forcePlay,
+        muted: !acousticDustWarningEnabled,
+      });
+      if (res.played) {
+        setLastAcousticChimeLabel(res.alertMessageDa);
       }
     },
-    []
+    [acousticDustWarningEnabled]
   );
 
   // Afspil automatisk diskret advarselstone når S > 0,8 under højvindsscenarier (v > 10 m/s)
   useEffect(() => {
     if (!acousticDustWarningEnabled || myceliumAlerts.channelStatus.isScrubbingSuppressed) return;
-    const isHighWindScenario =
-      currentWeather.windSpeed10m > 10.0 || forceHighWindDustWarningSim;
+    const effectiveWindMs = forceHighWindDustWarningSim
+      ? Math.max(currentWeather.windSpeed10m, 11.4)
+      : currentWeather.windSpeed10m;
     const exceedingReceptor =
       receptorExposures.find((r) => r.sumQuotient > 0.8) ||
       (forceHighWindDustWarningSim ? worstExposedReceptor : undefined);
@@ -2000,18 +1961,23 @@ export default function App() {
       : (exceedingReceptor?.sumQuotient ?? 0);
 
     // Hysterese-reset når vind eller S falder tydeligt under tærsklen
-    if (!forceHighWindDustWarningSim && (currentWeather.windSpeed10m <= 9.0 || effectiveS <= 0.72)) {
-      lastChimedStateKeyRef.current = '';
+    if (
+      shouldResetAcousticWarningHysteresis({
+        sumQuotientS: effectiveS,
+        windSpeedMs: currentWeather.windSpeed10m,
+        forceSimulated: forceHighWindDustWarningSim,
+      })
+    ) {
+      acousticDustWarningService.resetHysteresis();
       return;
     }
 
-    if (isHighWindScenario && exceedingReceptor && effectiveS > 0.8) {
+    if (effectiveWindMs > 10.0 && exceedingReceptor && effectiveS > 0.8) {
       const stateKey = `${currentWeather.hourIndex}-${exceedingReceptor.receptorId}-${forceHighWindDustWarningSim ? 'sim' : 'live'}`;
-      if (lastChimedStateKeyRef.current !== stateKey) {
-        lastChimedStateKeyRef.current = stateKey;
+      if (acousticDustWarningService.shouldTriggerForStateKey(stateKey)) {
         playAcousticDustDispersionWarningTone(
           effectiveS,
-          Math.max(currentWeather.windSpeed10m, forceHighWindDustWarningSim ? 11.4 : 0),
+          effectiveWindMs,
           exceedingReceptor.receptorName
         );
       }
@@ -2950,6 +2916,29 @@ export default function App() {
     signature: string;
   } | null>(null);
   const [system3InterlockLogs, setSystem3InterlockLogs] = useState<System3InterlockLogEntry[]>([]);
+  const [emergencyBrakeHistory, setEmergencyBrakeHistory] = useState<
+    SimultaneousEmergencyBrakeLogEntry[]
+  >(() => {
+    try {
+      const raw = window.localStorage.getItem('ringparken_s1s3_emergency_brake_history_v1');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as SimultaneousEmergencyBrakeLogEntry[]) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        'ringparken_s1s3_emergency_brake_history_v1',
+        JSON.stringify(emergencyBrakeHistory.slice(0, 50))
+      );
+    } catch {
+      // Ignorer localStorage kvotebegrænsninger
+    }
+  }, [emergencyBrakeHistory]);
 
   const cavModeLabelDa = useMemo(() => {
     switch (cavVentilationMode) {
@@ -3016,6 +3005,36 @@ export default function App() {
         triggerSummaryDa: `${dispatchEvent.system3State.sectioningStatuteDa} · ${dispatchEvent.system3State.waterLossPreventedM3} m³ vandspild afværget · CAV tvangsskiftet til Balanceret HEPA-Overtryk`,
       };
       setSystem3InterlockLogs((prev) => [pendingLogEntry, ...prev].slice(0, 30));
+
+      const pendingBrakeEntry: SimultaneousEmergencyBrakeLogEntry = {
+        id: logId,
+        observationCode: code,
+        eventId: dispatchEvent.eventId,
+        scenarioId: dispatchEvent.scenarioId,
+        scenarioTitleDa: dispatchEvent.scenarioTitleDa,
+        t0DetectedIso: dispatchEvent.t0DetectedIso,
+        t1DispatchedIso: dispatchEvent.t1DispatchedIso,
+        dispatchedTimeLabel: dispatchEvent.t1DispatchedIso.slice(11, 19),
+        latencyMs: dispatchEvent.latencyMs,
+        bureaucraticDelayDeltaTMs: dispatchEvent.bureaucraticDelayDeltaTMs,
+        corroboratingNodes: dispatchEvent.gate1Validation.corroboratingNodes,
+        totalNodes: dispatchEvent.gate1Validation.totalNodes,
+        corroborationPct: dispatchEvent.gate1Validation.corroborationPct,
+        lockedValveCodes: [...dispatchEvent.system3State.lockedValveCodes],
+        islandModeBlockCount: dispatchEvent.system1State.islandModeBlockIds.length,
+        haltedMachineCount: dispatchEvent.system3State.haltedMachines.length,
+        zkpRightToOpacityHash: dispatchEvent.gate1Validation.zkpRightToOpacityHash,
+        sha256Signature: 'Beregner SHA-256...',
+        triggerReasonsDa: [...dispatchEvent.triggers.activeTriggerReasonsDa],
+        acknowledged: dispatchEvent.acknowledged,
+        acknowledgedAtIso: dispatchEvent.acknowledgedAtIso,
+      };
+      setEmergencyBrakeHistory((prev) =>
+        [
+          pendingBrakeEntry,
+          ...prev.filter((item) => item.eventId !== dispatchEvent.eventId),
+        ].slice(0, 50)
+      );
 
       const signTask = (async () => {
         const corroboration = evaluatePointInDispersionPlume(
@@ -3090,6 +3109,11 @@ export default function App() {
             entry.id === logId ? { ...entry, sha256Signature: signature } : entry
           )
         );
+        setEmergencyBrakeHistory((prev) =>
+          prev.map((entry) =>
+            entry.id === logId ? { ...entry, sha256Signature: signature } : entry
+          )
+        );
       })().finally(() => {
         pendingObsSignPromisesRef.current.delete(signTask);
       });
@@ -3136,6 +3160,27 @@ export default function App() {
   useEffect(() => {
     setIsS3ValveLockoutActive(simultaneousAlgedonic.dispatch.active);
   }, [simultaneousAlgedonic.dispatch.active]);
+
+  useEffect(() => {
+    if (!simultaneousAlgedonic.dispatch.acknowledged) return;
+    const targetEventId = simultaneousAlgedonic.dispatch.eventId;
+    const ackIso = simultaneousAlgedonic.dispatch.acknowledgedAtIso;
+    setEmergencyBrakeHistory((prev) => {
+      let changed = false;
+      const next = prev.map((entry) => {
+        if (entry.eventId === targetEventId && !entry.acknowledged) {
+          changed = true;
+          return { ...entry, acknowledged: true, acknowledgedAtIso: ackIso };
+        }
+        return entry;
+      });
+      return changed ? next : prev;
+    });
+  }, [
+    simultaneousAlgedonic.dispatch.acknowledged,
+    simultaneousAlgedonic.dispatch.acknowledgedAtIso,
+    simultaneousAlgedonic.dispatch.eventId,
+  ]);
 
   const handleClearSimultaneousAll = useCallback(() => {
     simultaneousAlgedonic.clearSimultaneousSimulation();
@@ -5836,7 +5881,7 @@ export default function App() {
                       setForceHighWindDustWarningSim((prev) => {
                         const next = !prev;
                         if (next) {
-                          lastChimedStateKeyRef.current = '';
+                          acousticDustWarningService.resetHysteresis();
                         }
                         return next;
                       })
@@ -6271,6 +6316,11 @@ export default function App() {
           )}
           {activeUserRole === 'audit' && (
             <ComplianceAuditPanel
+              buildings={buildings}
+              sources={sources}
+              receptors={receptors}
+              puff24h={puff24h}
+              dateIso={weatherDataset.dateIso}
               onOpenBuildingOnGis={(buildingId) => {
                 setFocusedGisBuildingId(buildingId);
                 setViewportMode('risk_gis');
@@ -7234,7 +7284,7 @@ export default function App() {
             acousticDustWarningEnabled={acousticDustWarningEnabled}
             onToggleAcousticDustWarning={() => setAcousticDustWarningEnabled((v) => !v)}
             onTestAcousticDustWarningTone={() => {
-              hasUserAudioGestureRef.current = true;
+              acousticDustWarningService.markUserGestureUnlocked();
               playAcousticDustDispersionWarningTone(
                 Math.max(0.88, maxSiteSumQuotient),
                 Math.max(10.8, currentWeather.windSpeed10m),
@@ -7797,6 +7847,10 @@ export default function App() {
                     disabledNodeIds={myceliumDisabledNodeIds}
                     byzantineFaultNodeIds={myceliumByzantineNodeIds}
                     unacknowledgedAlertCount={myceliumAlerts.unacknowledgedCount}
+                    emergencyBrakeHistory={emergencyBrakeHistory}
+                    onOpenSimultaneousModal={() =>
+                      simultaneousAlgedonic.setIsSplitModalOpen(true)
+                    }
                     onToggleNodeOffline={handleToggleMyceliumNodeOffline}
                     onToggleByzantineFault={handleToggleMyceliumByzantineFault}
                     onResetFaultSimulations={handleResetMyceliumFaultSimulations}
@@ -11534,6 +11588,8 @@ export default function App() {
                     puff24h={puff24h}
                     manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
                     isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
+                    dateIso={weatherDataset.dateIso}
+                    sha256Hash={sha256Hash}
                   />
                 </DockableWindowFrame>
 
@@ -11561,13 +11617,29 @@ export default function App() {
                   />
                 </DockableWindowFrame>
 
+                {/* Statistisk korrelation mellem vindstød og maskinstøj for identifikation af støj-farlige vejrscenarier */}
+                <GustMachineImpulseStatisticalWidget
+                  weatherHours={weatherDataset.hours}
+                  selectedHourIndex={selectedHourIndex}
+                  onSelectHour={(hr) => {
+                    myceliumAlerts.notifyTimelineScrub();
+                    setSelectedHourIndex(hr);
+                    setPlumeRouteProgress(hr);
+                  }}
+                  manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
+                  isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
+                  dateIso={weatherDataset.dateIso}
+                />
+
                 {/* Retsmedicinsk PDF-generator for valgte støj-hændelser, vindkorrelation og sumkvotient S */}
                 <SelectedNoiseEventsPdfBuilderCard
                   dateIso={weatherDataset.dateIso}
                   receptorFocusName={selectedReceptorExposure.receptorName}
                   weatherHours={weatherDataset.hours}
+                  currentWeather={currentWeather}
                   observations={observations}
                   sources={sources}
+                  receptors={receptors}
                   puff24h={puff24h}
                   manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
                   isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
@@ -13446,6 +13518,8 @@ export default function App() {
                 puff24h={puff24h}
                 manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
                 isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
+                dateIso={weatherDataset.dateIso}
+                sha256Hash={sha256Hash}
               />
             )}
 

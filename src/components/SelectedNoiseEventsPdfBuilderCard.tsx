@@ -5,10 +5,12 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { Check, CheckSquare, FileDown, Square, Volume2, Wind } from 'lucide-react';
+import { Check, CheckSquare, FileDown, FileText, Square, Volume2, Wind } from 'lucide-react';
+import { INITIAL_RECEPTOR_ZONES } from '../data/ringparkenData';
 import { deterministicHexHash256 } from '../services/autonomousReceptorMeshService';
 import {
   ForensicSelectableNoiseEvent,
+  downloadNeighborGustNoiseTechnicalAppendixPdf,
   downloadSelectedNoiseEventsForensicPdf,
 } from '../services/selectedNoiseEventsPdfService';
 import {
@@ -16,14 +18,17 @@ import {
   DemolitionSourceNode,
   HourlyWeatherPoint,
   PuffAccumulationResult,
+  ReceptorZone,
 } from '../types/dispersion';
 
 export interface SelectedNoiseEventsPdfBuilderCardProps {
   dateIso: string;
   receptorFocusName: string;
   weatherHours: HourlyWeatherPoint[];
+  currentWeather?: HourlyWeatherPoint;
   observations: AlgedonicObservation[];
   sources: DemolitionSourceNode[];
+  receptors?: ReceptorZone[];
   puff24h: PuffAccumulationResult;
   manualMachineNoiseOutputDb: number;
   isManualMachineNoiseOverrideActive: boolean;
@@ -36,15 +41,49 @@ export const SelectedNoiseEventsPdfBuilderCard: React.FC<
   dateIso,
   receptorFocusName,
   weatherHours,
+  currentWeather,
   observations,
   sources,
+  receptors = INITIAL_RECEPTOR_ZONES,
   puff24h,
   manualMachineNoiseOutputDb,
   isManualMachineNoiseOverrideActive,
   onSelectHour,
 }) => {
   const [deselectedIds, setDeselectedIds] = useState<Record<string, boolean>>({});
-  const [lastExportedInfo, setLastExportedInfo] = useState<{ fileName: string; hash: string } | null>(null);
+  const [selectedNeighborIds, setSelectedNeighborIds] = useState<string[]>(() => {
+    const residential = receptors
+      .filter((r) => r.category === 'residential_block' || r.category === 'custom_receptor')
+      .map((r) => r.id);
+    return residential.length > 0 ? residential : receptors.map((r) => r.id);
+  });
+  const [lastExportedInfo, setLastExportedInfo] = useState<{
+    fileName: string;
+    hash: string;
+    label: string;
+  } | null>(null);
+
+  const neighborBlockChoices = useMemo(() => {
+    const filtered = receptors.filter(
+      (r) => r.category === 'residential_block' || r.category === 'custom_receptor'
+    );
+    return filtered.length > 0 ? filtered : receptors;
+  }, [receptors]);
+
+  const effectiveSelectedNeighborReceptors = useMemo(() => {
+    const idSet = new Set(selectedNeighborIds);
+    const chosen = neighborBlockChoices.filter((r) => idSet.has(r.id));
+    return chosen.length > 0 ? chosen : neighborBlockChoices;
+  }, [neighborBlockChoices, selectedNeighborIds]);
+
+  const toggleNeighborBlock = (recId: string) => {
+    setSelectedNeighborIds((prev) => {
+      if (prev.includes(recId)) {
+        return prev.length > 1 ? prev.filter((id) => id !== recId) : prev;
+      }
+      return [...prev, recId];
+    });
+  };
 
   const activeSources = sources.filter((s) => s.active);
   const dominantSourceLabel = activeSources[0]
@@ -172,7 +211,42 @@ export const SelectedNoiseEventsPdfBuilderCard: React.FC<
       receptorFocusName,
       selectedEvents,
     });
-    setLastExportedInfo({ fileName: res.fileName, hash: res.reportSha256 });
+    setLastExportedInfo({
+      fileName: res.fileName,
+      hash: res.reportSha256,
+      label: 'Retsmedicinsk Støj- & Vind-PDF',
+    });
+  };
+
+  const handleExportTechnicalAppendixPdf = () => {
+    const activeWeather =
+      currentWeather ??
+      weatherHours[12] ??
+      weatherHours[0] ?? {
+        hourIndex: 12,
+        hourLabel: '12:00',
+        windSpeed10m: 8.5,
+        windGusts10m: 12.8,
+        windDirection10m: 245,
+      };
+    const res = downloadNeighborGustNoiseTechnicalAppendixPdf({
+      dateIso,
+      hourLabel: activeWeather.hourLabel,
+      weatherHours,
+      currentWeather: activeWeather,
+      sources,
+      selectedReceptors: effectiveSelectedNeighborReceptors,
+      effectiveLwaDb: baseLwaDb,
+      machineProfileLabel: isManualMachineNoiseOverrideActive
+        ? `Manuelt Maskin-Output (${baseLwaDb.toFixed(1)} dB)`
+        : `Aktiv Nedrivningsdrift (${dominantSourceLabel.split(' ')[0]})`,
+      selectedEventsCount: selectedEvents.length,
+    });
+    setLastExportedInfo({
+      fileName: res.fileName,
+      hash: res.reportSha256,
+      label: `Teknisk Bilag (${effectiveSelectedNeighborReceptors.length} naboblokke)`,
+    });
   };
 
   return (
@@ -181,26 +255,81 @@ export const SelectedNoiseEventsPdfBuilderCard: React.FC<
       className="p-3 rounded-lg bg-[#090D16] border border-rose-500/55 space-y-2.5 font-mono text-slate-100 text-xs tabular-nums"
     >
       <div className="flex flex-wrap items-start justify-between gap-2 pb-2 border-b border-slate-800">
-        <div className="space-y-0.5">
+        <div className="space-y-0.5 min-w-0 flex-1">
           <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
             <Volume2 className="w-4 h-4 text-rose-400 shrink-0" />
             <span>Retsmedicinsk PDF-Rapport: Valgte Støj-Hændelser × Vind &amp; Sumkvotient (S)</span>
           </h3>
           <p className="text-[11px] text-slate-400">
-            Vælg støj-hændelser nedenfor for at dokumentere deres korrelation med vinddata og beregnet sumkvotient på hændelsestidspunktet.
+            Vælg støj-hændelser eller naboblokke nedenfor for at eksportere retsmedicinsk støj-PDF eller teknisk bilag over vindstød × maskinstøj til miljøtilsyn.
           </p>
         </div>
 
-        <button
-          type="button"
-          data-testid="export-selected-noise-events-pdf-btn"
-          disabled={selectedEvents.length === 0}
-          onClick={handleExportPdf}
-          className="px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-500 disabled:opacity-50 border border-rose-300 text-white text-[11px] font-bold flex items-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap shrink-0"
-        >
-          <FileDown className="w-3.5 h-3.5 shrink-0" />
-          <span>Generér Retsmedicinsk Støj- &amp; Vind-PDF ({selectedEvents.length})</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            data-testid="export-gust-noise-technical-appendix-pdf-btn"
+            onClick={handleExportTechnicalAppendixPdf}
+            className="px-2.5 py-1.5 rounded bg-sky-600 hover:bg-sky-500 border border-sky-300 text-white text-[11px] font-bold flex items-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap shrink-0"
+            title="Download teknisk bilag til miljøtilsyn med korrelation mellem vindstød og maskinstøj for de valgte naboblokke"
+          >
+            <FileText className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              Teknisk Bilag: Vindstød × Maskinstøj ({effectiveSelectedNeighborReceptors.length})
+            </span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="export-selected-noise-events-pdf-btn"
+            disabled={selectedEvents.length === 0}
+            onClick={handleExportPdf}
+            className="px-2.5 py-1.5 rounded bg-rose-600 hover:bg-rose-500 disabled:opacity-50 border border-rose-300 text-white text-[11px] font-bold flex items-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap shrink-0"
+          >
+            <FileDown className="w-3.5 h-3.5 shrink-0" />
+            <span>Støj- &amp; Vind-PDF ({selectedEvents.length})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Valgte naboblokke til teknisk bilag */}
+      <div className="p-2 rounded bg-[#0D1320] border border-sky-500/35 space-y-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <span className="font-semibold text-sky-300">
+            Valgte naboblokke til teknisk miljøtilsyns-bilag ({effectiveSelectedNeighborReceptors.length}/{neighborBlockChoices.length}):
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedNeighborIds(neighborBlockChoices.map((r) => r.id))}
+            className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[10px] cursor-pointer whitespace-nowrap"
+          >
+            Vælg alle blokke
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {neighborBlockChoices.map((rec) => {
+            const isPicked = effectiveSelectedNeighborReceptors.some((r) => r.id === rec.id);
+            return (
+              <button
+                key={`appendix-block-${rec.id}`}
+                type="button"
+                onClick={() => toggleNeighborBlock(rec.id)}
+                className={`px-2 py-0.5 rounded border text-[11px] inline-flex items-center gap-1 cursor-pointer transition-colors ${
+                  isPicked
+                    ? 'bg-sky-950/80 border-sky-400/70 text-sky-100 font-semibold'
+                    : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                {isPicked ? (
+                  <CheckSquare className="w-3 h-3 text-sky-400 shrink-0" />
+                ) : (
+                  <Square className="w-3 h-3 text-slate-600 shrink-0" />
+                )}
+                <span>{rec.code}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Hurtigvalg-knapper */}
@@ -224,7 +353,9 @@ export const SelectedNoiseEventsPdfBuilderCard: React.FC<
         {lastExportedInfo && (
           <span className="text-emerald-300 inline-flex items-center gap-1 truncate">
             <Check className="w-3 h-3 shrink-0" />
-            <span>PDF gemt · SHA-256: {lastExportedInfo.hash.slice(0, 12)}…</span>
+            <span>
+              {lastExportedInfo.label} gemt · SHA-256: {lastExportedInfo.hash.slice(0, 12)}…
+            </span>
           </span>
         )}
       </div>

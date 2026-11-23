@@ -291,14 +291,14 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
   return (
     <header
       id="page-top-anchor"
-      className="relative z-40 h-12 px-4 flex items-center justify-between gap-2 flex-nowrap border-b border-[var(--border-subtle)] bg-[var(--surface-panel)] shrink-0 font-sans tabular-nums"
+      className="relative z-40 min-h-12 h-auto w-full max-w-full px-3 sm:px-4 py-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-[var(--border-subtle)] bg-[var(--surface-panel)] shrink-0 font-sans tabular-nums"
     >
       {/* ZONE 1 (VENSTRE): App-titel, Myndigheds-fri periode Gauge, S-kvotient Sparkline & Status */}
-      <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+      <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
         <a
           href="#top"
           onClick={(e) => e.preventDefault()}
-          className="text-sm font-bold tracking-tight text-[var(--text-primary)] whitespace-nowrap shrink-0"
+          className="text-sm font-bold tracking-tight text-[var(--text-primary)] truncate max-w-full sm:whitespace-nowrap shrink-0"
         >
           Ringparken Miljø- &amp; Spredningstelemetri
         </a>
@@ -381,7 +381,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           </span>
         </button>
 
-        <div className="hidden md:inline-flex items-center shrink-0">
+        <div className="inline-flex items-center shrink-0">
           <SKvotientTendensSparkline
             points={last6HoursSparklinePoints}
             onSelectHour={onSelectHour}
@@ -398,7 +398,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           title={`Kybernetisk Afslapningstid Tr = ${relaxationTimeTrHours.toFixed(
             1
           )}t vs. Kriseinterval Δt = ${crisisIntervalDt.toFixed(1)}t`}
-          className={`hidden 2xl:inline-flex items-center gap-1.5 px-2 py-1 rounded border font-mono text-[11px] font-semibold cursor-pointer transition-colors whitespace-nowrap shrink-0 ${
+          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border font-mono text-[11px] font-semibold cursor-pointer transition-colors whitespace-nowrap shrink-0 ${
             isSystemicTetanus
               ? 'bg-[var(--surface-card)] border-[var(--border-subtle)] border-l-4 border-l-rose-500 text-[#F87171] hover:bg-[var(--surface-overlay)]'
               : 'bg-[var(--surface-card)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -419,7 +419,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
         </button>
 
         {/* Aggregated High-Wind & Receptor Threshold Violations Summary Card */}
-        <div className="relative shrink-0">
+        <div className="relative shrink-0 max-w-full">
           <button
             type="button"
             data-testid="header-risk-summary-card"
@@ -427,7 +427,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
             aria-expanded={showRiskSummaryPopover}
             onClick={() => setShowRiskSummaryPopover((v) => !v)}
             title="Samlet risikostatus på tværs af høj vind (>10 m/s), receptorzoner (S ≥ 1,0), indeklima (S_in) og aktive lovbrud"
-            className={`px-2 py-1 rounded border font-mono text-[11px] flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+            className={`px-2 py-1 rounded border font-mono text-[11px] flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap max-w-full ${
               immediateActionRequired
                 ? 'bg-rose-950/75 hover:bg-rose-950 border-rose-500/75 border-l-4 border-l-rose-400 text-rose-100 font-bold'
                 : elevatedReceptorZones.length > 0
@@ -455,7 +455,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
                 ? 'Forhøjet Risiko'
                 : 'Normal Drift'}
             </span>
-            <span className="hidden lg:inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-slate-950/70 border border-slate-700/80 text-[11px] text-slate-200 tabular-nums">
+            <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-slate-950/70 border border-slate-700/80 text-[11px] text-slate-200 tabular-nums">
               <span className={isHighWindAlert ? 'text-rose-300 font-bold' : 'text-cyan-300'}>
                 {currentWeather.windSpeed10m.toFixed(1)} m/s
               </span>
@@ -480,7 +480,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
               role="region"
               aria-label="Samlet risikoresumé for vind og receptorzoner"
               data-testid="header-risk-summary-popover"
-              className="absolute left-0 top-full mt-1.5 w-[340px] rounded-md bg-[var(--surface-overlay)] border border-[var(--border-subtle)] shadow-2xl p-3 z-50 font-sans text-xs space-y-2.5"
+              className="absolute left-0 top-full mt-1.5 w-[340px] max-w-[calc(100vw-1.5rem)] rounded-md bg-[var(--surface-overlay)] border border-[var(--border-subtle)] shadow-2xl p-3 z-50 font-sans text-xs space-y-2.5"
             >
               <div className="flex items-center justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
                 <div className="flex items-center gap-1.5 font-mono font-bold">
@@ -578,16 +578,16 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
       </div>
 
       {/* ZONE 2 (MIDTE): Kommandopalet Søgeknap (⌘K) + Simuler Fra–Til + Føj alle fund + Kompakt Bulk-ikon */}
-      <div className="flex items-center gap-1.5 min-w-0">
+      <div className="flex flex-wrap items-center gap-1.5 min-w-0 max-w-full">
         <button
           type="button"
           data-testid="open-command-palette-btn"
           onClick={onOpenCommandPalette}
           title="Åbn global kommandopalet (⌘K / Ctrl+K) — søg i 29 bygninger, receptorer, arbejdsrum, vejrscenarier og rapporter"
-          className="px-2.5 py-1.5 rounded bg-[#0F141D] hover:bg-[#1B2433] border border-[#2D3B50] hover:border-cyan-500/50 text-slate-300 hover:text-white text-[11px] flex items-center gap-2 transition-colors cursor-pointer min-w-0 max-w-[250px]"
+          className="px-2.5 py-1.5 rounded bg-[#0F141D] hover:bg-[#1B2433] border border-[#2D3B50] hover:border-cyan-500/50 text-slate-300 hover:text-white text-[11px] flex items-center gap-2 transition-colors cursor-pointer min-w-0 max-w-full sm:max-w-[250px]"
         >
           <Search className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <span className="truncate hidden sm:inline">
+          <span className="truncate">
             Søg bygning, modul eller rapport…
           </span>
           <kbd className="px-1.5 py-0.5 rounded bg-[#1B2433] border border-[#2D3B50] font-mono text-[11px] text-slate-300 shrink-0">
@@ -606,7 +606,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           title="Åbn/skjul Simuler Fra dato_klokkeslæt – Til dato_klokkeslæt"
         >
           <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <span className="hidden lg:inline">Simuler Fra – Til</span>
+          <span>Simuler Fra – Til</span>
         </button>
 
         <button
@@ -624,10 +624,10 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           ) : (
             <PlusCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
           )}
-          <span className="hidden md:inline">
+          <span>
             {batchAddFindingsSuccess
               ? `${batchAddedFindingsCount} føjet (${observations.length})`
-              : `Føj alle fund til Beviser (${totalCurrentFindingsCount})`}
+              : `Føj alle fund (${totalCurrentFindingsCount})`}
           </span>
         </button>
 
@@ -637,7 +637,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           onClick={onAddAllAndBulkDownload}
           data-testid="add-all-and-bulk-download-header-btn"
           aria-label="Tilføj alle fund og Bulk Download samlet bevispakke"
-          className={`p-1.5 rounded font-mono text-[11px] font-bold flex items-center justify-center border transition-colors cursor-pointer shrink-0 disabled:opacity-60 ${
+          className={`px-2 py-1.5 rounded font-mono text-[11px] font-bold flex items-center justify-center gap-1 border transition-colors cursor-pointer shrink-0 whitespace-nowrap disabled:opacity-60 ${
             bulkDownloadSuccess
               ? 'bg-emerald-400 text-slate-950 border-emerald-200'
               : 'bg-amber-400 hover:bg-amber-300 text-slate-950 border-amber-300'
@@ -651,11 +651,12 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           ) : (
             <Download className="w-3.5 h-3.5 text-slate-950 shrink-0" />
           )}
+          <span className="hidden sm:inline">Bulk</span>
         </button>
       </div>
 
       {/* ZONE 3 (HØJRE): Kilder & Receptorer, Mycelium ISA-18.2, Slagelse SHA-256, Minimerede Vinduer, Fokus-visning, Vejr-Korrelation & Rapport-Hub */}
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex flex-wrap items-center gap-1.5 min-w-0 max-w-full">
         <SourceQuickSwitchDropdown
           sources={sources}
           selectedSourceId={selectedSourceId}
@@ -669,7 +670,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           menuTestId="header-searchable-source-dropdown-menu"
           searchInputTestId="header-searchable-source-input"
           labelPrefix="Kilde:"
-          hideLabelOnSmall
+          hideLabelOnSmall={false}
           title="Søg og skift hurtigt mellem aktive kildenoder i simuleringen og på kortet"
         />
 
@@ -681,7 +682,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           title="Åbn samlet oversigt for Valg af kilder & Receptorer"
         >
           <Crosshair className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <span className="hidden xl:inline">Kilder &amp; Receptorer</span>
+          <span>Kilder &amp; Receptorer</span>
         </button>
 
         {onTriggerSimultaneousScenario && (
@@ -705,7 +706,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
                   simultaneousDispatch?.active ? 'text-amber-200' : 'text-cyan-400'
                 }`}
               />
-              <span className="hidden xl:inline">
+              <span>
                 {simultaneousDispatch?.isBlinkingP1
                   ? 'P1 S1+S3 (T1)'
                   : simultaneousDispatch?.active
@@ -718,7 +719,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
             {showSimultaneousMenu && (
               <div
                 data-testid="header-simultaneous-algedonic-menu"
-                className="absolute right-0 top-full mt-1.5 w-[370px] max-w-[92vw] rounded-lg bg-[#0F1623] border border-rose-500/70 shadow-2xl p-3 z-50 font-mono text-[11px] space-y-2"
+                className="absolute right-0 top-full mt-1.5 w-[370px] max-w-[calc(100vw-1.5rem)] rounded-lg bg-[#0F1623] border border-rose-500/70 shadow-2xl p-3 z-50 font-mono text-[11px] space-y-2"
               >
                 <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-800">
                   <span className="font-bold text-rose-200 uppercase flex items-center gap-1.5">
@@ -833,7 +834,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           title="Åbn System B Mycelium ISA-18.2 Algedonisk Alarm-Log & Kanal-Status"
         >
           <Radio className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <span className="hidden xl:inline">Mycelium ISA-18.2</span>
+          <span>Mycelium ISA-18.2</span>
           <span>({myceliumUnacknowledgedCount})</span>
         </button>
 
@@ -849,7 +850,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           title="Åbn dedikeret dashboard til håndtering af juridiske overtrædelser, SHA-256 signerede beviser og dokumentation til Slagelse Kommune"
         >
           <Scale className="w-3.5 h-3.5 shrink-0 text-rose-400" />
-          <span className="hidden xl:inline">Slagelse SHA-256</span>
+          <span>Slagelse SHA-256</span>
           <span>({legalViolations.length})</span>
         </button>
 
@@ -879,7 +880,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           aria-label="Skift mellem Standard og Kompakt Tilsyn visningstæthed"
         >
           <Rows3 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <span className="hidden 2xl:inline">
+          <span>
             {densityMode === 'compact' ? 'Kompakt' : 'Standard'}
           </span>
         </button>
@@ -898,12 +899,12 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           {isMinimizeAllFocusActive ? (
             <>
               <Maximize2 className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden 2xl:inline">Gendan</span>
+              <span>Gendan</span>
             </>
           ) : (
             <>
               <Minimize2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="hidden 2xl:inline">Fokus</span>
+              <span>Fokus</span>
             </>
           )}
         </button>
@@ -921,7 +922,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
           title="Vis 24-timers D3.js Vejr-Korrelationsgraf mellem vindhastighed (m/s) og registrerede støj- og støvhændelser"
         >
           <Wind className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <span className="hidden 2xl:inline">Vejr-Korrelation</span>
+          <span>Vejr-Korrelation</span>
         </button>
 
         <button
