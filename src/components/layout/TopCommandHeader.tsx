@@ -20,9 +20,11 @@ import {
   Scale,
   Search,
   ShieldAlert,
+  Volume2,
   Wind,
   Zap,
 } from 'lucide-react';
+import { useAcousticWeighting } from '../../context/AcousticWeightingContext';
 import {
   AlgedonicObservation,
   AlgedonicTestScenarioId,
@@ -168,6 +170,7 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
 }) => {
   const [showRiskSummaryPopover, setShowRiskSummaryPopover] = useState(false);
   const [showSimultaneousMenu, setShowSimultaneousMenu] = useState(false);
+  const { weighting, setWeighting, labels } = useAcousticWeighting();
 
   const breachHours24 = Math.max(
     1,
@@ -821,6 +824,45 @@ export const TopCommandHeader: React.FC<TopCommandHeaderProps> = ({
             )}
           </div>
         )}
+
+        {/* Acoustic Weighting Toggle: dB(A) vs dB(C) */}
+        <div
+          data-testid="acoustic-weighting-toggle"
+          role="group"
+          aria-label="Skift akustisk frekvensvægtning mellem dB(A) og dB(C)"
+          title={labels.standardDescriptionDa}
+          className="flex items-center rounded bg-[#151C28] border border-[#2D3B50] p-0.5 text-[11px] font-mono font-semibold shrink-0"
+        >
+          <Volume2 className="w-3.5 h-3.5 text-amber-400 mx-1 shrink-0" />
+          <button
+            type="button"
+            data-testid="acoustic-weighting-btn-A"
+            aria-pressed={weighting === 'A'}
+            onClick={() => setWeighting('A')}
+            className={`px-1.5 py-1 rounded transition-colors cursor-pointer whitespace-nowrap ${
+              weighting === 'A'
+                ? 'bg-amber-400 text-slate-950 font-bold'
+                : 'text-slate-300 hover:text-white'
+            }`}
+            title="A-vægtning · Miljøstyrelsens Vejledning nr. 5/1984 (dB(A))"
+          >
+            dB(A)
+          </button>
+          <button
+            type="button"
+            data-testid="acoustic-weighting-btn-C"
+            aria-pressed={weighting === 'C'}
+            onClick={() => setWeighting('C')}
+            className={`px-1.5 py-1 rounded transition-colors cursor-pointer whitespace-nowrap ${
+              weighting === 'C'
+                ? 'bg-cyan-400 text-slate-950 font-bold'
+                : 'text-slate-300 hover:text-white'
+            }`}
+            title="C-vægtning · IEC 61672-1 / Lavfrekvent støj Vejl. 9/1997 (dB(C))"
+          >
+            dB(C)
+          </button>
+        </div>
 
         <button
           type="button"

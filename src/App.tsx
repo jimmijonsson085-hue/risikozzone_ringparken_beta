@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import ErrorBoundary from './components/ErrorBoundary';
 import {
   AlertOctagon,
   AlertTriangle,
@@ -135,12 +136,22 @@ import { RiskZoneMap } from './components/RiskZoneMap';
 import { RoleDashboard } from './components/RoleDashboard';
 import { ComplianceAuditPanel } from './components/ComplianceAuditPanel';
 import { ClimateResiliencePanel } from './components/ClimateResiliencePanel';
+import { ClimateResiliencePercolationPanel } from './components/ClimateResiliencePercolationPanel';
+import {
+  ClimateResilienceConfig,
+  DEFAULT_CLIMATE_RESILIENCE_CONFIG,
+} from './utils/climateResiliencePercolation';
+import {
+  HistoricalExtremeWeatherScenario,
+  buildWeatherDatasetFromHistoricalExtremeScenario,
+} from './utils/historicalExtremeWeatherScenarios';
 import { Ringparken3DScene } from './components/Ringparken3DScene';
 import { UndergroundPercolation2D } from './components/UndergroundPercolation2D';
 import { BuildingCategoryManagerPanel } from './components/BuildingCategoryManagerPanel';
 import { BuildingSampleAndDmaPanel } from './components/BuildingSampleAndDmaPanel';
 import { L69PenaltyCalculatorWidget } from './components/L69PenaltyCalculatorWidget';
 import { PssSafetyInterlockWidget } from './components/PssSafetyInterlockWidget';
+import { PpvThresholdAlertWidget } from './components/PpvThresholdAlertWidget';
 import { Rolling6hGustNoiseCorrelationWidget } from './components/Rolling6hGustNoiseCorrelationWidget';
 import { WaterMainVibrationSankeyWidget } from './components/WaterMainVibrationSankeyWidget';
 import { CikMaterialMetabolismSankey } from './components/CikMaterialMetabolismSankey';
@@ -148,6 +159,15 @@ import { ForensicReportModal, ReportModalTab } from './components/ForensicReport
 import { ExpertPersonaRole, ForensicChatbotPanel } from './components/ForensicChatbotPanel';
 import { BioscienceToxicologyPanel } from './components/BioscienceToxicologyPanel';
 import { WeatherNoiseDustCorrelationPanel } from './components/WeatherNoiseDustCorrelationPanel';
+import { HighWindGustImpulseCorrelationWidget } from './components/HighWindGustImpulseCorrelationWidget';
+import { OpenMeteo24hWindImpulseCorrelationChart } from './components/OpenMeteo24hWindImpulseCorrelationChart';
+import { RollingGustDustDepositionWidget } from './components/RollingGustDustDepositionWidget';
+import {
+  FormalNoiseReportPayload,
+  HighFrequencyNoiseSpikeDetectorWidget,
+} from './components/HighFrequencyNoiseSpikeDetectorWidget';
+import { HighWindContingencyPlanWidget } from './components/HighWindContingencyPlanWidget';
+import { WeeklyExternalAuditWidget } from './components/WeeklyExternalAuditWidget';
 import { HeaderWeatherCorrelationD3Popup } from './components/HeaderWeatherCorrelationD3Popup';
 import {
   IndoorClimateAlgedonicLogEntry,
@@ -212,6 +232,7 @@ import {
 } from './components/ForensicEvidenceTimelineWidget';
 import { ProactiveComplaintMitigationAgentWidget } from './components/ProactiveComplaintMitigationAgentWidget';
 import { StochasticWindBiasWidget } from './components/StochasticWindBiasWidget';
+import { WindBiasAnalysisWidget } from './components/WindBiasAnalysisWidget';
 import { FiveDayWindForecastRoseWidget } from './components/FiveDayWindForecastRoseWidget';
 import { NoiseComplianceLogPanel } from './components/NoiseComplianceLogPanel';
 import {
@@ -252,10 +273,12 @@ import {
   generateForensicChainOfCustodyPdfReport,
   generateForensicPdfReport,
   generatePercolationPdfReport,
+  generateQuickSnapshotTop3ReceptorsPdfReport,
   render2DViewportPrintSnapshotDataUrl,
   validateChainOfCustodyAgainstStateRegistry,
 } from './services/pdfExportService';
 import { generateWeatherCorrelationPdfReport } from './services/weatherCorrelationPdfService';
+import { generateWeeklyExternalAuditPdf } from './services/weeklyExternalAuditPdfService';
 import {
   BornehaveSpatialPlumeAlertStatus,
   evaluateBornehaveDaycare3DPlumeAlert,
@@ -306,6 +329,20 @@ import {
   exportOpenMeteo24hWeatherDatasetJson,
   exportSlagelseViolationsEsdhCsv,
 } from './services/exportHubHelpers';
+import { useAcousticWeighting } from './context/AcousticWeightingContext';
+import {
+  RollingDust1hMonitorCard,
+  RollingDustHazardAlertBanner,
+} from './components/RollingDustHazardAlertBanner';
+import {
+  BrowserNotificationPermissionState,
+  PSS_RESPIRABLE_DUST_HYSTERESIS_RESET_UG_M3,
+  dispatchBrowserDustHazardNotification,
+  evaluateRolling1hRespirableDust,
+  getBrowserNotificationPermissionState,
+  requestDustNotificationPermission,
+  rollingDustHazardAudioService,
+} from './services/rollingDustHazardAlertService';
 
 const RELEVANT_SIDEBAR_WINDOWS_BY_TAB: Record<RightPanelTab, DashboardWindowId[]> = {
   algedonic: [
@@ -321,6 +358,7 @@ const RELEVANT_SIDEBAR_WINDOWS_BY_TAB: Record<RightPanelTab, DashboardWindowId[]
     'proactive_ai_agent',
   ],
   indoorClimate: ['indoor_climate_telemetry'],
+  climateResilience: ['climate_resilience_percolation'],
   puff24h: [
     'receptor_dust_deposition_profile',
     'cumulative_dust_24h',
@@ -389,6 +427,7 @@ const ALGEDONIC_OBSERVATION_PRESETS: Array<{
 ];
 
 export default function App() {
+  const { convertDb, unitLabel, labels } = useAcousticWeighting();
   // Quota warning state for Google Maps Platform (Section 8 requirement)
   const [gmpQuotaExceeded, setGmpQuotaExceeded] = useState(false);
 
@@ -429,6 +468,10 @@ export default function App() {
     toDateIso: string;
   } | null>(null);
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
+  const [activeHistoricalExtremeScenarioId, setActiveHistoricalExtremeScenarioId] =
+    useState<string | null>(null);
+  const [climateResilienceConfig, setClimateResilienceConfig] =
+    useState<ClimateResilienceConfig>(DEFAULT_CLIMATE_RESILIENCE_CONFIG);
 
   // Pre-populated timeline & midnight-rollover log from Last Week's Test Run (ready from start)
   const [recordedTimelineEvents, setRecordedTimelineEvents] = useState<
@@ -940,6 +983,8 @@ export default function App() {
     useState<number>(0.25);
   const [showWeatherCorrelationHeatmapLayer, setShowWeatherCorrelationHeatmapLayer] =
     useState<boolean>(true);
+  const [showAcousticHazardHeatmapLayer, setShowAcousticHazardHeatmapLayer] =
+    useState<boolean>(true);
   const [validatePhotoEvidenceBinary, setValidatePhotoEvidenceBinary] =
     useState<boolean>(true);
   const [exportFilter, setExportFilter] = useState<ExportFilterCriteria>(() => ({
@@ -1008,6 +1053,7 @@ export default function App() {
   const loadLiveOpenMeteo = useCallback(async (targetDate: string) => {
     setIsLoadingWeather(true);
     setActiveScenarioId(null);
+    setActiveHistoricalExtremeScenarioId(null);
     try {
       const ds = await fetchOpenMeteoWeatherForDate(targetDate);
       setWeatherDataset(ds);
@@ -1076,6 +1122,7 @@ export default function App() {
     const found = CRITICAL_WEATHER_SCENARIOS.find((s) => s.id === scenarioId);
     if (!found) return;
     setActiveScenarioId(found.id);
+    setActiveHistoricalExtremeScenarioId(null);
     setSelectedHourIndex(found.defaultFocusHour);
     setPlumeRouteProgress(found.defaultFocusHour);
     setWeatherDataset({
@@ -1087,6 +1134,28 @@ export default function App() {
       hours: found.generate24Hours(selectedDateIso),
     });
   };
+
+  const handleApplyHistoricalExtremeScenario = useCallback(
+    (
+      scenario: HistoricalExtremeWeatherScenario,
+      targetViewport: 'keep' | 'underground_3d' | '2d' = 'keep'
+    ) => {
+      setActiveScenarioId(null);
+      setActiveHistoricalExtremeScenarioId(scenario.id);
+      setPrecipitationOverrideMm(null);
+      setSelectedDateIso(scenario.dateIso);
+      setSelectedHourIndex(scenario.focusHourIndex);
+      setPlumeRouteProgress(scenario.focusHourIndex);
+      setWeatherDataset(buildWeatherDatasetFromHistoricalExtremeScenario(scenario));
+      if (targetViewport === 'underground_3d') {
+        setViewportMode('underground_3d');
+        setFocusBlok12PercolationTrigger((n) => n + 1);
+      } else if (targetViewport === '2d') {
+        setViewportMode('2d');
+      }
+    },
+    []
+  );
 
   // Helper to append a continuous time-travel / midnight rollover event & sync registration date
   const recordTimeTravelStep = useCallback(
@@ -1992,6 +2061,102 @@ export default function App() {
     worstExposedReceptor,
     playAcousticDustDispersionWarningTone,
   ]);
+
+  // 1-Times Rullende Gennemsnit af Respirabel Støvkoncentration (µg/m³) mod Sikkerhedsplan (PSS Sag W22085: 100 µg/m³)
+  const [dust1hAlertAudioMuted, setDust1hAlertAudioMuted] = useState<boolean>(false);
+  const [simulateRolling1hDustExceedance, setSimulateRolling1hDustExceedance] =
+    useState<boolean>(false);
+  const [dismissedDust1hAlertKey, setDismissedDust1hAlertKey] = useState<string | null>(null);
+  const [lastDust1hChimeTimestamp, setLastDust1hChimeTimestamp] = useState<string | null>(null);
+  const [dustNotificationPermission, setDustNotificationPermission] =
+    useState<BrowserNotificationPermissionState>(() =>
+      getBrowserNotificationPermissionState()
+    );
+
+  useEffect(() => {
+    return rollingDustHazardAudioService.attachUserGestureUnlockListeners();
+  }, []);
+
+  const rolling1hDustEval = useMemo(
+    () =>
+      evaluateRolling1hRespirableDust({
+        weatherHours: weatherDataset.hours,
+        selectedHourIndex,
+        sources,
+        receptors,
+        precipitationOverrideMm,
+        simulatedExceedanceBoostUgM3: simulateRolling1hDustExceedance ? 115 : 0,
+      }),
+    [
+      weatherDataset.hours,
+      selectedHourIndex,
+      sources,
+      receptors,
+      precipitationOverrideMm,
+      simulateRolling1hDustExceedance,
+    ]
+  );
+
+  const dust1hAlertStateKey = `${weatherDataset.dateIso}|${selectedHourIndex}|${
+    rolling1hDustEval.worstReceptor.receptorId
+  }|${simulateRolling1hDustExceedance ? 'sim' : 'live'}`;
+
+  useEffect(() => {
+    if (
+      !rolling1hDustEval.isThresholdExceeded &&
+      rolling1hDustEval.rolling1hAverageUgM3 <= PSS_RESPIRABLE_DUST_HYSTERESIS_RESET_UG_M3
+    ) {
+      rollingDustHazardAudioService.resetHysteresis();
+      setDismissedDust1hAlertKey(null);
+      return;
+    }
+
+    if (
+      rolling1hDustEval.isThresholdExceeded &&
+      !myceliumAlerts.channelStatus.isScrubbingSuppressed
+    ) {
+      if (rollingDustHazardAudioService.shouldTriggerForStateKey(dust1hAlertStateKey)) {
+        const audioRes = rollingDustHazardAudioService.playHazardChime({
+          muted: dust1hAlertAudioMuted,
+        });
+        if (audioRes.played) {
+          setLastDust1hChimeTimestamp(audioRes.timestampLabel);
+        }
+        dispatchBrowserDustHazardNotification({
+          evaluation: rolling1hDustEval,
+          dateIso: weatherDataset.dateIso,
+          tag: dust1hAlertStateKey,
+        });
+      }
+    }
+  }, [
+    rolling1hDustEval,
+    dust1hAlertStateKey,
+    dust1hAlertAudioMuted,
+    myceliumAlerts.channelStatus.isScrubbingSuppressed,
+    weatherDataset.dateIso,
+  ]);
+
+  const handleRequestDustBrowserNotification = useCallback(async () => {
+    const perm = await requestDustNotificationPermission();
+    setDustNotificationPermission(perm);
+    if (perm === 'granted' && rolling1hDustEval.isThresholdExceeded) {
+      dispatchBrowserDustHazardNotification({
+        evaluation: rolling1hDustEval,
+        dateIso: weatherDataset.dateIso,
+        tag: `${dust1hAlertStateKey}-manual`,
+      });
+    }
+  }, [rolling1hDustEval, weatherDataset.dateIso, dust1hAlertStateKey]);
+
+  const handlePlayDustAlarmTest = useCallback(() => {
+    rollingDustHazardAudioService.markUserGestureUnlocked();
+    const res = rollingDustHazardAudioService.playHazardChime({ forcePlay: true });
+    if (res.played) {
+      setLastDust1hChimeTimestamp(res.timestampLabel);
+    }
+  }, []);
+
   const [isBottomCompactMode, setIsBottomCompactMode] = useState<boolean>(true);
   const [isBottomCompactDropdownOpen, setIsBottomCompactDropdownOpen] = useState<boolean>(false);
   const [evidenceClearedBanner, setEvidenceClearedBanner] = useState<boolean>(false);
@@ -2303,6 +2468,103 @@ export default function App() {
 
     setObservations((prev) => [newObs, ...prev]);
     setSelectedObservationId(newObs.id);
+  };
+
+  // File a formal noise report directly from the noise-dust correlation or >95 dB spike widgets
+  const handleFileFormalNoiseReportFromCorrelation = async (
+    payload: FormalNoiseReportPayload
+  ): Promise<AlgedonicObservation | null> => {
+    const targetWeather =
+      weatherDataset.hours[payload.hourIndex] || currentWeather;
+    const nextNum = observations.length + 1;
+    const code = `STØJ-${String(nextNum).padStart(2, '0')}`;
+    const observationType = `Formel Støjrapport (${payload.decibelLevelDb.toFixed(1)} ${unitLabel})`;
+    const windGustVal =
+      typeof payload.windGustMs === 'number'
+        ? payload.windGustMs
+        : targetWeather.windGusts10m;
+    const baseDesc = [
+      `Formel støjrapport logget kl. ${payload.timeLabel} ved ${payload.locationLabel}.`,
+      `Registreret lydniveau: ${payload.decibelLevelDb.toFixed(1)} ${unitLabel}`,
+      `(vindstød ${windGustVal.toFixed(1)} m/s${
+        payload.dominantFrequencyHz ? `, spidsfrekvens ${payload.dominantFrequencyHz} Hz` : ''
+      }${payload.sourceName ? `, kilde: ${payload.sourceName}` : ''}).`,
+      payload.notes || '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const corroboration = evaluatePointInDispersionPlume(
+      payload.position,
+      sources,
+      targetWeather,
+      observationType
+    );
+    const nabotestCheck = evaluateNabotestForPoint(
+      payload.position,
+      autonomousReceptorMesh
+    );
+    const enrichedDescription = nabotestCheck.nabotestAppendixDa
+      ? `${baseDesc} ${nabotestCheck.nabotestAppendixDa}`
+      : baseDesc;
+
+    const signature = await computeForensicSha256Hash({
+      code,
+      dateIso: weatherDataset.dateIso,
+      hourIso: targetWeather.isoTime,
+      position: payload.position,
+      reporterRole: 'Beboer (Ringparken)',
+      observationType,
+      description: enrichedDescription,
+      weather: targetWeather,
+      isInsideMathematicalPlume: corroboration.isInsideMathematicalPlume,
+      calculatedSumQuotient: corroboration.calculatedSumQuotient,
+    });
+
+    const baseZkp = computeDeterministicZkpVerification({
+      code,
+      position: payload.position,
+      reporterRole: 'Beboer (Ringparken)',
+      observedTimestampIso: targetWeather.isoTime,
+      weather: targetWeather,
+      sumQuotientS: corroboration.calculatedSumQuotient,
+      distanceFromSourceMeters: corroboration.distanceFromSourceMeters,
+      rightToOpacityEnabled: true,
+      existingSha256: signature,
+    });
+
+    const zkpVerification = {
+      ...baseZkp,
+      physicalToDigitalProofOfState: {
+        ...baseZkp.physicalToDigitalProofOfState,
+        noiseLafmaxDb: Number(payload.decibelLevelDb.toFixed(1)),
+      },
+    };
+
+    const newObs: AlgedonicObservation = {
+      id: `obs-noise-${Date.now()}`,
+      code,
+      createdAtIso: new Date().toISOString(),
+      observedDateIso: weatherDataset.dateIso,
+      observedHourIndex: targetWeather.hourIndex,
+      observedHourLabel: targetWeather.hourLabel,
+      observedTimestampIso: targetWeather.isoTime,
+      position: payload.position,
+      locationLabel: payload.locationLabel,
+      reporterRole: 'Beboer (Ringparken)',
+      reporterIdentifier: zkpVerification.anonymizedRoleCommitment,
+      evidenceCategory: 'Beboerklage',
+      observationType,
+      description: enrichedDescription,
+      weatherSnapshot: targetWeather,
+      plumeCorroboration: corroboration,
+      sha256Signature: signature,
+      zkpVerification,
+    };
+
+    setObservations((prev) => [newObs, ...prev]);
+    setSelectedObservationId(newObs.id);
+    return newObs;
   };
 
   // Emit a ZKP-shielded Algedonic Signal from an Autonomous Receptor Node with automatic Nabotest consensus
@@ -4277,6 +4539,16 @@ export default function App() {
   );
   const handleToggleFullscreen3D = useCallback(() => setIsFullscreen3D((v) => !v), []);
   const handleToggleMapOnlyMode = useCallback(() => setIsMapOnlyMode((v) => !v), []);
+  const handleSwitchTo2DPercolation = useCallback(() => setViewportMode('underground_2d'), []);
+  const handleToggleUndergroundMode3D = useCallback((next?: boolean) => {
+    setViewportMode((prev) => {
+      const active = next !== undefined ? next : prev !== 'underground_3d';
+      return active ? 'underground_3d' : '3d';
+    });
+  }, []);
+  const handleExitUndergroundMode3D = useCallback((next?: boolean) => {
+    if (next === false) setViewportMode('3d');
+  }, []);
   const handleToggleWindNoiseHeatmapFromMap = useCallback((next?: boolean) => {
     setShowWindNoiseHeatmapLayer((prev) => (next !== undefined ? next : !prev));
   }, []);
@@ -4285,6 +4557,13 @@ export default function App() {
   }, []);
   const handleToggleWeatherCorrelationHeatmapFromMap = useCallback((next?: boolean) => {
     setShowWeatherCorrelationHeatmapLayer((prev) => (next !== undefined ? next : !prev));
+  }, []);
+  const handleToggleAcousticHazardHeatmapFromMap = useCallback((next?: boolean) => {
+    setShowAcousticHazardHeatmapLayer((prev) => (next !== undefined ? next : !prev));
+  }, []);
+  const handleActivateAcousticHazardHeatmap = useCallback(() => {
+    setShowAcousticHazardHeatmapLayer(true);
+    setViewportMode((prev) => (prev === '3d' ? 'split' : prev === '2d' || prev === 'split' ? prev : '2d'));
   }, []);
   const handleToggleLerBuffer = useCallback(() => setShowLerBuffer((v) => !v), []);
   const handleToggleSteelRoadPlates = useCallback(() => setHasSteelRoadPlates((v) => !v), []);
@@ -5278,6 +5557,9 @@ export default function App() {
     if (showWeatherCorrelationHeatmapLayer) {
       activeLayers.push('Vejr-Korrelations Heatmap (6t r > 0,80)');
     }
+    if (showAcousticHazardHeatmapLayer) {
+      activeLayers.push('Acoustic Hazard Heatmap (2D · L_WA + Vind-Refraktion)');
+    }
     if (bornehavePlumeAlertStatus.isAlertActive) {
       activeLayers.push(
         `Børnehave 3D-Alert (${bornehavePlumeAlertStatus.pctOfPasquillThreshold.toFixed(0)}%)`
@@ -5294,8 +5576,21 @@ export default function App() {
         west: renderedSnapshot.boundsNorthWest.lng,
       },
       activeLayers,
-      modeDescriptor: `Quick-Snapshot (${viewportMode.toUpperCase()} · ${selectedDateIso} kl. ${currentWeather.hourLabel})`,
+      modeDescriptor: `Quick Snapshot Export (${viewportMode.toUpperCase()} · ${selectedDateIso} kl. ${currentWeather.hourLabel})`,
       capturedAtIso: new Date().toISOString(),
+      snapshotDataUrl: renderedSnapshot.dataUrl,
+    });
+
+    generateQuickSnapshotTop3ReceptorsPdfReport({
+      dateIso: selectedDateIso,
+      hourLabel: currentWeather.hourLabel,
+      currentWeather,
+      maxSiteSumQuotient,
+      receptorExposures,
+      sources,
+      activeLayers,
+      sha256Hash,
+      snapshotCode: `SNAP-ALG-${String(observations.length + 1).padStart(2, '0')}`,
       snapshotDataUrl: renderedSnapshot.dataUrl,
     });
   }, [
@@ -5321,9 +5616,11 @@ export default function App() {
     showLeewardWakeEffect,
     showWeatherCorrelationOverlay,
     showWeatherCorrelationHeatmapLayer,
+    showAcousticHazardHeatmapLayer,
     bornehavePlumeAlertStatus.isAlertActive,
     bornehavePlumeAlertStatus.pctOfPasquillThreshold,
     selectedDateIso,
+    sha256Hash,
     handleSaveMapSnapshotObservation,
   ]);
 
@@ -5804,6 +6101,8 @@ export default function App() {
                     selectedReceptorId,
                   });
                 }}
+                activeHistoricalExtremeScenarioId={activeHistoricalExtremeScenarioId}
+                onApplyHistoricalExtremeScenario={handleApplyHistoricalExtremeScenario}
               />
             )}
 
@@ -6205,19 +6504,33 @@ export default function App() {
                     onPopOutFloating={handlePopOutFloatingWindow}
                     onRestore={handleRestoreWindow}
                   >
-                    <StochasticWindBiasWidget
-                      hours={weatherDataset.hours}
-                      currentWeather={currentWeather}
-                      dateIso={weatherDataset.dateIso}
-                      puff24h={puff24h}
-                      selectedReceptorId={selectedReceptorId}
-                      onSelectHour={(hrIdx) => {
-                        setSelectedHourIndex(hrIdx);
-                        setPlumeRouteProgress(hrIdx);
-                      }}
-                      onSelectReceptor={(recId) => setSelectedReceptorId(recId)}
-                      compact
-                    />
+                    <div className="space-y-3">
+                      <StochasticWindBiasWidget
+                        hours={weatherDataset.hours}
+                        currentWeather={currentWeather}
+                        dateIso={weatherDataset.dateIso}
+                        puff24h={puff24h}
+                        selectedReceptorId={selectedReceptorId}
+                        onSelectHour={(hrIdx) => {
+                          setSelectedHourIndex(hrIdx);
+                          setPlumeRouteProgress(hrIdx);
+                        }}
+                        onSelectReceptor={(recId) => setSelectedReceptorId(recId)}
+                        compact
+                      />
+                      <WindBiasAnalysisWidget
+                        hours={weatherDataset.hours}
+                        currentWeather={currentWeather}
+                        dateIso={weatherDataset.dateIso}
+                        puff24h={puff24h}
+                        selectedReceptorId={selectedReceptorId}
+                        onSelectHour={(hrIdx) => {
+                          setSelectedHourIndex(hrIdx);
+                          setPlumeRouteProgress(hrIdx);
+                        }}
+                        compact
+                      />
+                    </div>
                   </DockableWindowFrame>
                 )}
 
@@ -6319,8 +6632,12 @@ export default function App() {
               buildings={buildings}
               sources={sources}
               receptors={receptors}
+              observations={observations}
               puff24h={puff24h}
               dateIso={weatherDataset.dateIso}
+              manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
+              isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
+              merkleRootSignature={observationChainOfCustodyLedger.merkleRootSignature}
               onOpenBuildingOnGis={(buildingId) => {
                 setFocusedGisBuildingId(buildingId);
                 setViewportMode('risk_gis');
@@ -6594,6 +6911,7 @@ export default function App() {
               </button>
             </div>
           ) : (
+          <ErrorBoundary fallbackTitle="Fejl i 2D/3D Kort- og Spredningsvisning">
           <div className="flex-1 min-h-[480px] lg:min-h-0 relative grid grid-cols-1 grid-rows-1 overflow-hidden">
             {(viewportMode === '3d' || viewportMode === 'underground_3d') && (
               <Ringparken3DScene
@@ -6609,26 +6927,18 @@ export default function App() {
                 observations={observations}
                 selectedSourceId={selectedSourceId}
                 selectedReceptorId={selectedReceptorId}
-                onSelectSource={(id) => {
-                  setSelectedSourceId(id);
-                  setActiveTab('substances');
-                }}
-                onSelectReceptor={(id) => {
-                  setSelectedReceptorId(id);
-                }}
+                onSelectSource={handleSelectMapSource}
+                onSelectReceptor={handleSelectMapReceptor}
                 onToggleSourceActive={toggleSourceActive}
                 isFullscreen3D={isFullscreen3D}
-                onToggleFullscreen3D={() => setIsFullscreen3D((v) => !v)}
+                onToggleFullscreen3D={handleToggleFullscreen3D}
                 isMapOnly={isMapOnlyMode}
-                onToggleMapOnly={() => setIsMapOnlyMode((v) => !v)}
+                onToggleMapOnly={handleToggleMapOnlyMode}
                 undergroundMode={viewportMode === 'underground_3d'}
-                onToggleUndergroundMode={(next) => {
-                  const active = next !== undefined ? next : viewportMode !== 'underground_3d';
-                  setViewportMode(active ? 'underground_3d' : '3d');
-                }}
+                onToggleUndergroundMode={handleToggleUndergroundMode3D}
                 precipitationOverrideMm={precipitationOverrideMm}
                 onChangePrecipitationOverride={setPrecipitationOverrideMm}
-                onSwitchTo2DPercolation={() => setViewportMode('underground_2d')}
+                onSwitchTo2DPercolation={handleSwitchTo2DPercolation}
                 asbestosHeatmapActive={asbestosHeatmapActive}
                 onToggleAsbestosHeatmap={setAsbestosHeatmapActive}
                 asbestosSourceScope={asbestosSourceScope}
@@ -6662,19 +6972,21 @@ export default function App() {
                 showWaterMainLayer={effectiveShowWaterMainLayer}
                 onToggleWaterMainLayer={handleToggleWaterMainLayer}
                 showLerBuffer={showLerBuffer}
-                onToggleLerBuffer={() => setShowLerBuffer((v) => !v)}
+                onToggleLerBuffer={handleToggleLerBuffer}
                 hasSteelRoadPlates={hasSteelRoadPlates}
-                onToggleSteelRoadPlates={() => setHasSteelRoadPlates((v) => !v)}
+                onToggleSteelRoadPlates={handleToggleSteelRoadPlates}
                 simulatedPipeRuptureActive={simulatedPipeRuptureActive}
-                onToggleSimulatedPipeRupture={() => setSimulatedPipeRuptureActive((v) => !v)}
+                onToggleSimulatedPipeRupture={handleToggleSimulatedPipeRupture}
                 isS3ValveLockoutActive={isS3ValveLockoutActive}
-                onToggleS3ValveLockout={() => setIsS3ValveLockoutActive((v) => !v)}
+                onToggleS3ValveLockout={handleToggleS3ValveLockout}
                 onIsolateNearbyMachinery={handleIsolateNearbyMachinery}
                 onRestoreAllMachinery={handleRestoreAllMachinery}
                 virtualLeakPinPoint={virtualLeakPinPoint}
                 virtualLeakImpact={virtualLeakImpact}
                 onToggleVirtualLeakPinQuick={handleToggleVirtualLeakPinQuick}
                 simultaneousDispatch={simultaneousAlgedonic.dispatch}
+                climateResilienceConfig={climateResilienceConfig}
+                onOpenClimateResilienceTab={() => setActiveTab('climateResilience')}
               />
             )}
 
@@ -6783,25 +7095,18 @@ export default function App() {
                     observations={observations}
                     selectedSourceId={selectedSourceId}
                     selectedReceptorId={selectedReceptorId}
-                    onSelectSource={(id) => {
-                      setSelectedSourceId(id);
-                      setActiveTab('substances');
-                    }}
-                    onSelectReceptor={(id) => {
-                      setSelectedReceptorId(id);
-                    }}
+                    onSelectSource={handleSelectMapSource}
+                    onSelectReceptor={handleSelectMapReceptor}
                     onToggleSourceActive={toggleSourceActive}
                     isFullscreen3D={isFullscreen3D}
-                    onToggleFullscreen3D={() => setIsFullscreen3D((v) => !v)}
+                    onToggleFullscreen3D={handleToggleFullscreen3D}
                     isMapOnly={isMapOnlyMode}
-                    onToggleMapOnly={() => setIsMapOnlyMode((v) => !v)}
+                    onToggleMapOnly={handleToggleMapOnlyMode}
                     undergroundMode={true}
-                    onToggleUndergroundMode={(next) => {
-                      if (next === false) setViewportMode('3d');
-                    }}
+                    onToggleUndergroundMode={handleExitUndergroundMode3D}
                     precipitationOverrideMm={precipitationOverrideMm}
                     onChangePrecipitationOverride={setPrecipitationOverrideMm}
-                    onSwitchTo2DPercolation={() => setViewportMode('underground_2d')}
+                    onSwitchTo2DPercolation={handleSwitchTo2DPercolation}
                     asbestosHeatmapActive={asbestosHeatmapActive}
                     onToggleAsbestosHeatmap={setAsbestosHeatmapActive}
                     asbestosSourceScope={asbestosSourceScope}
@@ -6835,19 +7140,21 @@ export default function App() {
                     showWaterMainLayer={effectiveShowWaterMainLayer}
                     onToggleWaterMainLayer={handleToggleWaterMainLayer}
                     showLerBuffer={showLerBuffer}
-                    onToggleLerBuffer={() => setShowLerBuffer((v) => !v)}
+                    onToggleLerBuffer={handleToggleLerBuffer}
                     hasSteelRoadPlates={hasSteelRoadPlates}
-                    onToggleSteelRoadPlates={() => setHasSteelRoadPlates((v) => !v)}
+                    onToggleSteelRoadPlates={handleToggleSteelRoadPlates}
                     simulatedPipeRuptureActive={simulatedPipeRuptureActive}
-                    onToggleSimulatedPipeRupture={() => setSimulatedPipeRuptureActive((v) => !v)}
+                    onToggleSimulatedPipeRupture={handleToggleSimulatedPipeRupture}
                     isS3ValveLockoutActive={isS3ValveLockoutActive}
-                    onToggleS3ValveLockout={() => setIsS3ValveLockoutActive((v) => !v)}
+                    onToggleS3ValveLockout={handleToggleS3ValveLockout}
                     onIsolateNearbyMachinery={handleIsolateNearbyMachinery}
                     onRestoreAllMachinery={handleRestoreAllMachinery}
                     virtualLeakPinPoint={virtualLeakPinPoint}
                     virtualLeakImpact={virtualLeakImpact}
                     onToggleVirtualLeakPinQuick={handleToggleVirtualLeakPinQuick}
                     simultaneousDispatch={simultaneousAlgedonic.dispatch}
+                    climateResilienceConfig={climateResilienceConfig}
+                    onOpenClimateResilienceTab={() => setActiveTab('climateResilience')}
                   />
                 </div>
               </div>
@@ -6938,6 +7245,8 @@ export default function App() {
                 machineNoiseOutputDb={
                   isManualMachineNoiseOverrideActive ? manualMachineNoiseOutputDb : undefined
                 }
+                showAcousticHazardHeatmap={showAcousticHazardHeatmapLayer}
+                onToggleAcousticHazardHeatmap={handleToggleAcousticHazardHeatmapFromMap}
               />
             )}
 
@@ -7028,6 +7337,8 @@ export default function App() {
                     machineNoiseOutputDb={
                       isManualMachineNoiseOverrideActive ? manualMachineNoiseOutputDb : undefined
                     }
+                    showAcousticHazardHeatmap={showAcousticHazardHeatmapLayer}
+                    onToggleAcousticHazardHeatmap={handleToggleAcousticHazardHeatmapFromMap}
                   />
                 </div>
                 <div className="w-full h-full min-h-[260px] relative overflow-hidden">
@@ -7044,21 +7355,16 @@ export default function App() {
                     observations={observations}
                     selectedSourceId={selectedSourceId}
                     selectedReceptorId={selectedReceptorId}
-                    onSelectSource={(id) => {
-                      setSelectedSourceId(id);
-                      setActiveTab('substances');
-                    }}
-                    onSelectReceptor={(id) => {
-                      setSelectedReceptorId(id);
-                    }}
+                    onSelectSource={handleSelectMapSource}
+                    onSelectReceptor={handleSelectMapReceptor}
                     onToggleSourceActive={toggleSourceActive}
                     isFullscreen3D={isFullscreen3D}
-                    onToggleFullscreen3D={() => setIsFullscreen3D((v) => !v)}
+                    onToggleFullscreen3D={handleToggleFullscreen3D}
                     isMapOnly={isMapOnlyMode}
-                    onToggleMapOnly={() => setIsMapOnlyMode((v) => !v)}
+                    onToggleMapOnly={handleToggleMapOnlyMode}
                     precipitationOverrideMm={precipitationOverrideMm}
                     onChangePrecipitationOverride={setPrecipitationOverrideMm}
-                    onSwitchTo2DPercolation={() => setViewportMode('underground_2d')}
+                    onSwitchTo2DPercolation={handleSwitchTo2DPercolation}
                     asbestosHeatmapActive={asbestosHeatmapActive}
                     onToggleAsbestosHeatmap={setAsbestosHeatmapActive}
                     asbestosSourceScope={asbestosSourceScope}
@@ -7092,25 +7398,30 @@ export default function App() {
                     showWaterMainLayer={effectiveShowWaterMainLayer}
                     onToggleWaterMainLayer={handleToggleWaterMainLayer}
                     showLerBuffer={showLerBuffer}
-                    onToggleLerBuffer={() => setShowLerBuffer((v) => !v)}
+                    onToggleLerBuffer={handleToggleLerBuffer}
                     hasSteelRoadPlates={hasSteelRoadPlates}
-                    onToggleSteelRoadPlates={() => setHasSteelRoadPlates((v) => !v)}
+                    onToggleSteelRoadPlates={handleToggleSteelRoadPlates}
                     simulatedPipeRuptureActive={simulatedPipeRuptureActive}
-                    onToggleSimulatedPipeRupture={() => setSimulatedPipeRuptureActive((v) => !v)}
+                    onToggleSimulatedPipeRupture={handleToggleSimulatedPipeRupture}
                     isS3ValveLockoutActive={isS3ValveLockoutActive}
-                    onToggleS3ValveLockout={() => setIsS3ValveLockoutActive((v) => !v)}
+                    onToggleS3ValveLockout={handleToggleS3ValveLockout}
                     onIsolateNearbyMachinery={handleIsolateNearbyMachinery}
                     onRestoreAllMachinery={handleRestoreAllMachinery}
                     virtualLeakPinPoint={virtualLeakPinPoint}
                     virtualLeakImpact={virtualLeakImpact}
                     onToggleVirtualLeakPinQuick={handleToggleVirtualLeakPinQuick}
                     simultaneousDispatch={simultaneousAlgedonic.dispatch}
+                    climateResilienceConfig={climateResilienceConfig}
+                    onOpenClimateResilienceTab={() => setActiveTab('climateResilience')}
                   />
                 </div>
               </div>
             )}
             {viewportMode === 'risk_gis' && (
-              <div className="w-full h-full min-h-[480px] overflow-y-auto">
+              <div
+                key="viewport-risk-gis"
+                className="w-full h-full min-h-[480px] overflow-y-auto riskgis-viewport-glide"
+              >
                 <RiskZoneMap
                   initialWindFromDeg={currentWeather.windDirection10m}
                   initialWindSpeedMs={currentWeather.windSpeed10m}
@@ -7146,6 +7457,7 @@ export default function App() {
                 />
               )}
           </div>
+          </ErrorBoundary>
           )}
 
           {/* Vibrations-Sankey Widget inside #main-workspace-anchor (Entreprenørmaskiner -> Fundamenter & PPV) */}
@@ -7319,6 +7631,7 @@ export default function App() {
             data-minimize-others={isSidebarMinimizeOthersActive ? 'true' : 'false'}
             className="flex-1 min-h-0 overflow-y-auto scroll-smooth p-4 space-y-4"
           >
+            <ErrorBoundary key={activeTab} fallbackTitle="Fejl i aktivt analysemodul">
             {/* TAB 0: AI FOTO-DOKUMENTATION, VISUEL BESKRIVELSE & ALGEDONISK SIGNAL */}
             {activeTab === 'algedonic' && (
               <div className="space-y-4">
@@ -7658,8 +7971,8 @@ export default function App() {
                               <div className="text-amber-200/90">
                                 Physical-to-Digital State Anchor: Vind {previewZkp.physicalToDigitalProofOfState.windDirectionDeg}° · ∂T/∂z ={' '}
                                 {previewZkp.physicalToDigitalProofOfState.temperatureGradientDtDzKm} K/m · S ={' '}
-                                {previewZkp.physicalToDigitalProofOfState.sumQuotientS.toFixed(2)} · L_AFmax(+5,0 dB) ={' '}
-                                {previewZkp.physicalToDigitalProofOfState.noiseLafmaxDb} dB(A)
+                                {previewZkp.physicalToDigitalProofOfState.sumQuotientS.toFixed(2)} · {labels.lmaxLabel}(+5,0 dB) ={' '}
+                                {convertDb(previewZkp.physicalToDigitalProofOfState.noiseLafmaxDb, { isImpulse: true }).toFixed(1)} {unitLabel}
                               </div>
                             </div>
                           );
@@ -8420,7 +8733,7 @@ export default function App() {
                                   ZKP ({zkp.rightToOpacityEnabled ? 'Right-to-Opacity' : 'Åben'}):{' '}
                                   {zkp.zkpProofHash.slice(0, 20)}... · ∂T/∂z={' '}
                                   {zkp.physicalToDigitalProofOfState.temperatureGradientDtDzKm} K/m ·
-                                  L_AFmax(+5dB)={zkp.physicalToDigitalProofOfState.noiseLafmaxDb} dB(A)
+                                  {labels.lmaxLabel}(+5dB)={convertDb(zkp.physicalToDigitalProofOfState.noiseLafmaxDb, { isImpulse: true }).toFixed(1)} {unitLabel}
                                 </div>
                               );
                             })()}
@@ -9059,6 +9372,19 @@ export default function App() {
                         }}
                       />
                     </DockableWindowFrame>
+
+                    {/* Wind-Bias Analysis Widget (24h Sektor-Bias mod Modelleret Spredningsfane) */}
+                    <WindBiasAnalysisWidget
+                      hours={weatherDataset.hours}
+                      currentWeather={currentWeather}
+                      dateIso={weatherDataset.dateIso}
+                      puff24h={puff24h}
+                      selectedReceptorId={selectedReceptorId}
+                      onSelectHour={(hrIdx) => {
+                        setSelectedHourIndex(hrIdx);
+                        setPlumeRouteProgress(hrIdx);
+                      }}
+                    />
 
                     {/* Stochastic Wind-Bias Analysis Widget (24h Statistical Uncertainty: Open-Meteo vs. Actual Slagelse Weather Station) */}
                     <DockableWindowFrame
@@ -11127,15 +11453,29 @@ export default function App() {
 
                   {(complianceSubTab === 'all' ||
                     complianceSubTab === 'pss_interlocks') && (
-                    <WaterMainVibrationSankeyWidget
-                      waterMainTelemetry={waterMainTelemetry}
-                      sources={sources}
-                      manualMachineNoiseOutputDb={
-                        isManualMachineNoiseOverrideActive
-                          ? manualMachineNoiseOutputDb
-                          : 114
-                      }
-                    />
+                    <>
+                      <PpvThresholdAlertWidget
+                        sources={sources}
+                        receptors={receptors}
+                        currentWeather={currentWeather}
+                        precipitationOverrideMm={precipitationOverrideMm}
+                        manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
+                        isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
+                        hasSteelRoadPlates={hasSteelRoadPlates}
+                        waterMainPipePpvMmPerSec={waterMainTelemetry.pipePpvMmPerSec}
+                        onSelectReceptor={(recId) => setSelectedReceptorId(recId)}
+                        onSelectSource={(srcId) => setSelectedSourceId(srcId)}
+                      />
+                      <WaterMainVibrationSankeyWidget
+                        waterMainTelemetry={waterMainTelemetry}
+                        sources={sources}
+                        manualMachineNoiseOutputDb={
+                          isManualMachineNoiseOverrideActive
+                            ? manualMachineNoiseOutputDb
+                            : 114
+                        }
+                      />
+                    </>
                   )}
 
                   {/* 3. CALCULATION IN KIND 2.0 (CiK 2.0) MATERIALE-SANKEY (73.420 m²) */}
@@ -11567,6 +11907,187 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Item 5: Kontrolmulighed for 'Vind-Støj Korrelations-Heatmap' i 2D-kortvisningen (>10 m/s vind + impulsstøj-kilder) */}
+                <div
+                  data-testid="noise-dust-wind-noise-heatmap-control-card"
+                  className={`p-3 rounded-lg border space-y-2 font-mono text-xs transition-colors ${
+                    showWindNoiseHeatmapLayer
+                      ? 'bg-amber-950/35 border-amber-400/75 text-amber-50'
+                      : 'bg-[#151C28] border-[#2D3B50] text-slate-200'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                        <Wind className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>Vind-Støj Korrelations-Heatmap (2D Kortvisning)</span>
+                      </div>
+                      <p className="text-[11px] font-sans text-slate-300 leading-snug">
+                        Visualiserer områder med høj støjimpuls-risiko i 2D-kortet baseret på vindhastighed (&gt;10 m/s) og aktive impulsstøj-kilder.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="noise-dust-toggle-wind-noise-heatmap-btn"
+                      onClick={handleToggleWindNoiseHeatmapFromToolbar}
+                      className={`px-3 py-1.5 rounded text-[11px] font-bold border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                        showWindNoiseHeatmapLayer
+                          ? 'bg-amber-400 text-slate-950 border-white shadow-sm'
+                          : 'bg-[#1B2433] hover:bg-[#233044] text-amber-200 border-amber-500/50'
+                      }`}
+                    >
+                      {showWindNoiseHeatmapLayer
+                        ? '✓ Heatmap AKTIV i 2D-kort'
+                        : 'Aktivér Vind-Støj Heatmap'}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-white/10 text-[11px] tabular-nums">
+                    <span>
+                      Vind nu:{' '}
+                      <strong
+                        className={
+                          currentWeather.windSpeed10m > 10
+                            ? 'text-rose-300'
+                            : 'text-cyan-300'
+                        }
+                      >
+                        {currentWeather.windSpeed10m.toFixed(1)} m/s
+                      </strong>{' '}
+                      (stød {currentWeather.windGusts10m.toFixed(1)} m/s){' '}
+                      {currentWeather.windSpeed10m > 10
+                        ? '· HØJ VIND (>10 m/s)'
+                        : '· Under 10 m/s tærskel'}
+                    </span>
+                    <span className="text-slate-300">
+                      Impulskilder:{' '}
+                      <strong className="text-white">
+                        {sources.filter((s) => s.active).length}
+                      </strong>{' '}
+                      aktive ({(isManualMachineNoiseOverrideActive ? manualMachineNoiseOutputDb : 114).toFixed(0)} dB L_WA)
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-white/10">
+                    <span className="text-[11px] font-sans text-slate-300">
+                      <strong className="text-rose-200 font-mono">Acoustic Hazard Heatmap (2D):</strong>{' '}
+                      Opdaterer støjfarefelt dynamisk efter aktive maskiners L_WA og lokal vindrefraktion.
+                    </span>
+                    <button
+                      type="button"
+                      data-testid="noise-dust-toggle-acoustic-hazard-heatmap-btn"
+                      onClick={() => {
+                        setShowAcousticHazardHeatmapLayer((prev) => {
+                          const next = !prev;
+                          if (next && viewportMode !== '2d' && viewportMode !== 'split') {
+                            setViewportMode(viewportMode === '3d' ? 'split' : '2d');
+                          }
+                          return next;
+                        });
+                      }}
+                      className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                        showAcousticHazardHeatmapLayer
+                          ? 'bg-rose-500 text-white border-rose-200 shadow-sm'
+                          : 'bg-[#1B2433] hover:bg-[#233044] text-rose-200 border-rose-500/50'
+                      }`}
+                    >
+                      {showAcousticHazardHeatmapLayer
+                        ? '✓ Akustisk Fare-Heatmap AKTIV'
+                        : 'Aktivér Akustisk Fare-Heatmap'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Automatisk 'Høj-Vind Beredskabsplan' (>10 m/s) PDF-eksport & tjekliste */}
+                <HighWindContingencyPlanWidget
+                  dateIso={weatherDataset.dateIso}
+                  currentWeather={currentWeather}
+                  weatherHours={weatherDataset.hours}
+                  sources={sources}
+                  receptors={receptors}
+                  receptorExposures={receptorExposures}
+                  puff24h={puff24h}
+                  manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
+                  isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
+                  plumeDirectionDeg={plumeDirectionDeg}
+                  sha256Hash={sha256Hash}
+                  onSelectHour={(hr) => {
+                    myceliumAlerts.notifyTimelineScrub();
+                    setSelectedHourIndex(hr);
+                    setPlumeRouteProgress(hr);
+                  }}
+                  onSelectReceptor={(receptorId) => setSelectedReceptorId(receptorId)}
+                />
+
+                {/* Automatisk Ugerapport til Ekstern Revision (Støj, Støv & Vejr · 168t PDF) */}
+                <WeeklyExternalAuditWidget
+                  dateIso={weatherDataset.dateIso}
+                  sources={sources}
+                  receptors={receptors}
+                  observations={observations}
+                  manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
+                  isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
+                  merkleRootSignature={observationChainOfCustodyLedger.merkleRootSignature}
+                />
+
+                {/* Høj-Vindstød (>10 m/s) vs. Maskin-Impulsstøj Korrelation & Højrisiko Driftsscenarier */}
+                <HighWindGustImpulseCorrelationWidget
+                  weatherHours={weatherDataset.hours}
+                  selectedHourIndex={selectedHourIndex}
+                  onSelectHour={(hr) => {
+                    myceliumAlerts.notifyTimelineScrub();
+                    setSelectedHourIndex(hr);
+                    setPlumeRouteProgress(hr);
+                  }}
+                  sources={sources}
+                  manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
+                  isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
+                  dateIso={weatherDataset.dateIso}
+                  selectedReceptorName={selectedReceptorExposure.receptorName}
+                  selectedReceptorAddress={selectedReceptorExposure.address}
+                  selectedReceptorPosition={selectedReceptorExposure.position}
+                  onApplyMachineLwa={(lwaDb) => {
+                    setIsManualMachineNoiseOverrideActive(true);
+                    setManualMachineNoiseOutputDb(lwaDb);
+                  }}
+                  onActivateAcousticHazardHeatmap={handleActivateAcousticHazardHeatmap}
+                  onFileFormalNoiseReport={handleFileFormalNoiseReportFromCorrelation}
+                />
+
+                {/* Interaktiv Korrelationsgraf (Seneste 24 timer): Open-Meteo Vindhastighed (m/s) vs. Impulsstøj (dB) */}
+                <OpenMeteo24hWindImpulseCorrelationChart
+                  weatherHours={weatherDataset.hours}
+                  selectedHourIndex={selectedHourIndex}
+                  onSelectHour={(hr) => {
+                    myceliumAlerts.notifyTimelineScrub();
+                    setSelectedHourIndex(hr);
+                    setPlumeRouteProgress(hr);
+                  }}
+                  sources={sources}
+                  observations={observations}
+                  manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
+                  isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
+                  dateIso={weatherDataset.dateIso}
+                />
+
+                {/* Rullende korrelation: Open-Meteo vindstød (>10 m/s) ↔ kumulativ respirabel støv-deposition (µg/m²) */}
+                <RollingGustDustDepositionWidget
+                  weatherHours={weatherDataset.hours}
+                  hourlyReceptorProfile={
+                    (
+                      puff24h.receptorSummaries.find(
+                        (r) => r.receptorId === selectedReceptorExposure.receptorId
+                      ) || puff24h.peakReceptor
+                    ).hourlyProfile
+                  }
+                  receptorName={selectedReceptorExposure.receptorName}
+                  selectedHourIndex={selectedHourIndex}
+                  onSelectHour={(hr) => {
+                    myceliumAlerts.notifyTimelineScrub();
+                    setSelectedHourIndex(hr);
+                    setPlumeRouteProgress(hr);
+                  }}
+                  dateIso={weatherDataset.dateIso}
+                />
+
                 <DockableWindowFrame
                   windowId="wind_noise_correlation"
                   state={windowStates.wind_noise_correlation}
@@ -11650,7 +12171,25 @@ export default function App() {
                   }}
                 />
 
-                {/* Realtids Støj-Overholdelseslog (> 55 dB(A)) med Slagelse-Kommune-ESDH eksport */}
+                {/* 1-Times Rullende Respirabel Støv-Overvågning & Højprioritets Alarmkontrol */}
+                <RollingDust1hMonitorCard
+                  evaluation={rolling1hDustEval}
+                  isAudioMuted={dust1hAlertAudioMuted}
+                  isSimulatedExceedanceActive={simulateRolling1hDustExceedance}
+                  notificationPermission={dustNotificationPermission}
+                  lastChimeTimestamp={lastDust1hChimeTimestamp}
+                  onToggleAudioMuted={() => setDust1hAlertAudioMuted((m) => !m)}
+                  onToggleSimulatedExceedance={() => {
+                    rollingDustHazardAudioService.markUserGestureUnlocked();
+                    setDismissedDust1hAlertKey(null);
+                    setSimulateRolling1hDustExceedance((s) => !s);
+                  }}
+                  onRequestBrowserNotificationPermission={handleRequestDustBrowserNotification}
+                  onPlayAlarmTest={handlePlayDustAlarmTest}
+                  onSelectReceptor={(recId) => setSelectedReceptorId(recId)}
+                />
+
+                {/* Realtids Støj-Overholdelseslog med Slagelse-Kommune-ESDH eksport */}
                 <NoiseComplianceLogPanel
                   dateIso={weatherDataset.dateIso}
                   currentWeather={currentWeather}
@@ -11668,6 +12207,24 @@ export default function App() {
                     setSelectedHourIndex(hr);
                     setPlumeRouteProgress(hr);
                   }}
+                  onAppendImpulseNoiseEvidence={(newObs) => {
+                    setObservations((prev) => [newObs, ...prev]);
+                    setSelectedObservationId(newObs.id);
+                  }}
+                />
+
+                {/* Realtids PPV Threshold Alert (DIN 4150-3 · 25 mm/s strukturgrænse) */}
+                <PpvThresholdAlertWidget
+                  sources={sources}
+                  receptors={receptors}
+                  currentWeather={currentWeather}
+                  precipitationOverrideMm={precipitationOverrideMm}
+                  manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
+                  isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
+                  hasSteelRoadPlates={hasSteelRoadPlates}
+                  waterMainPipePpvMmPerSec={waterMainTelemetry.pipePpvMmPerSec}
+                  onSelectReceptor={(recId) => setSelectedReceptorId(recId)}
+                  onSelectSource={(srcId) => setSelectedSourceId(srcId)}
                 />
 
                 {/* Quick Top Slider for Machine Noise Output Level (90 dB – 125 dB) inside 'Støj & Støv' */}
@@ -11678,11 +12235,13 @@ export default function App() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-extrabold text-amber-300 uppercase tracking-wide flex items-center gap-1.5">
                       <Volume2 className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span>Maskinernes Støj-Output-Niveau (90 dB – 125 dB)</span>
+                      <span>
+                        Maskinernes Støj-Output-Niveau ({convertDb(90).toFixed(0)} – {convertDb(125).toFixed(0)} {unitLabel})
+                      </span>
                     </span>
                     <div className="flex items-center gap-1.5">
-                      <span className="px-2 py-0.5 rounded bg-amber-500/25 border border-amber-400 text-amber-100 font-extrabold">
-                        {manualMachineNoiseOutputDb.toFixed(1)} dB(A) L_WA
+                      <span className="px-2 py-0.5 rounded bg-amber-500/25 border border-amber-400 text-amber-100 font-extrabold tabular-nums">
+                        {convertDb(manualMachineNoiseOutputDb).toFixed(1)} {unitLabel} {labels.lwaLabel}
                       </span>
                       <button
                         type="button"
@@ -11698,7 +12257,9 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2.5">
-                    <span className="text-[11px] text-emerald-300 font-bold shrink-0">90 dB</span>
+                    <span className="text-[11px] text-emerald-300 font-bold shrink-0 tabular-nums">
+                      {convertDb(90).toFixed(0)} dB
+                    </span>
                     <input
                       type="range"
                       min={90}
@@ -11709,10 +12270,12 @@ export default function App() {
                         setIsManualMachineNoiseOverrideActive(true);
                         setManualMachineNoiseOutputDb(Number(e.target.value));
                       }}
-                      aria-label="Juster maskinernes støj-output-niveau fra 90 dB til 125 dB"
+                      aria-label={`Juster maskinernes støj-output-niveau (${unitLabel})`}
                       className="flex-1 accent-amber-400 cursor-pointer"
                     />
-                    <span className="text-[11px] text-rose-300 font-bold shrink-0">125 dB</span>
+                    <span className="text-[11px] text-rose-300 font-bold shrink-0 tabular-nums">
+                      {convertDb(125).toFixed(0)} dB
+                    </span>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-1.5 pt-0.5">
                     <div className="flex flex-wrap items-center gap-1">
@@ -11726,19 +12289,19 @@ export default function App() {
                               setIsManualMachineNoiseOverrideActive(true);
                               setManualMachineNoiseOutputDb(dbPreset);
                             }}
-                            className={`px-1.5 py-0.5 rounded text-[11px] font-bold border cursor-pointer transition-colors ${
+                            className={`px-1.5 py-0.5 rounded text-[11px] font-bold border cursor-pointer transition-colors tabular-nums ${
                               isSel
                                 ? 'bg-amber-400 text-slate-950 border-white'
                                 : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-amber-400/50'
                             }`}
                           >
-                            {dbPreset} dB
+                            {convertDb(dbPreset).toFixed(0)} dB
                           </button>
                         );
                       })}
                     </div>
                     <span className="text-[11px] text-slate-300">
-                      Simulerer maskinstyrke i 3D &amp; 24t-grafer
+                      Simulerer maskinstyrke i 3D &amp; 24t-grafer ({unitLabel})
                     </span>
                   </div>
                 </div>
@@ -11755,6 +12318,8 @@ export default function App() {
                     ).hourlyProfile
                   }
                   receptorName={selectedReceptorExposure.receptorName}
+                  receptorAddress={selectedReceptorExposure.address}
+                  receptorPosition={selectedReceptorExposure.position}
                   observations={observations}
                   sources={sources}
                   selectedHourIndex={selectedHourIndex}
@@ -11769,6 +12334,20 @@ export default function App() {
                     setSelectedObservationId(obs.id);
                     setSelectedHourIndex(obs.observedHourIndex);
                   }}
+                  onFileFormalNoiseReport={handleFileFormalNoiseReportFromCorrelation}
+                />
+
+                {/* HØJFREKVENT STØJSPIDS-DETEKTOR & VISUALISERING (>95 dB(A) Transiente Maskinoperationer) */}
+                <HighFrequencyNoiseSpikeDetectorWidget
+                  sources={sources}
+                  currentWeather={currentWeather}
+                  observations={observations}
+                  selectedReceptorName={selectedReceptorExposure.receptorName}
+                  selectedReceptorAddress={selectedReceptorExposure.address}
+                  selectedReceptorPosition={selectedReceptorExposure.position}
+                  manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
+                  isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
+                  onFileFormalNoiseReport={handleFileFormalNoiseReportFromCorrelation}
                 />
 
                 {/* DEDIKERET SEKTION: VIND-KOMPENSERET IMPULS-KATALOG (.DBA Fil-Upload, Automatisk Maskin-/Vejrkorrelation & 168-Timers PDF-Rapport) */}
@@ -12342,6 +12921,53 @@ export default function App() {
                 </div>
               </DockableWindowFrame>
             )}
+
+            {/* TAB 8: KLIMARESILIENS & UNDERJORDISK PERKOLATION (3D FREMTIDSSCENARIER) */}
+            {activeTab === 'climateResilience' && (
+              <DockableWindowFrame
+                windowId="climate_resilience_percolation"
+                state={windowStates.climate_resilience_percolation}
+                onMinimize={handleMinimizeWindow}
+                onPopOutFloating={handlePopOutFloatingWindow}
+                onRestore={handleRestoreWindow}
+              >
+                <ClimateResiliencePercolationPanel
+                  config={climateResilienceConfig}
+                  onChangeConfig={setClimateResilienceConfig}
+                  currentWeather={currentWeather}
+                  precipitationOverrideMm={precipitationOverrideMm}
+                  activeSourceCount={
+                    sources.filter((s) => s.active && !hiddenSourceIds.includes(s.id)).length
+                  }
+                  unsecuredDemolishedCount={
+                    buildings.filter((b) => b.category === 'e_demolished_unsecured').length
+                  }
+                  isUnderground3DActive={
+                    viewportMode === 'underground_3d' || viewportMode === 'underground_split'
+                  }
+                  onVisualizeIn3DUnderground={() => {
+                    if (!climateResilienceConfig.enabled) {
+                      setClimateResilienceConfig((prev) => ({ ...prev, enabled: true }));
+                    }
+                    if (viewportMode !== 'underground_3d' && viewportMode !== 'underground_split') {
+                      setViewportMode('underground_3d');
+                    }
+                    setFocusBlok12PercolationTrigger((n) => n + 1);
+                  }}
+                  onFocusBlok12In3D={() => {
+                    if (!climateResilienceConfig.enabled) {
+                      setClimateResilienceConfig((prev) => ({ ...prev, enabled: true }));
+                    }
+                    if (viewportMode !== 'underground_3d' && viewportMode !== 'underground_split') {
+                      setViewportMode('underground_3d');
+                    }
+                    setFocusBlok12PercolationTrigger((n) => n + 1);
+                  }}
+                  onSwitchTo2DPercolation={handleSwitchTo2DPercolation}
+                />
+              </DockableWindowFrame>
+            )}
+            </ErrorBoundary>
           </div>
         </aside>
       </div>
@@ -12951,8 +13577,46 @@ export default function App() {
               </div>
             )}
 
+            {winId === 'climate_resilience_percolation' && (
+              <ClimateResiliencePercolationPanel
+                config={climateResilienceConfig}
+                onChangeConfig={setClimateResilienceConfig}
+                currentWeather={currentWeather}
+                precipitationOverrideMm={precipitationOverrideMm}
+                activeSourceCount={
+                  sources.filter((s) => s.active && !hiddenSourceIds.includes(s.id)).length
+                }
+                unsecuredDemolishedCount={
+                  buildings.filter((b) => b.category === 'e_demolished_unsecured').length
+                }
+                isUnderground3DActive={
+                  viewportMode === 'underground_3d' || viewportMode === 'underground_split'
+                }
+                onVisualizeIn3DUnderground={() => {
+                  if (!climateResilienceConfig.enabled) {
+                    setClimateResilienceConfig((prev) => ({ ...prev, enabled: true }));
+                  }
+                  if (viewportMode !== 'underground_3d' && viewportMode !== 'underground_split') {
+                    setViewportMode('underground_3d');
+                  }
+                  setFocusBlok12PercolationTrigger((n) => n + 1);
+                }}
+                onFocusBlok12In3D={() => {
+                  if (!climateResilienceConfig.enabled) {
+                    setClimateResilienceConfig((prev) => ({ ...prev, enabled: true }));
+                  }
+                  if (viewportMode !== 'underground_3d' && viewportMode !== 'underground_split') {
+                    setViewportMode('underground_3d');
+                  }
+                  setFocusBlok12PercolationTrigger((n) => n + 1);
+                }}
+                onSwitchTo2DPercolation={handleSwitchTo2DPercolation}
+              />
+            )}
+
             {winId === 'map_viewport_2d_3d' && (
               <div className="h-[540px] w-full rounded overflow-hidden border border-slate-800 relative flex flex-col">
+                <ErrorBoundary fallbackTitle="Fejl i flydende 2D/3D kortvindue">
                 <div className="flex-1 min-h-0 relative grid grid-cols-1 grid-rows-1 overflow-hidden">
                   {(viewportMode === '3d' || viewportMode === 'underground_3d') && (
                     <Ringparken3DScene
@@ -12968,24 +13632,18 @@ export default function App() {
                       observations={observations}
                       selectedSourceId={selectedSourceId}
                       selectedReceptorId={selectedReceptorId}
-                      onSelectSource={(id) => {
-                        setSelectedSourceId(id);
-                        setActiveTab('substances');
-                      }}
-                      onSelectReceptor={(id) => setSelectedReceptorId(id)}
+                      onSelectSource={handleSelectMapSource}
+                      onSelectReceptor={handleSelectMapReceptor}
                       onToggleSourceActive={toggleSourceActive}
                       isFullscreen3D={isFullscreen3D}
-                      onToggleFullscreen3D={() => setIsFullscreen3D((v) => !v)}
+                      onToggleFullscreen3D={handleToggleFullscreen3D}
                       isMapOnly={isMapOnlyMode}
-                      onToggleMapOnly={() => setIsMapOnlyMode((v) => !v)}
+                      onToggleMapOnly={handleToggleMapOnlyMode}
                       undergroundMode={viewportMode === 'underground_3d'}
-                      onToggleUndergroundMode={(next) => {
-                        const active = next !== undefined ? next : viewportMode !== 'underground_3d';
-                        setViewportMode(active ? 'underground_3d' : '3d');
-                      }}
+                      onToggleUndergroundMode={handleToggleUndergroundMode3D}
                       precipitationOverrideMm={precipitationOverrideMm}
                       onChangePrecipitationOverride={setPrecipitationOverrideMm}
-                      onSwitchTo2DPercolation={() => setViewportMode('underground_2d')}
+                      onSwitchTo2DPercolation={handleSwitchTo2DPercolation}
                       asbestosHeatmapActive={asbestosHeatmapActive}
                       onToggleAsbestosHeatmap={setAsbestosHeatmapActive}
                       asbestosSourceScope={asbestosSourceScope}
@@ -13019,19 +13677,21 @@ export default function App() {
                       showWaterMainLayer={effectiveShowWaterMainLayer}
                       onToggleWaterMainLayer={handleToggleWaterMainLayer}
                       showLerBuffer={showLerBuffer}
-                      onToggleLerBuffer={() => setShowLerBuffer((v) => !v)}
+                      onToggleLerBuffer={handleToggleLerBuffer}
                       hasSteelRoadPlates={hasSteelRoadPlates}
-                      onToggleSteelRoadPlates={() => setHasSteelRoadPlates((v) => !v)}
+                      onToggleSteelRoadPlates={handleToggleSteelRoadPlates}
                       simulatedPipeRuptureActive={simulatedPipeRuptureActive}
-                      onToggleSimulatedPipeRupture={() => setSimulatedPipeRuptureActive((v) => !v)}
+                      onToggleSimulatedPipeRupture={handleToggleSimulatedPipeRupture}
                       isS3ValveLockoutActive={isS3ValveLockoutActive}
-                      onToggleS3ValveLockout={() => setIsS3ValveLockoutActive((v) => !v)}
+                      onToggleS3ValveLockout={handleToggleS3ValveLockout}
                       onIsolateNearbyMachinery={handleIsolateNearbyMachinery}
                       onRestoreAllMachinery={handleRestoreAllMachinery}
                       virtualLeakPinPoint={virtualLeakPinPoint}
                       virtualLeakImpact={virtualLeakImpact}
                       onToggleVirtualLeakPinQuick={handleToggleVirtualLeakPinQuick}
                       simultaneousDispatch={simultaneousAlgedonic.dispatch}
+                      climateResilienceConfig={climateResilienceConfig}
+                      onOpenClimateResilienceTab={() => setActiveTab('climateResilience')}
                     />
                   )}
 
@@ -13138,20 +13798,18 @@ export default function App() {
                           observations={observations}
                           selectedSourceId={selectedSourceId}
                           selectedReceptorId={selectedReceptorId}
-                          onSelectSource={(id) => setSelectedSourceId(id)}
-                          onSelectReceptor={(id) => setSelectedReceptorId(id)}
+                          onSelectSource={handleSelectMapSourceModal}
+                          onSelectReceptor={handleSelectMapReceptor}
                           onToggleSourceActive={toggleSourceActive}
                           isFullscreen3D={isFullscreen3D}
-                          onToggleFullscreen3D={() => setIsFullscreen3D((v) => !v)}
+                          onToggleFullscreen3D={handleToggleFullscreen3D}
                           isMapOnly={isMapOnlyMode}
-                          onToggleMapOnly={() => setIsMapOnlyMode((v) => !v)}
+                          onToggleMapOnly={handleToggleMapOnlyMode}
                           undergroundMode={true}
-                          onToggleUndergroundMode={(next) => {
-                            if (next === false) setViewportMode('3d');
-                          }}
+                          onToggleUndergroundMode={handleExitUndergroundMode3D}
                           precipitationOverrideMm={precipitationOverrideMm}
                           onChangePrecipitationOverride={setPrecipitationOverrideMm}
-                          onSwitchTo2DPercolation={() => setViewportMode('underground_2d')}
+                          onSwitchTo2DPercolation={handleSwitchTo2DPercolation}
                           asbestosHeatmapActive={asbestosHeatmapActive}
                           onToggleAsbestosHeatmap={setAsbestosHeatmapActive}
                           asbestosSourceScope={asbestosSourceScope}
@@ -13191,21 +13849,21 @@ export default function App() {
                           showWaterMainLayer={effectiveShowWaterMainLayer}
                           onToggleWaterMainLayer={handleToggleWaterMainLayer}
                           showLerBuffer={showLerBuffer}
-                          onToggleLerBuffer={() => setShowLerBuffer((v) => !v)}
+                          onToggleLerBuffer={handleToggleLerBuffer}
                           hasSteelRoadPlates={hasSteelRoadPlates}
-                          onToggleSteelRoadPlates={() => setHasSteelRoadPlates((v) => !v)}
+                          onToggleSteelRoadPlates={handleToggleSteelRoadPlates}
                           simulatedPipeRuptureActive={simulatedPipeRuptureActive}
-                          onToggleSimulatedPipeRupture={() =>
-                            setSimulatedPipeRuptureActive((v) => !v)
-                          }
+                          onToggleSimulatedPipeRupture={handleToggleSimulatedPipeRupture}
                           isS3ValveLockoutActive={isS3ValveLockoutActive}
-                          onToggleS3ValveLockout={() => setIsS3ValveLockoutActive((v) => !v)}
+                          onToggleS3ValveLockout={handleToggleS3ValveLockout}
                           onIsolateNearbyMachinery={handleIsolateNearbyMachinery}
                           onRestoreAllMachinery={handleRestoreAllMachinery}
                           virtualLeakPinPoint={virtualLeakPinPoint}
                           virtualLeakImpact={virtualLeakImpact}
                           onToggleVirtualLeakPinQuick={handleToggleVirtualLeakPinQuick}
                           simultaneousDispatch={simultaneousAlgedonic.dispatch}
+                          climateResilienceConfig={climateResilienceConfig}
+                          onOpenClimateResilienceTab={() => setActiveTab('climateResilience')}
                         />
                       </div>
                     </div>
@@ -13296,6 +13954,8 @@ export default function App() {
                       machineNoiseOutputDb={
                         isManualMachineNoiseOverrideActive ? manualMachineNoiseOutputDb : undefined
                       }
+                      showAcousticHazardHeatmap={showAcousticHazardHeatmapLayer}
+                      onToggleAcousticHazardHeatmap={handleToggleAcousticHazardHeatmapFromMap}
                     />
                   )}
 
@@ -13388,6 +14048,8 @@ export default function App() {
                               ? manualMachineNoiseOutputDb
                               : undefined
                           }
+                          showAcousticHazardHeatmap={showAcousticHazardHeatmapLayer}
+                          onToggleAcousticHazardHeatmap={handleToggleAcousticHazardHeatmapFromMap}
                         />
                       </div>
                       <div className="w-full h-full min-h-[240px] relative overflow-hidden">
@@ -13404,16 +14066,16 @@ export default function App() {
                           observations={observations}
                           selectedSourceId={selectedSourceId}
                           selectedReceptorId={selectedReceptorId}
-                          onSelectSource={(id) => setSelectedSourceId(id)}
-                          onSelectReceptor={(id) => setSelectedReceptorId(id)}
+                          onSelectSource={handleSelectMapSourceModal}
+                          onSelectReceptor={handleSelectMapReceptor}
                           onToggleSourceActive={toggleSourceActive}
                           isFullscreen3D={isFullscreen3D}
-                          onToggleFullscreen3D={() => setIsFullscreen3D((v) => !v)}
+                          onToggleFullscreen3D={handleToggleFullscreen3D}
                           isMapOnly={isMapOnlyMode}
-                          onToggleMapOnly={() => setIsMapOnlyMode((v) => !v)}
+                          onToggleMapOnly={handleToggleMapOnlyMode}
                           precipitationOverrideMm={precipitationOverrideMm}
                           onChangePrecipitationOverride={setPrecipitationOverrideMm}
-                          onSwitchTo2DPercolation={() => setViewportMode('underground_2d')}
+                          onSwitchTo2DPercolation={handleSwitchTo2DPercolation}
                           asbestosHeatmapActive={asbestosHeatmapActive}
                           onToggleAsbestosHeatmap={setAsbestosHeatmapActive}
                           asbestosSourceScope={asbestosSourceScope}
@@ -13453,28 +14115,31 @@ export default function App() {
                           showWaterMainLayer={effectiveShowWaterMainLayer}
                           onToggleWaterMainLayer={handleToggleWaterMainLayer}
                           showLerBuffer={showLerBuffer}
-                          onToggleLerBuffer={() => setShowLerBuffer((v) => !v)}
+                          onToggleLerBuffer={handleToggleLerBuffer}
                           hasSteelRoadPlates={hasSteelRoadPlates}
-                          onToggleSteelRoadPlates={() => setHasSteelRoadPlates((v) => !v)}
+                          onToggleSteelRoadPlates={handleToggleSteelRoadPlates}
                           simulatedPipeRuptureActive={simulatedPipeRuptureActive}
-                          onToggleSimulatedPipeRupture={() =>
-                            setSimulatedPipeRuptureActive((v) => !v)
-                          }
+                          onToggleSimulatedPipeRupture={handleToggleSimulatedPipeRupture}
                           isS3ValveLockoutActive={isS3ValveLockoutActive}
-                          onToggleS3ValveLockout={() => setIsS3ValveLockoutActive((v) => !v)}
+                          onToggleS3ValveLockout={handleToggleS3ValveLockout}
                           onIsolateNearbyMachinery={handleIsolateNearbyMachinery}
                           onRestoreAllMachinery={handleRestoreAllMachinery}
                           virtualLeakPinPoint={virtualLeakPinPoint}
                           virtualLeakImpact={virtualLeakImpact}
                           onToggleVirtualLeakPinQuick={handleToggleVirtualLeakPinQuick}
                           simultaneousDispatch={simultaneousAlgedonic.dispatch}
+                          climateResilienceConfig={climateResilienceConfig}
+                          onOpenClimateResilienceTab={() => setActiveTab('climateResilience')}
                         />
                       </div>
                     </div>
                   )}
 
                   {viewportMode === 'risk_gis' && (
-                    <div className="w-full h-full overflow-y-auto">
+                    <div
+                      key="viewport-floating-risk-gis"
+                      className="w-full h-full overflow-y-auto riskgis-viewport-glide"
+                    >
                       <RiskZoneMap
                         initialWindFromDeg={currentWeather.windDirection10m}
                         initialWindSpeedMs={currentWeather.windSpeed10m}
@@ -13500,6 +14165,7 @@ export default function App() {
                     </div>
                   )}
                 </div>
+                </ErrorBoundary>
               </div>
             )}
 
@@ -13678,6 +14344,25 @@ export default function App() {
         </aside>
       )}
 
+      {/* 1-Times Rullende Respirabel Støv-Alarm (Akustisk & Højprioritets Visuel Browser-Advarsel) */}
+      {!isMapOnlyMode && !isFullscreen3D && (
+        <RollingDustHazardAlertBanner
+          evaluation={rolling1hDustEval}
+          isDismissed={dismissedDust1hAlertKey === dust1hAlertStateKey}
+          isAudioMuted={dust1hAlertAudioMuted}
+          notificationPermission={dustNotificationPermission}
+          lastChimeTimestamp={lastDust1hChimeTimestamp}
+          onToggleAudioMuted={() => setDust1hAlertAudioMuted((m) => !m)}
+          onRequestBrowserNotificationPermission={handleRequestDustBrowserNotification}
+          onPlayAlarmTest={handlePlayDustAlarmTest}
+          onDismiss={() => setDismissedDust1hAlertKey(dust1hAlertStateKey)}
+          onFocusNoiseDustAndReceptor={(recId) => {
+            setSelectedReceptorId(recId);
+            setActiveTab('noiseDust');
+          }}
+        />
+      )}
+
       {/* System B Mycelium Tactical Algedonic Toast Stack & ISA-18.2 Alarm-Log Drawer (Guaranteed Primary In-App Channel) */}
       <TacticalAlgedonicToastDrawer
         alerts={myceliumAlerts.alerts}
@@ -13783,6 +14468,18 @@ export default function App() {
         completedRangeSimulation={completedRangeSimulation}
         onOpenRangeSimDrawer={() => setIsRangeSimPanelOpen(true)}
         isBulkDownloading={isBulkDownloading}
+        onDownloadWeeklyExternalAuditPdf={() => {
+          const ctx = getFilteredExportContext();
+          generateWeeklyExternalAuditPdf({
+            dateIso: weatherDataset.dateIso,
+            sources,
+            receptors: ctx.receptors,
+            observations: ctx.observations,
+            manualMachineNoiseOutputDb,
+            isManualMachineNoiseOverrideActive,
+            merkleRootSignature: observationChainOfCustodyLedger.merkleRootSignature,
+          });
+        }}
         onDownloadForensicPdf={() => {
           const ctx = getFilteredExportContext();
           generateForensicPdfReport({

@@ -13,8 +13,13 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { RINGPARKEN_BUILDINGS } from '../constants/ringparkenData';
-import { RINGPARKEN_MASTER_BUILDINGS } from '../data/ringparkenData';
 import {
+  INITIAL_DEMOLITION_SOURCES,
+  INITIAL_RECEPTOR_ZONES,
+  RINGPARKEN_MASTER_BUILDINGS,
+} from '../data/ringparkenData';
+import {
+  AlgedonicObservation,
   DemolitionSourceNode,
   PuffAccumulationResult,
   ReceptorZone,
@@ -25,6 +30,7 @@ import {
   downloadComplianceAuditWeeklyPdfReport,
 } from '../services/complianceAuditWeeklyPdfService';
 import { IncidentAnalyzer } from './IncidentAnalyzer';
+import { WeeklyExternalAuditWidget } from './WeeklyExternalAuditWidget';
 import {
   BEK_496_2024_AREA_THRESHOLD_M2,
   BEK_613_2026_LIMITS,
@@ -197,8 +203,12 @@ export interface ComplianceAuditPanelProps {
   buildings?: RingparkenBuildingUnit[];
   sources?: DemolitionSourceNode[];
   receptors?: ReceptorZone[];
+  observations?: AlgedonicObservation[];
   puff24h?: PuffAccumulationResult | null;
   dateIso?: string;
+  manualMachineNoiseOutputDb?: number;
+  isManualMachineNoiseOverrideActive?: boolean;
+  merkleRootSignature?: string;
 }
 
 export const ComplianceAuditPanel: React.FC<ComplianceAuditPanelProps> = ({
@@ -206,8 +216,12 @@ export const ComplianceAuditPanel: React.FC<ComplianceAuditPanelProps> = ({
   buildings = RINGPARKEN_MASTER_BUILDINGS,
   sources,
   receptors,
+  observations = [],
   puff24h = null,
   dateIso,
+  manualMachineNoiseOutputDb = 114,
+  isManualMachineNoiseOverrideActive = false,
+  merkleRootSignature,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'register' | 'incident'>(
     'register'
@@ -526,6 +540,19 @@ export const ComplianceAuditPanel: React.FC<ComplianceAuditPanelProps> = ({
             <span>Eksporter Audit JSON</span>
           </button>
         </div>
+      </div>
+
+      {/* AUTOMATISK UGERAPPORT TIL EKSTERN REVISION (STØJ, STØV & VEJR - 168 TIMER) */}
+      <div className="max-w-[1360px] mx-auto">
+        <WeeklyExternalAuditWidget
+          dateIso={dateIso ?? new Date().toISOString().slice(0, 10)}
+          sources={sources && sources.length > 0 ? sources : INITIAL_DEMOLITION_SOURCES}
+          receptors={receptors && receptors.length > 0 ? receptors : INITIAL_RECEPTOR_ZONES}
+          observations={observations}
+          manualMachineNoiseOutputDb={manualMachineNoiseOutputDb}
+          isManualMachineNoiseOverrideActive={isManualMachineNoiseOverrideActive}
+          merkleRootSignature={merkleRootSignature}
+        />
       </div>
 
       {/* UGE-OVERSKRIDELSER PR. BYGNINGSKATEGORI & S-KVOTIENT TENDENSER (PDF-FORHÅNDSVISNING) */}

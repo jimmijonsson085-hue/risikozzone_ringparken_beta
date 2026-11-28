@@ -1840,7 +1840,8 @@ export async function computeForensicSha256Hash(payload: unknown): Promise<strin
   return (
     (h1 >>> 0).toString(16).padStart(8, '0') +
     (h2 >>> 0).toString(16).padStart(8, '0') +
-    (h1 ^ h2).toString(16).padStart(8, '0')
+    ((h1 ^ h2) >>> 0).toString(16).padStart(8, '0') +
+    ((h1 + h2) >>> 0).toString(16).padStart(8, '0')
   ).repeat(2);
 }
 

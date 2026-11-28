@@ -17,6 +17,7 @@ import {
   HourlyReceptorPuffDose,
   HourlyWeatherPoint,
 } from '../types/dispersion';
+import { generateWindNoiseTechnicalAnnexPdfReport } from '../services/weatherCorrelationPdfService';
 
 export interface HeaderWeatherCorrelationD3PopupProps {
   isOpen: boolean;
@@ -215,17 +216,22 @@ export const HeaderWeatherCorrelationD3Popup: React.FC<HeaderWeatherCorrelationD
     }
   };
 
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const onSelectHourRef = useRef(onSelectHour);
+  onSelectHourRef.current = onSelectHour;
+
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     const handleMouseDown = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       if (!target) return;
       if (popupRef.current?.contains(target)) return;
       if (target.closest('[data-weather-corr-toggle="true"]')) return;
-      onClose();
+      onCloseRef.current();
     };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('mousedown', handleMouseDown);
@@ -233,7 +239,7 @@ export const HeaderWeatherCorrelationD3Popup: React.FC<HeaderWeatherCorrelationD
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('mousedown', handleMouseDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   const { hourlyData, pearsonR, pearsonDustQuotientR, wasCacheHit, cachedDatasetCount } =
     useMemo(() => {
@@ -602,7 +608,7 @@ export const HeaderWeatherCorrelationD3Popup: React.FC<HeaderWeatherCorrelationD
       .style('cursor', 'pointer')
       .on('mouseenter', (_event, d) => setHoveredHour(d))
       .on('mouseleave', () => setHoveredHour(null))
-      .on('click', (_event, d) => onSelectHour(d.hourIndex));
+      .on('click', (_event, d) => onSelectHourRef.current(d.hourIndex));
 
     // Dust Deposition bar (rose/crimson) mapped to Right Axis in µg/m² or mg/m²
     barGroups
@@ -716,7 +722,7 @@ export const HeaderWeatherCorrelationD3Popup: React.FC<HeaderWeatherCorrelationD
       .style('cursor', 'pointer')
       .on('mouseenter', (_event, d) => setHoveredHour(d))
       .on('mouseleave', () => setHoveredHour(null))
-      .on('click', (_event, d) => onSelectHour(d.hourIndex));
+      .on('click', (_event, d) => onSelectHourRef.current(d.hourIndex));
 
     // X Axis
     const xAxis = d3
@@ -818,7 +824,6 @@ export const HeaderWeatherCorrelationD3Popup: React.FC<HeaderWeatherCorrelationD
     isOpen,
     hourlyData,
     selectedHourIndex,
-    onSelectHour,
     dustScaleMode,
     dustUnitMode,
     unitFactor,
@@ -839,12 +844,12 @@ export const HeaderWeatherCorrelationD3Popup: React.FC<HeaderWeatherCorrelationD
     <div
       ref={popupRef}
       data-testid="header-weather-correlation-d3-popup"
-      className="absolute right-4 top-full mt-2 w-[560px] max-w-[96vw] rounded-lg bg-[#0B0E17] border border-cyan-400/70 shadow-2xl ring-1 ring-cyan-500/30 p-3 z-50 text-xs font-mono tabular-nums"
+      className="absolute right-4 top-full mt-2 w-[640px] max-w-[96vw] rounded-lg bg-[#0B0E17] border border-cyan-400/70 shadow-2xl ring-1 ring-cyan-500/30 p-3 z-50 text-xs font-mono tabular-nums"
       role="dialog"
       aria-label="24-timers D3.js Vejr-Korrelationsgraf mellem vindhastighed og støvdeponering"
     >
       {/* Popup Header */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <Wind className="w-4 h-4 text-cyan-400 shrink-0" />
           <span className="font-bold text-white truncate">
@@ -855,6 +860,58 @@ export const HeaderWeatherCorrelationD3Popup: React.FC<HeaderWeatherCorrelationD
           </span>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            data-testid="d3-popup-export-wind-noise-annex-pdf-btn"
+            onClick={() => {
+              const rWindToNoise = computePearson(
+                hourlyData,
+                (d) => d.windSpeedMs,
+                (d) => d.estNoiseLaeqDb
+              );
+              const rGustToNoise = computePearson(
+                hourlyData,
+                (d) => d.windGustsMs,
+                (d) => d.estNoiseLaeqDb
+              );
+              const selectedRow =
+                hourlyData.find((r) => r.hourIndex === selectedHourIndex) ?? hourlyData[0];
+              generateWindNoiseTechnicalAnnexPdfReport({
+                dateIso,
+                selectedHourLabel: selectedRow?.hourLabel ?? '12:00',
+                machineNoiseOutputDb,
+                pearsonWindToNoiseR: rWindToNoise,
+                pearsonGustToNoiseR: rGustToNoise,
+                rows: hourlyData.map((r) => {
+                  const wh = weatherHours.find((w) => w.hourIndex === r.hourIndex);
+                  return {
+                    hourIndex: r.hourIndex,
+                    hourLabel: r.hourLabel,
+                    windSpeedMs: r.windSpeedMs,
+                    windGustsMs: r.windGustsMs,
+                    windDirectionDeg: Math.round(wh?.windDirection10m ?? 245),
+                    pasquillClass: wh?.pasquillClass ?? 'D',
+                    estNoiseLaeqDb: r.estNoiseLaeqDb,
+                    estMachineLafmaxDb: Number(
+                      (
+                        r.estNoiseLaeqDb +
+                        5.0 +
+                        Math.max(0, (machineNoiseOutputDb - 108) * 0.65)
+                      ).toFixed(1)
+                    ),
+                    refractionDeltaDb: Number(
+                      ((r.windSpeedMs - 4.0) * 0.45).toFixed(1)
+                    ),
+                  };
+                }),
+              });
+            }}
+            className="px-2 py-0.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap"
+            title="Generér og download teknisk bilag til miljøtilsyn (PDF) med korrelation mellem vinddata og maskinstøj"
+          >
+            <FileDown className="w-3.5 h-3.5 shrink-0" />
+            <span>Teknisk Bilag PDF (Vind × Støj)</span>
+          </button>
           {onExportForensicPdf && (
             <button
               type="button"

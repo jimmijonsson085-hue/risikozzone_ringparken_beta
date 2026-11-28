@@ -131,6 +131,12 @@ import {
   computeWindDirectionalNoiseCells,
 } from './WindDirectionalNoiseHeatmapLayer';
 import { computeHighWindNeighborNoisePulseTargets } from '../utils/neighborNoisePulse';
+import {
+  AcousticHazardHeatmapCell,
+  AcousticHeatmapMetricMode,
+  computeAcousticHazardHeatmap,
+} from '../utils/acousticHazardHeatmap';
+import { computeAcousticPlumeVisualization } from '../utils/acousticPlumeVisualization';
 
 export type MapOverlayWindowId =
   | 'wind_hud'
@@ -407,6 +413,8 @@ interface DispersionMapProps {
   onAcknowledgeSimultaneousP1?: () => void;
   onOpenSimultaneousModal?: () => void;
   machineNoiseOutputDb?: number;
+  showAcousticHazardHeatmap?: boolean;
+  onToggleAcousticHazardHeatmap?: (next?: boolean) => void;
 }
 
 const RISK_COLORS: Record<
@@ -615,6 +623,8 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
   onAcknowledgeSimultaneousP1,
   onOpenSimultaneousModal,
   machineNoiseOutputDb = 114,
+  showAcousticHazardHeatmap: externalShowAcousticHazardHeatmap,
+  onToggleAcousticHazardHeatmap,
 }) => {
   const [internalMapOnly, setInternalMapOnly] = useState<boolean>(false);
   const effectiveMapOnly = isMapOnly !== undefined ? isMapOnly : internalMapOnly;
@@ -663,6 +673,18 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
   const eStopToastTimerRef = useRef<number | null>(null);
   const [showHighWindCorrelationHud, setShowHighWindCorrelationHud] = useState<boolean>(true);
   const [showSource85DbWavefronts, setShowSource85DbWavefronts] = useState<boolean>(true);
+  const [showWavefrontInspectorHud, setShowWavefrontInspectorHud] = useState<boolean>(false);
+  const [inspectedWavefrontSourceId, setInspectedWavefrontSourceId] = useState<string | null>(null);
+  const [hoveredWavefrontSourceId, setHoveredWavefrontSourceId] = useState<string | null>(null);
+  const [hoveredPlumeZoneTooltip, setHoveredPlumeZoneTooltip] = useState<{
+    zone: PlumePolygonZone;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [gmpPlumeTooltip, setGmpPlumeTooltip] = useState<{
+    zone: PlumePolygonZone;
+    position: LatLngPoint;
+  } | null>(null);
   const [showEvacuationFlowAnimation, setShowEvacuationFlowAnimation] = useState<boolean>(true);
   const [showWeatherCorrelationHud, setShowWeatherCorrelationHud] = useState<boolean>(true);
   const visibleBuildings = useMemo(
@@ -979,6 +1001,33 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
       setInternalShowWeatherCorrelationHeatmap(nextVal);
     }
   };
+  const [internalShowAcousticHazardHeatmap, setInternalShowAcousticHazardHeatmap] =
+    useState<boolean>(true);
+  const showAcousticHazardHeatmapLayer =
+    externalShowAcousticHazardHeatmap !== undefined
+      ? externalShowAcousticHazardHeatmap
+      : internalShowAcousticHazardHeatmap;
+  const setShowAcousticHazardHeatmapLayer = (
+    updater: boolean | ((prev: boolean) => boolean)
+  ) => {
+    const nextVal =
+      typeof updater === 'function'
+        ? updater(showAcousticHazardHeatmapLayer)
+        : updater;
+    if (onToggleAcousticHazardHeatmap) {
+      onToggleAcousticHazardHeatmap(nextVal);
+    } else {
+      setInternalShowAcousticHazardHeatmap(nextVal);
+    }
+  };
+  const [showAcousticHazardHud, setShowAcousticHazardHud] = useState<boolean>(true);
+  const [showAcousticPlumeVisualization, setShowAcousticPlumeVisualization] =
+    useState<boolean>(true);
+  const [showAcousticPlumeHud, setShowAcousticPlumeHud] = useState<boolean>(false);
+  const [acousticHeatmapMetricMode, setAcousticHeatmapMetricMode] =
+    useState<AcousticHeatmapMetricMode>('lafmax');
+  const [acousticHeatmapOpacityPct, setAcousticHeatmapOpacityPct] = useState<number>(80);
+  const [hoveredAcousticCellId, setHoveredAcousticCellId] = useState<string | null>(null);
   const [overrideNoiseWindFromDeg, setOverrideNoiseWindFromDeg] = useState<number | null>(null);
   const [selectedHeatmapNeighborBlockIds, setSelectedHeatmapNeighborBlockIds] = useState<
     string[]
@@ -1038,6 +1087,53 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
       latest6hGustSummary.windowHours,
       machineNoiseOutputDb,
     ]
+  );
+
+  const acousticHazardHeatmapData = useMemo(
+    () =>
+      computeAcousticHazardHeatmap({
+        sources: visibleSources,
+        receptors,
+        currentWeather,
+        weatherHours,
+        baseMachineLwaDb: machineNoiseOutputDb,
+        metricMode: acousticHeatmapMetricMode,
+        gridCols: 18,
+        gridRows: 13,
+        loopProgress: isAnimatingPlumeRoute ? plumeRouteProgress : undefined,
+        isPlayingLoop: isAnimatingPlumeRoute,
+      }),
+    [
+      visibleSources,
+      receptors,
+      currentWeather,
+      weatherHours,
+      machineNoiseOutputDb,
+      acousticHeatmapMetricMode,
+      isAnimatingPlumeRoute,
+      plumeRouteProgress,
+    ]
+  );
+
+  const hoveredAcousticCell: AcousticHazardHeatmapCell | null = useMemo(() => {
+    if (!hoveredAcousticCellId) return null;
+    return (
+      acousticHazardHeatmapData.renderedCells.find(
+        (c) => c.id === hoveredAcousticCellId
+      ) ?? null
+    );
+  }, [hoveredAcousticCellId, acousticHazardHeatmapData.renderedCells]);
+
+  const acousticPlumeVizData = useMemo(
+    () =>
+      computeAcousticPlumeVisualization({
+        sources: visibleSources,
+        observations,
+        currentWeather,
+        manualMachineNoiseOutputDb: machineNoiseOutputDb,
+        isManualMachineNoiseOverrideActive: typeof machineNoiseOutputDb === 'number',
+      }),
+    [visibleSources, observations, currentWeather, machineNoiseOutputDb]
   );
 
   useEffect(() => {
@@ -1147,8 +1243,8 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
     currentWeather,
     dateIso: selectedDateIso || puff24h.dateIso,
     selectedHourIndex: currentWeather.hourIndex,
-    timelineProgress: (plumeRouteProgress ?? 0) + forecast6hProgress,
-    isPlayingTimeline: Boolean(isAnimatingPlumeRoute) || isPlaying6hDustForecast,
+    timelineProgress: plumeRouteProgress ?? 0,
+    isPlayingTimeline: Boolean(isAnimatingPlumeRoute),
     onFocusNodeOnMap: handleFocusMyceliumNode,
   });
 
@@ -1163,7 +1259,6 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
   }, [
     currentWeather.hourIndex,
     selectedDateIso,
-    forecast6hProgress,
     plumeRouteProgress,
     comparisonHourAIndex,
     comparisonHourBIndex,
@@ -1233,7 +1328,7 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
     return Math.hypot(dLat, dLng);
   };
 
-  // Item 6: > 85 dB acoustic wavefront propagation from active demolition sources into 'støj-følsomme' neighbor zones
+  // Item 8: Interactive > 85 dB Acoustic Impulse-Wavefront propagation from active demolition sources into 'støj-følsomme' neighbor zones
   const sourceWavefrontTargets = useMemo(() => {
     const sensitiveReceptors = receptors.filter(
       (r) =>
@@ -1243,15 +1338,44 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
     );
     const activeSrcList = visibleSources.filter((s) => s.active);
     const windDownwindDeg = (currentWeather.windDirection10m + 180) % 360;
+    const windSpeedMs = currentWeather.windSpeed10m ?? 0;
     const gustBonusDb = Math.max(0, (currentWeather.windGusts10m - 6) * 0.42);
-    const effectiveLwa = Math.max(85, machineNoiseOutputDb || 114);
+    const windRefractionBoostDb = Number((2.5 + gustBonusDb).toFixed(1));
+    const baseMachineLwa = machineNoiseOutputDb > 0 ? machineNoiseOutputDb : 114;
+    const mLat = 111320;
+    const mLng = 111320 * Math.cos((RINGPARKEN_CENTER.lat * Math.PI) / 180);
+
+    const buildWavefrontZonePolygon = (
+      origin: LatLngPoint,
+      baseRadiusM: number
+    ): LatLngPoint[] => {
+      const steps = 32;
+      const stretchM = baseRadiusM * Math.min(0.45, 0.14 + windSpeedMs * 0.022);
+      const pts: LatLngPoint[] = [];
+      for (let i = 0; i <= steps; i++) {
+        const angleDeg = (i / steps) * 360;
+        const diffRad = ((angleDeg - windDownwindDeg) * Math.PI) / 180;
+        const rM = Math.max(12, baseRadiusM + Math.cos(diffRad) * stretchM);
+        const angRad = (angleDeg * Math.PI) / 180;
+        pts.push({
+          lat: origin.lat + (rM * Math.cos(angRad)) / mLat,
+          lng: origin.lng + (rM * Math.sin(angRad)) / mLng,
+        });
+      }
+      return pts;
+    };
 
     return activeSrcList
       .map((src) => {
+        const sourceLwaDb =
+          typeof src.baseSoundPowerLwaDb === 'number'
+            ? Math.max(baseMachineLwa, src.baseSoundPowerLwaDb)
+            : baseMachineLwa;
+
         const hits = sensitiveReceptors
           .map((rec) => {
-            const dLatM = (rec.center.lat - src.position.lat) * 111320;
-            const dLngM = (rec.center.lng - src.position.lng) * 63180;
+            const dLatM = (rec.center.lat - src.position.lat) * mLat;
+            const dLngM = (rec.center.lng - src.position.lng) * mLng;
             const distM = Math.max(8, Math.hypot(dLatM, dLngM));
             if (distM > 280) return null;
 
@@ -1260,10 +1384,10 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
             const downwindFactor = Math.max(0, Math.cos((angleDiff * Math.PI) / 180));
             const estimatedLafmaxDb = Number(
               (
-                effectiveLwa -
+                sourceLwaDb -
                 20 * Math.log10(distM) -
                 6.5 +
-                downwindFactor * (2.5 + gustBonusDb)
+                downwindFactor * windRefractionBoostDb
               ).toFixed(1)
             );
             return {
@@ -1278,19 +1402,62 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
 
         const peakLafmaxDb =
           hits[0]?.estimatedLafmaxDb ??
-          Number((effectiveLwa - 24 + gustBonusDb).toFixed(1));
+          Number((sourceLwaDb - 24 + gustBonusDb).toFixed(1));
+        const exceeds85Db = sourceLwaDb > 85 && (hits.length > 0 || peakLafmaxDb > 85);
+
+        const calcRadiusForThreshold = (thresholdDb: number) =>
+          Math.max(
+            14,
+            Math.min(
+              260,
+              Math.round(Math.pow(10, (sourceLwaDb - thresholdDb - 6.5) / 20))
+            )
+          );
+
+        const concentricZones = [
+          {
+            thresholdDb: 85,
+            tierLabel: '85 dB(A) Impulszone',
+            strokeHex: '#facc15',
+            fillHex: '#eab308',
+            radiusM: calcRadiusForThreshold(85),
+            polygon: buildWavefrontZonePolygon(src.position, calcRadiusForThreshold(85)),
+          },
+          {
+            thresholdDb: 90,
+            tierLabel: '90 dB(A) Høj-Impuls',
+            strokeHex: '#fb923c',
+            fillHex: '#f97316',
+            radiusM: calcRadiusForThreshold(90),
+            polygon: buildWavefrontZonePolygon(src.position, calcRadiusForThreshold(90)),
+          },
+          {
+            thresholdDb: 95,
+            tierLabel: '95 dB(A) Nærzone-Spids',
+            strokeHex: '#f43f5e',
+            fillHex: '#e11d48',
+            radiusM: calcRadiusForThreshold(95),
+            polygon: buildWavefrontZonePolygon(src.position, calcRadiusForThreshold(95)),
+          },
+        ];
+
         return {
           source: src,
+          sourceLwaDb,
+          windRefractionBoostDb,
+          windDownwindDeg,
           peakLafmaxDb,
-          exceeds85Db: hits.length > 0 || peakLafmaxDb > 85,
-          impactedReceptors: hits.slice(0, 4),
+          exceeds85Db,
+          impactedReceptors: hits.slice(0, 5),
+          concentricZones,
         };
       })
-      .filter((entry) => entry.exceeds85Db && entry.impactedReceptors.length > 0);
+      .filter((entry) => entry.exceeds85Db);
   }, [
     receptors,
     visibleSources,
     currentWeather.windDirection10m,
+    currentWeather.windSpeed10m,
     currentWeather.windGusts10m,
     machineNoiseOutputDb,
   ]);
@@ -2740,23 +2907,26 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
     receptorExposures,
   ]);
 
-  // Continuous 60fps Animation Loop for 6-Hour Dust Movement Forecast (+0t -> +6t)
+  // Throttled Animation Loop for 6-Hour Dust Movement Forecast (+0t -> +6t) to keep 2D map interactive
   useEffect(() => {
     if (!show6hDustForecast || !isPlaying6hDustForecast) return;
     let rafId: number | null = null;
-    let lastTs = performance.now();
+    let lastCommitTs = performance.now();
 
     const speedMultiplier =
       forecast6hSpeed === '2x' ? 1.55 : forecast6hSpeed === '0.5x' ? 0.42 : 0.85;
 
     const tick = (now: number) => {
-      const dtSec = Math.min(0.1, (now - lastTs) / 1000);
-      lastTs = now;
-      setForecast6hProgress((prev) => {
-        const next = prev + dtSec * speedMultiplier;
-        return next > 6.0 ? next - 6.0 : next;
-      });
-      setPuffWavePhase((prev) => (prev + dtSec * 0.95) % 1);
+      const elapsedMs = now - lastCommitTs;
+      if (elapsedMs >= 65) {
+        const dtSec = Math.min(0.25, elapsedMs / 1000);
+        lastCommitTs = now;
+        setForecast6hProgress((prev) => {
+          const next = prev + dtSec * speedMultiplier;
+          return next > 6.0 ? next - 6.0 : next;
+        });
+        setPuffWavePhase((prev) => (prev + dtSec * 0.95) % 1);
+      }
       rafId = window.requestAnimationFrame(tick);
     };
 
@@ -4951,20 +5121,89 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
             </span>
           </button>
 
+          <div className="inline-flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              data-testid="toggle-source-85db-wavefronts-btn"
+              onClick={() => setShowSource85DbWavefronts((v) => !v)}
+              className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                showSource85DbWavefronts && sourceWavefrontTargets.length > 0
+                  ? 'bg-rose-500/20 text-rose-200 border border-rose-400/70 font-semibold'
+                  : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+              }`}
+              title="Vis/skjul interaktiv Acoustic Impulse-Wavefront (> 85 dB) med koncentriske trykbølgezoner fra aktive nedrivningskilder"
+            >
+              <Waves className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+              <span className="font-mono tabular-nums">
+                Acoustic Impulse-Wavefront (&gt;85 dB · {sourceWavefrontTargets.length})
+              </span>
+            </button>
+            {showSource85DbWavefronts && sourceWavefrontTargets.length > 0 && (
+              <button
+                type="button"
+                data-testid="toggle-wavefront-inspector-hud-btn"
+                onClick={() => {
+                  setShowWavefrontInspectorHud((v) => !v);
+                  if (!inspectedWavefrontSourceId && sourceWavefrontTargets[0]) {
+                    setInspectedWavefrontSourceId(sourceWavefrontTargets[0].source.id);
+                  }
+                }}
+                className={`px-2 py-1.5 rounded text-[11px] font-mono font-bold border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  showWavefrontInspectorHud
+                    ? 'bg-rose-500 text-white border-rose-200'
+                    : 'bg-rose-950/80 text-rose-200 border-rose-500/60 hover:bg-rose-900/90'
+                }`}
+                title="Åbn/luk interaktiv Acoustic Impulse-Wavefront inspektør"
+              >
+                Zoner
+              </button>
+            )}
+          </div>
+
           <button
             type="button"
-            data-testid="toggle-source-85db-wavefronts-btn"
-            onClick={() => setShowSource85DbWavefronts((v) => !v)}
+            data-testid="toggle-acoustic-hazard-heatmap-btn"
+            onClick={() => {
+              setShowAcousticHazardHeatmapLayer((prev) => {
+                const next = !prev;
+                if (next) setShowAcousticHazardHud(true);
+                return next;
+              });
+            }}
             className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              showSource85DbWavefronts && sourceWavefrontTargets.length > 0
-                ? 'bg-rose-500/20 text-rose-200 border border-rose-400/70 font-semibold'
+              showAcousticHazardHeatmapLayer
+                ? 'bg-rose-500/25 text-rose-100 border border-rose-400/80 font-bold shadow-xs'
                 : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
             }`}
-            title="Vis/skjul CSS-animeret akustisk trykbølge (> 85 dB) fra aktive nedrivningskilder ind mod støj-følsomme nabozoner"
+            title="Dynamisk 2D Akustisk Fare-Heatmap baseret på aktive maskiners L_WA og lokale vind-/termiske refraktionsforhold"
           >
-            <Waves className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+            <Volume2 className="w-3.5 h-3.5 shrink-0 text-rose-400" />
             <span className="font-mono tabular-nums">
-              Støjbølger &gt;85 dB ({sourceWavefrontTargets.length})
+              Acoustic Hazard Heatmap ({acousticHazardHeatmapData.peakGridLafmaxDb.toFixed(0)} dB)
+            </span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="toggle-acoustic-plume-viz-btn"
+            onClick={() => {
+              setShowAcousticPlumeVisualization((prev) => {
+                const next = !prev;
+                if (next) setShowAcousticPlumeHud(true);
+                else setShowAcousticPlumeHud(false);
+                return next;
+              });
+            }}
+            className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              showAcousticPlumeVisualization
+                ? 'bg-cyan-500/20 text-cyan-100 border border-cyan-400/80 font-bold'
+                : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+            }`}
+            title="Akustisk Fane-Visualisering i 2D baseret på maskinernes placering og lokal vindretning med visuel feedback til naboklager"
+          >
+            <Navigation className="w-3.5 h-3.5 shrink-0 text-cyan-300" />
+            <span className="font-mono tabular-nums">
+              Akustisk Fane ({acousticPlumeVizData.complaintsInsidePlumeCount}/{acousticPlumeVizData.complaintsTotalCount} klager)
             </span>
           </button>
 
@@ -6722,15 +6961,16 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
               {receptors.map((rec) => {
                 const exp = exposureByReceptorId[rec.id];
                 const isHit = exp && (exp.riskLevel === 'red' || exp.riskLevel === 'orange');
+                const pulse85Target = highWind85DbPulseByReceptorId[rec.id];
                 return (
                   <Polygon
                     key={`gmp-rec-poly-${rec.id}`}
                     paths={rec.polygon}
-                    strokeColor={isHit ? '#f43f5e' : '#38bdf8'}
-                    strokeOpacity={0.9}
-                    strokeWeight={isHit ? 2.5 : 1.5}
-                    fillColor={isHit ? '#f43f5e' : '#0284c7'}
-                    fillOpacity={isHit ? 0.22 : 0.12}
+                    strokeColor={pulse85Target ? '#f43f5e' : isHit ? '#f43f5e' : '#38bdf8'}
+                    strokeOpacity={pulse85Target ? 0.98 : 0.9}
+                    strokeWeight={pulse85Target ? 3.5 : isHit ? 2.5 : 1.5}
+                    fillColor={pulse85Target ? '#f43f5e' : isHit ? '#f43f5e' : '#0284c7'}
+                    fillOpacity={pulse85Target ? 0.36 : isHit ? 0.22 : 0.12}
                     onClick={() => onSelectReceptor(rec.id)}
                   />
                 );
@@ -7128,39 +7368,79 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                   </AdvancedMarker>
                 ))}
 
-              {/* Item 6: > 85 dB Demolition Source Acoustic Wavefront Propagation on Google Maps */}
+              {/* Item 8: Interactive > 85 dB Acoustic Impulse-Wavefront Propagation & Impact Zones on Google Maps */}
               {showSource85DbWavefronts &&
-                sourceWavefrontTargets.map((entry) => (
-                  <React.Fragment key={`gmp-src-wavefront-${entry.source.id}`}>
-                    <AdvancedMarker position={entry.source.position}>
-                      <div
-                        className="map-gmp-source-wavefront-wrap"
-                        data-testid={`gmp-source-85db-wavefront-${entry.source.code}`}
-                        style={
-                          {
-                            '--source-wave-dur': `${Math.max(
-                              0.85,
-                              1.75 - Math.max(0, entry.peakLafmaxDb - 85) * 0.04
-                            ).toFixed(2)}s`,
-                          } as React.CSSProperties
-                        }
+                sourceWavefrontTargets.map((entry) => {
+                  const isFocused =
+                    inspectedWavefrontSourceId === entry.source.id ||
+                    hoveredWavefrontSourceId === entry.source.id;
+                  return (
+                    <React.Fragment key={`gmp-src-wavefront-${entry.source.id}`}>
+                      {entry.concentricZones.map((cz) => (
+                        <Polygon
+                          key={`gmp-wave-zone-${entry.source.id}-${cz.thresholdDb}`}
+                          paths={cz.polygon}
+                          strokeColor={cz.strokeHex}
+                          strokeOpacity={isFocused ? 0.95 : 0.65}
+                          strokeWeight={isFocused ? 2.5 : cz.thresholdDb === 95 ? 2 : 1.3}
+                          fillColor={cz.fillHex}
+                          fillOpacity={
+                            cz.thresholdDb === 95
+                              ? isFocused
+                                ? 0.24
+                                : 0.14
+                              : cz.thresholdDb === 90
+                              ? isFocused
+                                ? 0.16
+                                : 0.09
+                              : isFocused
+                              ? 0.1
+                              : 0.05
+                          }
+                          onClick={() => {
+                            setInspectedWavefrontSourceId(entry.source.id);
+                            setShowWavefrontInspectorHud(true);
+                            onSelectSource(entry.source.id);
+                          }}
+                        />
+                      ))}
+                      <AdvancedMarker
+                        position={entry.source.position}
+                        onClick={() => {
+                          setInspectedWavefrontSourceId(entry.source.id);
+                          setShowWavefrontInspectorHud(true);
+                          onSelectSource(entry.source.id);
+                        }}
                       >
-                        <span className="map-gmp-source-wavefront-ring map-gmp-source-wavefront-ring--1" />
-                        <span className="map-gmp-source-wavefront-ring map-gmp-source-wavefront-ring--2" />
-                        <span className="map-gmp-source-wavefront-ring map-gmp-source-wavefront-ring--3" />
-                      </div>
-                    </AdvancedMarker>
-                    {entry.impactedReceptors.map((hit) => (
-                      <Polyline
-                        key={`gmp-src-wave-ray-${entry.source.id}-${hit.receptor.id}`}
-                        path={[entry.source.position, hit.receptor.center]}
-                        strokeColor="#f43f5e"
-                        strokeOpacity={0.68}
-                        strokeWeight={2}
-                      />
-                    ))}
-                  </React.Fragment>
-                ))}
+                        <div
+                          className="map-gmp-source-wavefront-wrap pointer-events-auto cursor-pointer"
+                          data-testid={`gmp-source-85db-wavefront-${entry.source.code}`}
+                          style={
+                            {
+                              '--source-wave-dur': `${Math.max(
+                                0.85,
+                                1.75 - Math.max(0, entry.peakLafmaxDb - 85) * 0.04
+                              ).toFixed(2)}s`,
+                            } as React.CSSProperties
+                          }
+                        >
+                          <span className="map-gmp-source-wavefront-ring map-gmp-source-wavefront-ring--1" />
+                          <span className="map-gmp-source-wavefront-ring map-gmp-source-wavefront-ring--2" />
+                          <span className="map-gmp-source-wavefront-ring map-gmp-source-wavefront-ring--3" />
+                        </div>
+                      </AdvancedMarker>
+                      {entry.impactedReceptors.map((hit) => (
+                        <Polyline
+                          key={`gmp-src-wave-ray-${entry.source.id}-${hit.receptor.id}`}
+                          path={[entry.source.position, hit.receptor.center]}
+                          strokeColor="#f43f5e"
+                          strokeOpacity={isFocused ? 0.92 : 0.68}
+                          strokeWeight={isFocused ? 3 : 2}
+                        />
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
 
               {/* Visuel 'puls'-effekt på berørte naboblokke (>85 dB(A) maskinstøj under højvindsscenarier) på Google Maps */}
               {highWind85DbNeighborPulseTargets.map((item) => (
@@ -7487,25 +7767,163 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                   />
                 ))}
 
-              {/* Plume / 24h Puff Risk Zone Polygons (Hidden in pure Differens-Heatmap mode so only the direct concentration difference is shown) */}
+              {/* Dynamic 2D Acoustic Hazard Heatmap Overlay (Google Maps Mode) */}
+              {showAcousticHazardHeatmapLayer && (
+                <>
+                  {acousticHazardHeatmapData.renderedCells.map((cell) => {
+                    const isHovered = hoveredAcousticCellId === cell.id;
+                    const opacityScale = acousticHeatmapOpacityPct / 100;
+                    return (
+                      <Polygon
+                        key={`gmp-ahm-${cell.id}`}
+                        paths={cell.polygon}
+                        strokeColor={isHovered ? '#ffffff' : cell.strokeHex}
+                        strokeOpacity={isHovered ? 0.95 : 0.45 * opacityScale}
+                        strokeWeight={isHovered ? 1.8 : 0.6}
+                        fillColor={cell.fillHex}
+                        fillOpacity={Math.min(0.78, cell.gmpFillOpacity * opacityScale)}
+                        onMouseOver={() => setHoveredAcousticCellId(cell.id)}
+                        onMouseOut={() =>
+                          setHoveredAcousticCellId((prev) => (prev === cell.id ? null : prev))
+                        }
+                        onClick={() => {
+                          if (cell.dominantSourceId) onSelectSource(cell.dominantSourceId);
+                        }}
+                      />
+                    );
+                  })}
+                  {acousticHazardHeatmapData.hazardZoneContours.map((contour) => {
+                    const opacityScale = acousticHeatmapOpacityPct / 100;
+                    const isCritical = contour.thresholdDb === 85;
+                    return (
+                      <Polygon
+                        key={`gmp-ahm-contour-${contour.id}`}
+                        paths={contour.polygon}
+                        strokeColor={contour.strokeHex}
+                        strokeOpacity={Math.min(0.95, (isCritical ? 0.92 : 0.72) * opacityScale)}
+                        strokeWeight={isCritical ? 2.2 : 1.4}
+                        fillColor={contour.fillHex}
+                        fillOpacity={(isCritical ? 0.16 : 0.08) * opacityScale}
+                        clickable={false}
+                      />
+                    );
+                  })}
+                  {acousticHazardHeatmapData.activeSourceSummaries.map((srcSum) => (
+                    <Polyline
+                      key={`gmp-ahm-refr-${srcSum.sourceId}`}
+                      path={[srcSum.position, srcSum.refractionArrowTip]}
+                      strokeColor="#fda4af"
+                      strokeOpacity={0.9}
+                      strokeWeight={2.2}
+                    />
+                  ))}
+                </>
+              )}
+
+              {/* Akustisk Fane-Visualisering (2D Impulsstøj-Fane + Visuel Feedback til Naboklager, Google Maps Mode) */}
+              {showAcousticPlumeVisualization && (
+                <>
+                  {acousticPlumeVizData.allBandsSorted.map((band) => (
+                    <Polygon
+                      key={`gmp-aplume-${band.id}`}
+                      paths={band.polygon}
+                      strokeColor={band.strokeHex}
+                      strokeOpacity={band.thresholdDb === 85 ? 0.92 : 0.68}
+                      strokeWeight={band.thresholdDb === 85 ? 2.2 : 1.3}
+                      fillColor={band.fillHex}
+                      fillOpacity={band.fillOpacity}
+                      clickable={false}
+                    />
+                  ))}
+                  {acousticPlumeVizData.activeSourceFans.map((fan) => (
+                    <Polyline
+                      key={`gmp-aplume-axis-${fan.sourceId}`}
+                      path={[fan.position, fan.axisTip]}
+                      strokeColor="#38bdf8"
+                      strokeOpacity={0.85}
+                      strokeWeight={1.8}
+                    />
+                  ))}
+                  {acousticPlumeVizData.complaintFeedbacks
+                    .filter((fb) => fb.isInsideAcousticPlume)
+                    .map((fb) => (
+                      <Polyline
+                        key={`gmp-aplume-fb-${fb.observationId}`}
+                        path={[fb.nearestSourcePosition, fb.position]}
+                        strokeColor={fb.isInsideCritical85DbPlume ? '#f43f5e' : '#fbbf24'}
+                        strokeOpacity={0.95}
+                        strokeWeight={2.0}
+                      />
+                    ))}
+                </>
+              )}
+
+              {/* Plume / 24h Puff Risk Zone Polygons with Interactive S-Quotient Tooltip (Google Maps Mode) */}
               {!isDifferenceHeatmapMode &&
                 filteredActivePolygons.map((zone) => {
                   const style = RISK_COLORS[zone.level];
+                  const midPt =
+                    zone.polygon[Math.floor(zone.polygon.length / 2)] || zone.polygon[0];
                   return (
                     <Polygon
                       key={`gmp-plume-${zone.id}`}
                       paths={zone.polygon}
-                      strokeColor={style.stroke}
+                      strokeColor={
+                        gmpPlumeTooltip?.zone.id === zone.id ? '#ffffff' : style.stroke
+                      }
                       strokeOpacity={(showHeatmapComparison ? 0.35 : 0.85) * crossFadeProgress}
-                      strokeWeight={zone.level === 'red' ? 2 : 1.2}
+                      strokeWeight={
+                        gmpPlumeTooltip?.zone.id === zone.id
+                          ? 2.8
+                          : zone.level === 'red'
+                          ? 2
+                          : 1.2
+                      }
                       fillColor={style.fill}
                       fillOpacity={
                         (showHeatmapComparison ? style.fillOpacity * 0.35 : style.fillOpacity) *
                         crossFadeProgress
                       }
+                      onMouseOver={() => {
+                        if (midPt) setGmpPlumeTooltip({ zone, position: midPt });
+                      }}
+                      onMouseOut={() => {
+                        setGmpPlumeTooltip((prev) =>
+                          prev?.zone.id === zone.id ? null : prev
+                        );
+                      }}
+                      onClick={() => {
+                        if (midPt) setGmpPlumeTooltip({ zone, position: midPt });
+                      }}
                     />
                   );
                 })}
+
+              {gmpPlumeTooltip && (
+                <InfoWindow
+                  position={gmpPlumeTooltip.position}
+                  onCloseClick={() => setGmpPlumeTooltip(null)}
+                >
+                  <div
+                    data-testid="gmp-plume-zone-s-tooltip"
+                    className="text-slate-900 font-mono text-[11px] space-y-1 p-0.5 max-w-[230px]"
+                  >
+                    <div className="font-bold text-slate-950 flex items-center justify-between gap-2">
+                      <span>{gmpPlumeTooltip.zone.sourceName}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-900 font-extrabold">
+                        S = {gmpPlumeTooltip.zone.maxSumQuotient.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="text-slate-700">
+                      {gmpPlumeTooltip.zone.label} ({gmpPlumeTooltip.zone.sumQuotientRange})
+                    </div>
+                    <div className="text-slate-600 text-[10px]">
+                      Rækkevidde {Math.round(gmpPlumeTooltip.zone.downwindDistanceMeters)} m ·
+                      Retning {Math.round(gmpPlumeTooltip.zone.plumeDirectionDeg)}°
+                    </div>
+                  </div>
+                </InfoWindow>
+              )}
 
               {/* HEATMAP-SAMMENLIGNING & DIFFERENS-HEATMAP (T_A vs T_B) ON GOOGLE MAPS */}
               {showHeatmapComparison && heatmapComparison && (
@@ -9376,64 +9794,370 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
               </g>
             )}
 
-            {/* Item 6: CSS-Animated Acoustic Wavefront (> 85 dB) from Active Demolition Sources into 'støj-følsomme' Neighbor Zones */}
+            {/* Dynamic 2D 'Acoustic Hazard Heatmap' Spatial Field (Active L_WA + Wind & Thermal Refraction) */}
+            {showAcousticHazardHeatmapLayer && (
+              <g data-testid="svg-acoustic-hazard-heatmap-layer">
+                {acousticHazardHeatmapData.renderedCells.map((cell) => {
+                  const isHovered = hoveredAcousticCellId === cell.id;
+                  const opacityScale = acousticHeatmapOpacityPct / 100;
+                  return (
+                    <polygon
+                      key={`svg-ahm-${cell.id}`}
+                      points={polygonToSvgPoints(cell.polygon)}
+                      fill={cell.fillHex}
+                      fillOpacity={Math.min(0.76, cell.svgFillOpacity * opacityScale)}
+                      stroke={isHovered ? '#ffffff' : cell.strokeHex}
+                      strokeWidth={isHovered ? 1.5 : 0.45}
+                      strokeOpacity={isHovered ? 0.95 : 0.35 * opacityScale}
+                      className="cursor-crosshair transition-opacity"
+                      onMouseEnter={() => setHoveredAcousticCellId(cell.id)}
+                      onMouseLeave={() =>
+                        setHoveredAcousticCellId((prev) => (prev === cell.id ? null : prev))
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (cell.dominantSourceId) onSelectSource(cell.dominantSourceId);
+                      }}
+                    />
+                  );
+                })}
+
+                {/* Wind-Refracted Iso-dB Acoustic Hazard Contours (65 / 75 / 85 dB) */}
+                <g className="pointer-events-none" data-testid="svg-acoustic-hazard-contours">
+                  {acousticHazardHeatmapData.hazardZoneContours.map((contour) => {
+                    const opacityScale = acousticHeatmapOpacityPct / 100;
+                    const isCritical = contour.thresholdDb === 85;
+                    return (
+                      <polygon
+                        key={`svg-ahm-contour-${contour.id}`}
+                        points={polygonToSvgPoints(contour.polygon)}
+                        fill={contour.fillHex}
+                        fillOpacity={(isCritical ? 0.14 : 0.06) * opacityScale}
+                        stroke={contour.strokeHex}
+                        strokeWidth={isCritical ? 1.8 : 1.2}
+                        strokeDasharray={
+                          contour.thresholdDb === 85
+                            ? undefined
+                            : contour.thresholdDb === 75
+                            ? '6 3'
+                            : '3 4'
+                        }
+                        strokeOpacity={Math.min(0.95, (isCritical ? 0.92 : 0.72) * opacityScale)}
+                      />
+                    );
+                  })}
+                </g>
+
+                {/* Downwind Wind-Refraction Propagation Vectors per Active Source */}
+                <g className="pointer-events-none">
+                  {acousticHazardHeatmapData.activeSourceSummaries.map((srcSum) => {
+                    const sp = projectLatLng(srcSum.position);
+                    const tp = projectLatLng(srcSum.refractionArrowTip);
+                    const mx = sp.x + (tp.x - sp.x) * 0.65;
+                    const my = sp.y + (tp.y - sp.y) * 0.65;
+                    return (
+                      <g key={`svg-ahm-vec-${srcSum.sourceId}`}>
+                        <line
+                          x1={sp.x}
+                          y1={sp.y}
+                          x2={tp.x}
+                          y2={tp.y}
+                          stroke="#fda4af"
+                          strokeWidth={1.8}
+                          strokeDasharray="5 3"
+                          strokeOpacity={0.85}
+                        />
+                        <circle
+                          cx={tp.x}
+                          cy={tp.y}
+                          r={3.2}
+                          fill="#fb7185"
+                          stroke="#ffffff"
+                          strokeWidth={1}
+                        />
+                        <g transform={`translate(${mx}, ${my - 9})`}>
+                          <rect
+                            x={-48}
+                            y={-7}
+                            width={96}
+                            height={13}
+                            rx={2}
+                            fill="#0f172a"
+                            fillOpacity={0.88}
+                            stroke="#fb7185"
+                            strokeWidth={0.8}
+                          />
+                          <text
+                            x={0}
+                            y={2.5}
+                            textAnchor="middle"
+                            className="fill-rose-200 text-[10px] font-mono font-bold tabular-nums"
+                          >
+                            {srcSum.effectiveLwaDb.toFixed(0)}dB · +
+                            {Math.max(0, srcSum.maxDownwindRefractionDb).toFixed(1)}Δ
+                          </text>
+                        </g>
+                      </g>
+                    );
+                  })}
+                </g>
+
+                {/* Live Hover Telemetry Callout for Acoustic Heatmap Grid Cell */}
+                {hoveredAcousticCell &&
+                  (() => {
+                    const hp = projectLatLng(hoveredAcousticCell.center);
+                    const valDb =
+                      acousticHeatmapMetricMode === 'laeq'
+                        ? hoveredAcousticCell.laeqDb
+                        : hoveredAcousticCell.lafmaxDb;
+                    return (
+                      <g
+                        transform={`translate(${hp.x}, ${hp.y - 26})`}
+                        className="pointer-events-none"
+                      >
+                        <rect
+                          x={-98}
+                          y={-22}
+                          width={196}
+                          height={34}
+                          rx={3}
+                          fill="#090d16"
+                          fillOpacity={0.96}
+                          stroke={hoveredAcousticCell.strokeHex}
+                          strokeWidth={1.3}
+                        />
+                        <text
+                          x={0}
+                          y={-7}
+                          textAnchor="middle"
+                          className="fill-white text-[10.5px] font-mono font-bold tabular-nums"
+                        >
+                          {acousticHeatmapMetricMode === 'laeq' ? 'L_Aeq' : 'L_AFmax'}:{' '}
+                          {valDb.toFixed(1)} dB(A) ({hoveredAcousticCell.dominantSourceCode})
+                        </text>
+                        <text
+                          x={0}
+                          y={6}
+                          textAnchor="middle"
+                          className="fill-cyan-300 text-[10px] font-mono tabular-nums"
+                        >
+                          VindΔ {hoveredAcousticCell.windRefractionDb >= 0 ? '+' : ''}
+                          {hoveredAcousticCell.windRefractionDb.toFixed(1)} dB · Termisk{' '}
+                          {hoveredAcousticCell.thermalRefractionDb >= 0 ? '+' : ''}
+                          {hoveredAcousticCell.thermalRefractionDb.toFixed(1)} dB
+                        </text>
+                      </g>
+                    );
+                  })()}
+              </g>
+            )}
+
+            {/* Akustisk Fane-Visualisering (2D Impulsstøj-Fane pr. maskine langs lokal vindretning + klage-kobling) */}
+            {showAcousticPlumeVisualization &&
+              acousticPlumeVizData.activeSourceFans.length > 0 && (
+                <g data-testid="svg-acoustic-plume-visualization">
+                  {acousticPlumeVizData.allBandsSorted.map((band) => (
+                    <polygon
+                      key={`svg-aplume-${band.id}`}
+                      points={polygonToSvgPoints(band.polygon)}
+                      fill={band.fillHex}
+                      fillOpacity={band.fillOpacity}
+                      stroke={band.strokeHex}
+                      strokeWidth={band.thresholdDb === 85 ? 1.8 : 1.1}
+                      strokeDasharray={band.thresholdDb === 85 ? undefined : '5 3'}
+                      strokeOpacity={0.85}
+                      className="pointer-events-none"
+                    />
+                  ))}
+
+                  {acousticPlumeVizData.activeSourceFans.map((fan) => {
+                    const sp = projectLatLng(fan.position);
+                    const tp = projectLatLng(fan.axisTip);
+                    return (
+                      <g key={`svg-aplume-axis-${fan.sourceId}`} className="pointer-events-none">
+                        <line
+                          x1={sp.x}
+                          y1={sp.y}
+                          x2={tp.x}
+                          y2={tp.y}
+                          stroke="#38bdf8"
+                          strokeWidth={1.6}
+                          strokeDasharray="6 3"
+                          strokeOpacity={0.85}
+                        />
+                        <circle
+                          cx={tp.x}
+                          cy={tp.y}
+                          r={3}
+                          fill="#38bdf8"
+                          stroke="#0f172a"
+                          strokeWidth={1}
+                        />
+                      </g>
+                    );
+                  })}
+
+                  {acousticPlumeVizData.complaintFeedbacks
+                    .filter((fb) => fb.isInsideAcousticPlume)
+                    .map((fb) => {
+                      const sp = projectLatLng(fb.nearestSourcePosition);
+                      const cp = projectLatLng(fb.position);
+                      const strokeCol = fb.isInsideCritical85DbPlume ? '#f43f5e' : '#fbbf24';
+                      return (
+                        <g
+                          key={`svg-aplume-fb-${fb.observationId}`}
+                          className="cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const matchedObs = observations.find(
+                              (o) => o.id === fb.observationId
+                            );
+                            if (matchedObs) {
+                              onSelectObservation(matchedObs);
+                            }
+                          }}
+                        >
+                          <line
+                            x1={sp.x}
+                            y1={sp.y}
+                            x2={cp.x}
+                            y2={cp.y}
+                            stroke={strokeCol}
+                            strokeWidth={1.8}
+                            strokeDasharray="4 2"
+                            strokeOpacity={0.95}
+                          />
+                          <circle
+                            cx={cp.x}
+                            cy={cp.y}
+                            r={11}
+                            fill="none"
+                            stroke={strokeCol}
+                            strokeWidth={1.8}
+                            strokeOpacity={0.9}
+                          />
+                        </g>
+                      );
+                    })}
+                </g>
+              )}
+
+            {/* Item 8: Interactive 'Acoustic Impulse-Wavefront' Visualizer (> 85 dB) from Active Demolition Sources */}
             {showSource85DbWavefronts && sourceWavefrontTargets.length > 0 && (
-              <g
-                className="pointer-events-none"
-                data-testid="svg-source-85db-wavefront-layer"
-              >
+              <g data-testid="svg-source-85db-wavefront-layer">
                 {sourceWavefrontTargets.map((entry) => {
                   const sp = projectLatLng(entry.source.position);
                   const waveDurSec = Math.max(
                     0.85,
                     1.75 - Math.max(0, entry.peakLafmaxDb - 85) * 0.04
                   ).toFixed(2);
+                  const isFocused =
+                    inspectedWavefrontSourceId === entry.source.id ||
+                    hoveredWavefrontSourceId === entry.source.id;
+                  const handleFocusSourceWavefront = (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    setInspectedWavefrontSourceId(entry.source.id);
+                    setShowWavefrontInspectorHud(true);
+                    onSelectSource(entry.source.id);
+                  };
+
                   return (
                     <g
                       key={`svg-src-wavefront-${entry.source.id}`}
+                      data-testid={`svg-source-85db-wavefront-${entry.source.code}`}
                       style={{ '--source-wave-dur': `${waveDurSec}s` } as React.CSSProperties}
                     >
-                      {entry.impactedReceptors.map((hit) => {
-                        const rp = projectLatLng(hit.receptor.center);
-                        const mx = (sp.x + rp.x) * 0.5;
-                        const my = (sp.y + rp.y) * 0.5;
-                        return (
-                          <g key={`svg-src-wave-link-${entry.source.id}-${hit.receptor.id}`}>
-                            <line
-                              x1={sp.x}
-                              y1={sp.y}
-                              x2={rp.x}
-                              y2={rp.y}
-                              stroke="#fb7185"
-                              strokeWidth={1.6}
-                              strokeDasharray="6 4"
-                              strokeOpacity={0.75}
-                            />
-                            <g transform={`translate(${mx}, ${my})`}>
-                              <rect
-                                x={-44}
-                                y={-7}
-                                width={88}
-                                height={14}
-                                rx={2}
-                                fill="#4c0519"
-                                fillOpacity={0.92}
-                                stroke="#f43f5e"
-                                strokeWidth={0.9}
+                      {/* Interactive Concentric Acoustic Impact Zones (85 / 90 / 95 dB(A)) */}
+                      {entry.concentricZones.map((cz) => (
+                        <polygon
+                          key={`svg-wave-zone-${entry.source.id}-${cz.thresholdDb}`}
+                          data-testid={`svg-wavefront-zone-${entry.source.code}-${cz.thresholdDb}`}
+                          points={polygonToSvgPoints(cz.polygon)}
+                          fill={cz.fillHex}
+                          fillOpacity={
+                            cz.thresholdDb === 95
+                              ? isFocused
+                                ? 0.24
+                                : 0.13
+                              : cz.thresholdDb === 90
+                              ? isFocused
+                                ? 0.16
+                                : 0.08
+                              : isFocused
+                              ? 0.1
+                              : 0.04
+                          }
+                          stroke={cz.strokeHex}
+                          strokeWidth={isFocused ? 2.2 : cz.thresholdDb === 95 ? 1.8 : 1.2}
+                          strokeOpacity={isFocused ? 0.96 : 0.72}
+                          strokeDasharray={cz.thresholdDb === 85 ? '6 3' : undefined}
+                          className="cursor-pointer transition-opacity"
+                          onMouseEnter={() => setHoveredWavefrontSourceId(entry.source.id)}
+                          onMouseLeave={() =>
+                            setHoveredWavefrontSourceId((prev) =>
+                              prev === entry.source.id ? null : prev
+                            )
+                          }
+                          onClick={handleFocusSourceWavefront}
+                        />
+                      ))}
+
+                      {/* Propagation Rays & dB Callouts to Impacted Sensitive Receptors */}
+                      <g className="pointer-events-none">
+                        {entry.impactedReceptors.map((hit) => {
+                          const rp = projectLatLng(hit.receptor.center);
+                          const mx = (sp.x + rp.x) * 0.5;
+                          const my = (sp.y + rp.y) * 0.5;
+                          return (
+                            <g key={`svg-src-wave-link-${entry.source.id}-${hit.receptor.id}`}>
+                              <line
+                                x1={sp.x}
+                                y1={sp.y}
+                                x2={rp.x}
+                                y2={rp.y}
+                                stroke="#fb7185"
+                                strokeWidth={isFocused ? 2.2 : 1.6}
+                                strokeDasharray="6 4"
+                                strokeOpacity={isFocused ? 0.95 : 0.75}
                               />
-                              <text
-                                x={0}
-                                y={3}
-                                textAnchor="middle"
-                                className="fill-rose-100 text-[11px] font-mono font-bold tabular-nums"
-                              >
-                                &gt;85dB: {hit.estimatedLafmaxDb.toFixed(0)}dB
-                              </text>
+                              <g transform={`translate(${mx}, ${my})`}>
+                                <rect
+                                  x={-44}
+                                  y={-7}
+                                  width={88}
+                                  height={14}
+                                  rx={2}
+                                  fill="#4c0519"
+                                  fillOpacity={0.94}
+                                  stroke="#f43f5e"
+                                  strokeWidth={0.9}
+                                />
+                                <text
+                                  x={0}
+                                  y={3}
+                                  textAnchor="middle"
+                                  className="fill-rose-100 text-[11px] font-mono font-bold tabular-nums"
+                                >
+                                  &gt;85dB: {hit.estimatedLafmaxDb.toFixed(0)}dB
+                                </text>
+                              </g>
                             </g>
-                          </g>
-                        );
-                      })}
-                      <g transform={`translate(${sp.x}, ${sp.y})`}>
+                          );
+                        })}
+                      </g>
+
+                      {/* Animated Concentric Wavefront Rings + Clickable Source Pulse Anchor */}
+                      <g
+                        transform={`translate(${sp.x}, ${sp.y})`}
+                        className="cursor-pointer"
+                        onMouseEnter={() => setHoveredWavefrontSourceId(entry.source.id)}
+                        onMouseLeave={() =>
+                          setHoveredWavefrontSourceId((prev) =>
+                            prev === entry.source.id ? null : prev
+                          )
+                        }
+                        onClick={handleFocusSourceWavefront}
+                      >
                         <circle
                           cx={0}
                           cy={0}
@@ -9441,7 +10165,7 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                           fill="none"
                           stroke="#f43f5e"
                           strokeWidth={2.2}
-                          className="map-source-wavefront-ring map-source-wavefront-ring--1"
+                          className="map-source-wavefront-ring map-source-wavefront-ring--1 pointer-events-none"
                         />
                         <circle
                           cx={0}
@@ -9450,7 +10174,7 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                           fill="none"
                           stroke="#fbbf24"
                           strokeWidth={1.8}
-                          className="map-source-wavefront-ring map-source-wavefront-ring--2"
+                          className="map-source-wavefront-ring map-source-wavefront-ring--2 pointer-events-none"
                         />
                         <circle
                           cx={0}
@@ -9459,8 +10183,29 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                           fill="none"
                           stroke="#f97316"
                           strokeWidth={1.4}
-                          className="map-source-wavefront-ring map-source-wavefront-ring--3"
+                          className="map-source-wavefront-ring map-source-wavefront-ring--3 pointer-events-none"
                         />
+                        <g transform="translate(0, 26)">
+                          <rect
+                            x={-54}
+                            y={-8}
+                            width={108}
+                            height={15}
+                            rx={3}
+                            fill={isFocused ? '#be123c' : '#4c0519'}
+                            fillOpacity={0.95}
+                            stroke={isFocused ? '#ffffff' : '#fb7185'}
+                            strokeWidth={isFocused ? 1.4 : 1}
+                          />
+                          <text
+                            x={0}
+                            y={2.5}
+                            textAnchor="middle"
+                            className="fill-rose-50 text-[10px] font-mono font-extrabold tabular-nums"
+                          >
+                            ⚡ BØLGE {entry.source.code} · {entry.peakLafmaxDb.toFixed(0)} dB
+                          </text>
+                        </g>
                       </g>
                     </g>
                   );
@@ -9539,10 +10284,7 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
 
             {/* Plume Concentration Heatmap Layer (utilizes simulation.plumeZones vs Safe Zones S < 0.25) */}
             {showPlumeConcentrationHeatmapLayer && (
-              <g
-                data-testid="svg-plume-concentration-heatmap-layer"
-                className="pointer-events-none"
-              >
+              <g data-testid="svg-plume-concentration-heatmap-layer">
                 {/* Safe Zone Backdrop Perimeter (S < 0,25 outside active plumeZones) */}
                 <polygon
                   points={polygonToSvgPoints(plumeConcentrationHeatmapData.safeZonePerimeter)}
@@ -9551,13 +10293,17 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                   strokeWidth="1.6"
                   strokeDasharray="7 4"
                   strokeOpacity="0.7"
+                  className="pointer-events-none"
                 />
                 {(() => {
                   const safeBadgePt = projectLatLng(
                     plumeConcentrationHeatmapData.safeZonePerimeter[0]
                   );
                   return (
-                    <g transform={`translate(${safeBadgePt.x + 110}, ${safeBadgePt.y + 18})`}>
+                    <g
+                      transform={`translate(${safeBadgePt.x + 110}, ${safeBadgePt.y + 18})`}
+                      className="pointer-events-none"
+                    >
                       <rect
                         x={-102}
                         y={-11}
@@ -9587,7 +10333,11 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                   .map((rec) => {
                     const cPx = projectLatLng(rec.center);
                     return (
-                      <g key={`safe-rec-halo-${rec.id}`} transform={`translate(${cPx.x}, ${cPx.y})`}>
+                      <g
+                        key={`safe-rec-halo-${rec.id}`}
+                        transform={`translate(${cPx.x}, ${cPx.y})`}
+                        className="pointer-events-none"
+                      >
                         <circle
                           cx={0}
                           cy={0}
@@ -9655,9 +10405,36 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                     { lat: 0, lng: 0 }
                   );
                   const cPx = projectLatLng(centroid);
+                  const isHoveredZone = hoveredPlumeZoneTooltip?.zone.id === zone.id;
 
                   return (
-                    <g key={`svg-conc-heat-${zone.id}`}>
+                    <g
+                      key={`svg-conc-heat-${zone.id}`}
+                      className="cursor-crosshair"
+                      onMouseEnter={(e) => {
+                        const box = svgRef.current?.parentElement?.getBoundingClientRect();
+                        if (!box) return;
+                        setHoveredPlumeZoneTooltip({
+                          zone,
+                          x: e.clientX - box.left,
+                          y: e.clientY - box.top,
+                        });
+                      }}
+                      onMouseMove={(e) => {
+                        const box = svgRef.current?.parentElement?.getBoundingClientRect();
+                        if (!box) return;
+                        setHoveredPlumeZoneTooltip({
+                          zone,
+                          x: e.clientX - box.left,
+                          y: e.clientY - box.top,
+                        });
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredPlumeZoneTooltip((prev) =>
+                          prev?.zone.id === zone.id ? null : prev
+                        );
+                      }}
+                    >
                       {/* Soft Outer Thermal Bleed */}
                       <polygon
                         points={pts}
@@ -9671,12 +10448,20 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                       <polygon
                         points={pts}
                         fill={gradId}
-                        stroke={strokeCol}
-                        strokeWidth={heatmapLevel === 'red' ? 2.4 : heatmapLevel === 'orange' ? 1.8 : 1.2}
-                        strokeOpacity={0.94}
+                        stroke={isHoveredZone ? '#ffffff' : strokeCol}
+                        strokeWidth={
+                          isHoveredZone
+                            ? 3
+                            : heatmapLevel === 'red'
+                            ? 2.4
+                            : heatmapLevel === 'orange'
+                            ? 1.8
+                            : 1.2
+                        }
+                        strokeOpacity={isHoveredZone ? 1 : 0.94}
                       />
                       {(heatmapLevel === 'red' || heatmapLevel === 'orange') && (
-                        <g transform={`translate(${cPx.x}, ${cPx.y})`}>
+                        <g transform={`translate(${cPx.x}, ${cPx.y})`} className="pointer-events-none">
                           <rect
                             x={-54}
                             y={-9}
@@ -9761,7 +10546,7 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
               </g>
             )}
 
-            {/* Plume / 24h Gaussian Puff Risk Zone Polygons (Hidden in pure Differens-Heatmap mode so only the direct concentration difference is shown) */}
+            {/* Plume / 24h Gaussian Puff Risk Zone Polygons with Interactive S-Quotient Hover Tooltips */}
             {!isDifferenceHeatmapMode &&
               filteredActivePolygons.map((zone) => {
                 const gradId =
@@ -9773,18 +10558,51 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
                     ? 'url(#plume-blue-grad)'
                     : 'url(#plume-yellow-grad)';
                 const strokeCol = RISK_COLORS[zone.level].stroke;
+                const isHoveredZone = hoveredPlumeZoneTooltip?.zone.id === zone.id;
                 return (
                   <g
                     key={zone.id}
-                    className="pointer-events-none"
+                    data-testid={`svg-plume-zone-${zone.id}`}
+                    className="cursor-crosshair"
                     opacity={(showHeatmapComparison ? 0.25 : 1) * crossFadeProgress}
+                    onMouseEnter={(e) => {
+                      const box = svgRef.current?.parentElement?.getBoundingClientRect();
+                      if (!box) return;
+                      setHoveredPlumeZoneTooltip({
+                        zone,
+                        x: e.clientX - box.left,
+                        y: e.clientY - box.top,
+                      });
+                    }}
+                    onMouseMove={(e) => {
+                      const box = svgRef.current?.parentElement?.getBoundingClientRect();
+                      if (!box) return;
+                      setHoveredPlumeZoneTooltip({
+                        zone,
+                        x: e.clientX - box.left,
+                        y: e.clientY - box.top,
+                      });
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredPlumeZoneTooltip((prev) =>
+                        prev?.zone.id === zone.id ? null : prev
+                      );
+                    }}
                   >
                     <polygon
                       points={polygonToSvgPoints(zone.polygon)}
                       fill={gradId}
-                      stroke={strokeCol}
-                      strokeWidth={zone.level === 'red' ? 1.8 : 1.1}
-                      strokeOpacity={isPuffMode && zone.hourLabel ? 0.45 : 0.85}
+                      stroke={isHoveredZone ? '#ffffff' : strokeCol}
+                      strokeWidth={
+                        isHoveredZone ? 2.8 : zone.level === 'red' ? 1.8 : 1.1
+                      }
+                      strokeOpacity={
+                        isHoveredZone
+                          ? 1
+                          : isPuffMode && zone.hourLabel
+                          ? 0.45
+                          : 0.85
+                      }
                     />
                   </g>
                 );
@@ -12414,6 +13232,204 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
           </div>
         )}
 
+        {/* Interactive Floating Plume Zone S-Quotient Tooltip (2D Tactical Map Hover) */}
+        {!useGoogleMapsEngine && hoveredPlumeZoneTooltip && (() => {
+          const { zone, x, y } = hoveredPlumeZoneTooltip;
+          const isCrit = zone.level === 'red' || zone.maxSumQuotient >= 1.0;
+          const isElev = zone.level === 'orange';
+          const isHydro = zone.level === 'blue';
+          const tierLabel = isCrit
+            ? 'KRITISK RØD (S ≥ 1,0)'
+            : isElev
+            ? 'FORHØJET ORANGE'
+            : isHydro
+            ? 'HYDROLOGISK BLÅ'
+            : 'OBSERVATION GUL';
+          const clampedX = Math.max(12, Math.min(x + 14, 520));
+          const clampedY = Math.max(12, Math.min(y + 14, 380));
+
+          return (
+            <div
+              data-testid="plume-zone-s-tooltip"
+              style={{ left: `${clampedX}px`, top: `${clampedY}px` }}
+              className={`absolute z-40 pointer-events-none w-[262px] rounded-md border p-2.5 shadow-2xl font-mono text-[11px] tabular-nums space-y-1 ${
+                isCrit
+                  ? 'bg-[#1a0910]/95 border-rose-400 text-rose-50'
+                  : isElev
+                  ? 'bg-[#1a1007]/95 border-amber-400 text-amber-50'
+                  : isHydro
+                  ? 'bg-[#081626]/95 border-indigo-400 text-indigo-50'
+                  : 'bg-[#171608]/95 border-yellow-400 text-yellow-50'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 border-b border-white/15 pb-1">
+                <span className="font-extrabold uppercase tracking-wide truncate">
+                  {tierLabel}
+                </span>
+                <span
+                  className={`px-1.5 py-0.5 rounded font-extrabold shrink-0 ${
+                    isCrit
+                      ? 'bg-rose-500 text-white'
+                      : isElev
+                      ? 'bg-amber-400 text-slate-950'
+                      : isHydro
+                      ? 'bg-indigo-400 text-slate-950'
+                      : 'bg-yellow-400 text-slate-950'
+                  }`}
+                >
+                  S = {zone.maxSumQuotient.toFixed(2)}
+                </span>
+              </div>
+              <div className="text-slate-100 font-semibold truncate">{zone.sourceName}</div>
+              <div className="grid grid-cols-2 gap-1 text-[10.5px] text-slate-300">
+                <span>Interval: {zone.sumQuotientRange}</span>
+                <span>Afstand: {Math.round(zone.downwindDistanceMeters)} m</span>
+                <span>Fane-retning: {Math.round(zone.plumeDirectionDeg)}°</span>
+                <span>Bredde: {Math.round(zone.crosswindWidthMeters)} m</span>
+              </div>
+              {zone.hourLabel && (
+                <div className="text-[10px] text-cyan-300">
+                  24t Puff-trin: kl. {zone.hourLabel}
+                </div>
+              )}
+              <div
+                className={`text-[10px] font-bold pt-0.5 ${
+                  zone.maxSumQuotient >= 1.0 ? 'text-rose-300' : 'text-emerald-300'
+                }`}
+              >
+                {zone.maxSumQuotient >= 1.0
+                  ? '⚠ BEK 613/2026: Grænseoverskridelse (S ≥ 1,00)'
+                  : `Eksponering: ${Math.round(zone.maxSumQuotient * 100)}% af grænseværdi`}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Interactive 'Acoustic Impulse-Wavefront' Visualizer Inspector HUD (>85 dB) */}
+        {showSource85DbWavefronts &&
+          sourceWavefrontTargets.length > 0 &&
+          showWavefrontInspectorHud &&
+          (() => {
+            const activeEntry =
+              sourceWavefrontTargets.find(
+                (e) => e.source.id === inspectedWavefrontSourceId
+              ) || sourceWavefrontTargets[0];
+
+            return (
+              <div
+                data-testid="acoustic-impulse-wavefront-hud"
+                className="absolute top-16 right-3 z-30 pointer-events-auto w-[348px] max-w-[calc(100%-24px)] rounded-md bg-[#0d0812]/95 border border-rose-500/80 p-2.5 shadow-2xl font-mono text-[11px] tabular-nums text-slate-100 space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2 border-b border-rose-500/30 pb-1.5">
+                  <div className="flex items-center gap-1.5 font-bold text-rose-300">
+                    <Waves className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                    <span>Acoustic Impulse-Wavefront (&gt;85 dB)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowWavefrontInspectorHud(false)}
+                    aria-label="Luk wavefront-inspektør"
+                    className="p-0.5 rounded bg-slate-900 hover:bg-rose-600 border border-slate-700 text-slate-300 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {sourceWavefrontTargets.length > 1 && (
+                  <div className="flex flex-wrap gap-1">
+                    {sourceWavefrontTargets.map((item) => (
+                      <button
+                        key={`wf-tab-${item.source.id}`}
+                        type="button"
+                        onClick={() => {
+                          setInspectedWavefrontSourceId(item.source.id);
+                          onSelectSource(item.source.id);
+                        }}
+                        className={`px-2 py-0.5 rounded border text-[10.5px] font-bold cursor-pointer ${
+                          activeEntry.source.id === item.source.id
+                            ? 'bg-rose-500 text-white border-rose-200'
+                            : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-rose-400'
+                        }`}
+                      >
+                        {item.source.code} ({item.peakLafmaxDb.toFixed(0)} dB)
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="p-2 rounded bg-black/40 border border-rose-500/35 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-white truncate">
+                      {activeEntry.source.code}: {activeEntry.source.name.split(':')[0]}
+                    </span>
+                    <span className="text-rose-300 font-extrabold shrink-0">
+                      L_WA {activeEntry.sourceLwaDb.toFixed(0)} dB
+                    </span>
+                  </div>
+                  <div className="text-[10.5px] text-slate-300 flex items-center justify-between">
+                    <span>
+                      Medvind: {Math.round(activeEntry.windDownwindDeg)}° (+
+                      {activeEntry.windRefractionBoostDb.toFixed(1)} dB)
+                    </span>
+                    <span className="text-amber-300 font-bold">
+                      Spids {activeEntry.peakLafmaxDb.toFixed(1)} dB(A)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                    Koncentriske Bølgefront-Zoner (kalibreret rækkevidde)
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {activeEntry.concentricZones
+                      .slice()
+                      .reverse()
+                      .map((cz) => (
+                        <div
+                          key={`wf-zone-stat-${cz.thresholdDb}`}
+                          className="p-1.5 rounded bg-slate-950/90 border border-slate-800 space-y-0.5"
+                        >
+                          <div
+                            className="font-bold text-[10.5px]"
+                            style={{ color: cz.strokeHex }}
+                          >
+                            ≥{cz.thresholdDb} dB(A)
+                          </div>
+                          <div className="text-white font-extrabold">{cz.radiusM} m</div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                {activeEntry.impactedReceptors.length > 0 && (
+                  <div className="space-y-1 pt-1 border-t border-slate-800">
+                    <div className="text-[10px] uppercase tracking-wider text-rose-300 font-bold">
+                      Berørte Støjfølsomme Nabozoner ({activeEntry.impactedReceptors.length})
+                    </div>
+                    <div className="max-h-24 overflow-y-auto space-y-1">
+                      {activeEntry.impactedReceptors.map((hit) => (
+                        <button
+                          key={`wf-hit-${hit.receptor.id}`}
+                          type="button"
+                          onClick={() => onSelectReceptor(hit.receptor.id)}
+                          className="w-full px-2 py-1 rounded bg-rose-950/50 hover:bg-rose-900/70 border border-rose-500/40 flex items-center justify-between gap-2 text-left cursor-pointer"
+                        >
+                          <span className="truncate text-slate-100">
+                            {hit.receptor.code} · {hit.distMeters} m
+                          </span>
+                          <span className="font-bold text-rose-300 shrink-0">
+                            {hit.estimatedLafmaxDb.toFixed(1)} dB(A)
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
         {/* 2D Taktisk Kort HUD-kort for 6t Vindstød & Støj Heatmap for Valgte Naboblokke */}
         {showWindNoiseHeatmapLayer && !useGoogleMapsEngine && (
           <div className="absolute bottom-14 left-3 z-20 pointer-events-auto max-w-[calc(100%-24px)]">
@@ -12441,6 +13457,243 @@ const DispersionMapComponent: React.FC<DispersionMapProps> = ({
               onSelectReceptor={onSelectReceptor}
               onClose={() => setShowWindNoiseHeatmapLayer(false)}
             />
+          </div>
+        )}
+
+        {/* Dynamic 2D Acoustic Hazard Heatmap Legend & Refraction Telemetry HUD */}
+        {!effectiveMapOnly && showAcousticHazardHeatmapLayer && showAcousticHazardHud && (
+          <div
+            data-testid="acoustic-hazard-heatmap-hud"
+            className={`absolute ${
+              showPlumeConcentrationHeatmapLayer ? 'bottom-[264px]' : 'bottom-14'
+            } right-3 z-25 pointer-events-auto w-[348px] max-w-[calc(100%-24px)] bg-[#0F1623]/95 border border-rose-500/70 rounded-md p-2.5 shadow-2xl font-mono text-[11px] tabular-nums space-y-2`}
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-rose-200 uppercase truncate">
+                <Volume2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                <span className="truncate">Akustiske Farezoner (2D Heatmap)</span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAcousticHeatmapMetricMode((m) =>
+                      m === 'lafmax' ? 'laeq' : 'lafmax'
+                    )
+                  }
+                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-cyan-200 cursor-pointer whitespace-nowrap"
+                  title="Skift mellem spids-impulsstøj (L_AFmax) og ækvivalent energi (L_Aeq)"
+                >
+                  {acousticHeatmapMetricMode === 'lafmax' ? 'L_AFmax' : 'L_Aeq'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAcousticHazardHud(false)}
+                  className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer"
+                  aria-label="Minimer Acoustic Hazard Heatmap HUD"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Active Machinery L_WA & Local Wind Refraction Metrics */}
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="p-1.5 rounded bg-black/35 border border-slate-800 space-y-0.5">
+                <div className="text-[10px] text-slate-400">
+                  Aktive Maskiner ({acousticHazardHeatmapData.activeSourcesCount})
+                </div>
+                <div className="font-bold text-amber-300">
+                  Σ L_WA {acousticHazardHeatmapData.combinedSiteLwaDb.toFixed(1)} dB
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  Maks kilde: {acousticHazardHeatmapData.maxActiveLwaDb.toFixed(1)} dB
+                </div>
+              </div>
+
+              <div className="p-1.5 rounded bg-black/35 border border-slate-800 space-y-0.5">
+                <div className="text-[10px] text-slate-400">
+                  Vind- &amp; Termisk Refraktion ({acousticHazardHeatmapData.pasquillClass})
+                </div>
+                <div className="font-bold text-cyan-300">
+                  Nedvind +{acousticHazardHeatmapData.downwindWindRefractionDb.toFixed(1)} / Term{' '}
+                  {acousticHazardHeatmapData.thermalRefractionDb >= 0 ? '+' : ''}
+                  {acousticHazardHeatmapData.thermalRefractionDb.toFixed(1)} dB
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  {acousticHazardHeatmapData.windSpeedMs.toFixed(1)} m/s (stød{' '}
+                  {acousticHazardHeatmapData.windGustsMs.toFixed(1)}) →{' '}
+                  {acousticHazardHeatmapData.plumeDownwindDeg}°
+                </div>
+              </div>
+            </div>
+
+            {/* Active Sources L_WA & Wind-Refracted Iso-dB Zone Reach */}
+            {acousticHazardHeatmapData.activeSourceSummaries.length > 0 && (
+              <div className="px-2 py-1 rounded bg-black/35 border border-slate-800 space-y-0.5 text-[10px]">
+                {acousticHazardHeatmapData.activeSourceSummaries.slice(0, 3).map((srcSum) => (
+                  <div
+                    key={`hud-src-lwa-${srcSum.sourceId}`}
+                    className="flex items-center justify-between gap-2 text-slate-300"
+                  >
+                    <span className="truncate">
+                      {srcSum.sourceCode} ({srcSum.effectiveLwaDb.toFixed(0)} dB L_WA)
+                    </span>
+                    <span className="text-rose-300 shrink-0">
+                      85dB: {srcSum.critical85DbRadiusM}m · 75dB: {srcSum.high75DbRadiusM}m
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Thermal Acoustic Hazard Color Scale */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10px] text-slate-300">
+                <span>&lt;55</span>
+                <span className="text-cyan-300">55–64</span>
+                <span className="text-amber-300">65–74</span>
+                <span className="text-orange-300">75–84</span>
+                <span className="text-rose-300 font-bold">≥85 dB(A)</span>
+              </div>
+              <div className="h-2 rounded overflow-hidden grid grid-cols-5 border border-slate-700">
+                <div className="bg-slate-800" />
+                <div className="bg-cyan-500/80" />
+                <div className="bg-yellow-500/85" />
+                <div className="bg-orange-500/90" />
+                <div className="bg-rose-600" />
+              </div>
+            </div>
+
+            {/* Opacity + Hovered Cell or Worst Receptor */}
+            <div className="flex items-center gap-2 text-[10px] text-slate-300">
+              <span className="shrink-0">Dækning: {acousticHeatmapOpacityPct}%</span>
+              <input
+                type="range"
+                min={25}
+                max={100}
+                step={5}
+                value={acousticHeatmapOpacityPct}
+                onChange={(e) => setAcousticHeatmapOpacityPct(Number(e.target.value))}
+                aria-label="Juster opacitet på Acoustic Hazard Heatmap"
+                className="flex-1 accent-rose-400 cursor-pointer"
+              />
+              <span className="text-rose-300 font-bold shrink-0">
+                {acousticHazardHeatmapData.criticalCellCount} ≥85dB
+              </span>
+            </div>
+
+            {hoveredAcousticCell ? (
+              <div className="px-2 py-1 rounded bg-slate-950/90 border border-cyan-500/50 text-[10.5px] flex items-center justify-between gap-2">
+                <span className="text-cyan-200 truncate">
+                  Celle ({hoveredAcousticCell.dominantSourceCode}, {hoveredAcousticCell.nearestSourceDistM}m)
+                </span>
+                <span className="font-bold text-white shrink-0">
+                  {(acousticHeatmapMetricMode === 'laeq'
+                    ? hoveredAcousticCell.laeqDb
+                    : hoveredAcousticCell.lafmaxDb
+                  ).toFixed(1)}{' '}
+                  dB (VindΔ {hoveredAcousticCell.windRefractionDb >= 0 ? '+' : ''}
+                  {hoveredAcousticCell.windRefractionDb.toFixed(1)})
+                </span>
+              </div>
+            ) : (
+              acousticHazardHeatmapData.worstReceptor && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSelectReceptor(acousticHazardHeatmapData.worstReceptor!.receptorId)
+                  }
+                  className="w-full px-2 py-1 rounded bg-rose-950/45 hover:bg-rose-900/60 border border-rose-500/45 flex items-center justify-between gap-2 text-left cursor-pointer"
+                >
+                  <span className="truncate text-slate-100">
+                    Spids: {acousticHazardHeatmapData.worstReceptor.code} ·{' '}
+                    {acousticHazardHeatmapData.worstReceptor.name}
+                  </span>
+                  <span className="font-bold text-rose-300 shrink-0">
+                    {(acousticHeatmapMetricMode === 'laeq'
+                      ? acousticHazardHeatmapData.worstReceptor.laeqDb
+                      : acousticHazardHeatmapData.worstReceptor.lafmaxDb
+                    ).toFixed(1)}{' '}
+                    dB(A)
+                  </span>
+                </button>
+              )
+            )}
+          </div>
+        )}
+
+        {/* Akustisk Fane-Visualisering HUD (Visuel Feedback til Naboklager langs vindaksen) */}
+        {!effectiveMapOnly && showAcousticPlumeVisualization && showAcousticPlumeHud && (
+          <div
+            data-testid="acoustic-plume-viz-hud"
+            className="absolute bottom-14 left-3 z-25 pointer-events-auto w-[336px] max-w-[calc(100%-24px)] bg-[#0F1623]/95 border border-cyan-500/70 rounded-md p-2.5 shadow-2xl font-mono text-[11px] tabular-nums space-y-2"
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-cyan-200 uppercase truncate">
+                <Navigation className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="truncate">Akustisk Fane-Visualisering (2D)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAcousticPlumeHud(false)}
+                className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer"
+                aria-label="Luk Akustisk Fane HUD"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="text-[10.5px] text-slate-300 flex items-center justify-between gap-2">
+              <span>
+                Vindakse: <strong>{acousticPlumeVizData.plumeDownwindDeg}°</strong> ({acousticPlumeVizData.windSpeedMs.toFixed(1)} m/s)
+              </span>
+              <span className="text-cyan-300">
+                {acousticPlumeVizData.activeSourceFans.length} aktive faner
+              </span>
+            </div>
+
+            <div className="space-y-1 max-h-[120px] overflow-y-auto">
+              {acousticPlumeVizData.complaintFeedbacks.length === 0 ? (
+                <div className="p-2 rounded bg-black/35 border border-slate-800 text-[10.5px] text-slate-400">
+                  Ingen registrerede naboklager endnu. Når en naboklage oprettes, vises fane-korrelation direkte på kortet.
+                </div>
+              ) : (
+                acousticPlumeVizData.complaintFeedbacks.slice(0, 4).map((fb) => (
+                  <button
+                    key={`hud-aplume-fb-${fb.observationId}`}
+                    type="button"
+                    onClick={() => {
+                      const matchedObs = observations.find(
+                        (o) => o.id === fb.observationId
+                      );
+                      if (matchedObs) {
+                        onSelectObservation(matchedObs);
+                      }
+                    }}
+                    className={`w-full px-2 py-1 rounded border text-left space-y-0.5 cursor-pointer transition-colors ${
+                      fb.isInsideCritical85DbPlume
+                        ? 'bg-rose-950/50 border-rose-500/60 text-rose-100'
+                        : fb.isInsideAcousticPlume
+                        ? 'bg-amber-950/40 border-amber-500/50 text-amber-100'
+                        : 'bg-slate-950/80 border-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 font-bold">
+                      <span className="truncate">
+                        {fb.observationCode} · {fb.locationLabel}
+                      </span>
+                      <span className="shrink-0">
+                        {fb.estimatedImpulseLafmaxDb.toFixed(1)} dB
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-300 truncate">
+                      {fb.feedbackLabelDa}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         )}
 
@@ -13599,7 +14852,8 @@ function areDispersionMapPropsEqual(
     prev.virtualLeakPinPoint !== next.virtualLeakPinPoint ||
     prev.virtualLeakImpact !== next.virtualLeakImpact ||
     prev.simultaneousDispatch !== next.simultaneousDispatch ||
-    prev.machineNoiseOutputDb !== next.machineNoiseOutputDb
+    prev.machineNoiseOutputDb !== next.machineNoiseOutputDb ||
+    prev.showAcousticHazardHeatmap !== next.showAcousticHazardHeatmap
   ) {
     return false;
   }
@@ -13634,6 +14888,7 @@ function areDispersionMapPropsEqual(
     prev.onToggleWindNoiseHeatmap !== next.onToggleWindNoiseHeatmap ||
     prev.onTogglePlumeConcentrationHeatmap !== next.onTogglePlumeConcentrationHeatmap ||
     prev.onToggleWeatherCorrelationHeatmap !== next.onToggleWeatherCorrelationHeatmap ||
+    prev.onToggleAcousticHazardHeatmap !== next.onToggleAcousticHazardHeatmap ||
     prev.onToggleWaterMainLayer !== next.onToggleWaterMainLayer ||
     prev.onToggleLerBuffer !== next.onToggleLerBuffer ||
     prev.onToggleSteelRoadPlates !== next.onToggleSteelRoadPlates ||

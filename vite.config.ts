@@ -38,19 +38,10 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: 'es2022',
-      minify: 'terser',
-      terserOptions: {
-        compress: {
-          passes: 2,
-          drop_debugger: true,
-        },
-        format: {
-          comments: false,
-        },
-      },
-      sourcemap: mode === 'production' ? 'hidden' : true,
+      minify: true,
+      sourcemap: false,
       cssCodeSplit: true,
-      reportCompressedSize: true,
+      reportCompressedSize: false,
     },
   };
 });

@@ -98,6 +98,8 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
   const [isTallViewport, setIsTallViewport] = useState<boolean>(false);
+  const [webglError, setWebglError] = useState<string | null>(null);
+  const [webglRetryNonce, setWebglRetryNonce] = useState<number>(0);
   const [sliceDistanceMeters, setSliceDistanceMeters] = useState<number>(140);
   const [horizontalCutHeightMeters, setHorizontalCutHeightMeters] = useState<number>(8.2);
   const [showInversionLid, setShowInversionLid] = useState<boolean>(true);
@@ -276,15 +278,39 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
     const container = mountRef.current;
     if (!container) return;
 
+    setWebglError(null);
+
+    const probeCanvas = document.createElement('canvas');
+    let probeGl: WebGLRenderingContext | WebGL2RenderingContext | null = null;
+    try {
+      probeGl =
+        (probeCanvas.getContext('webgl2') as WebGL2RenderingContext | null) ||
+        (probeCanvas.getContext('webgl') as WebGLRenderingContext | null) ||
+        (probeCanvas.getContext('experimental-webgl') as WebGLRenderingContext | null);
+    } catch {
+      probeGl = null;
+    }
+    if (!probeGl) {
+      setWebglError('WebGL 3D-kontekst er utilgængelig i denne browser.');
+      return;
+    }
+
     // 1. Renderer & Software WebGL Detection
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      powerPreference: 'high-performance',
-    });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        powerPreference: 'high-performance',
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setWebglError(`WebGLRenderer fejl: ${msg}`);
+      return;
+    }
     const gl = renderer.getContext();
-    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    const debugInfo = gl?.getExtension('WEBGL_debug_renderer_info');
     const rendererStr = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : '';
-    const isSoftwareGl = /SwiftShader|llvmpipe|Software|Basic Render Driver/i.test(rendererStr);
+    const isSoftwareGl = /SwiftShader|llvmpipe|Software|Basic Render Driver/i.test(String(rendererStr || ''));
 
     const initWidth = Math.max(320, container.clientWidth || 640);
     const initHeight = Math.max(260, container.clientHeight || 340);
@@ -304,11 +330,17 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
     scene.background = new THREE.Color(0x070b14);
     scene.fog = new THREE.FogExp2(0x070b14, 0.0028);
 
-    const pmremGenerator = new THREE.PMREMGenerator(renderer);
-    const roomEnv = new RoomEnvironment();
-    const envRT = pmremGenerator.fromScene(roomEnv, 0.04);
-    scene.environment = envRT.texture;
-    roomEnv.dispose();
+    let pmremGenerator: THREE.PMREMGenerator | null = null;
+    let envRT: THREE.WebGLRenderTarget | null = null;
+    try {
+      pmremGenerator = new THREE.PMREMGenerator(renderer);
+      const roomEnv = new RoomEnvironment();
+      envRT = pmremGenerator.fromScene(roomEnv, 0.04);
+      scene.environment = envRT.texture;
+      roomEnv.dispose();
+    } catch {
+      envRT = null;
+    }
 
     const camera = new THREE.PerspectiveCamera(42, initWidth / initHeight, 0.5, 900);
     camera.position.set(115, 68, 135);
@@ -844,15 +876,30 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
     const clock = new THREE.Clock();
     let rafId = 0;
     let frameInFlight = false;
+    let disposed = false;
+
+    const onContextLost = (ev: Event) => {
+      ev.preventDefault();
+      disposed = true;
+      cancelAnimationFrame(rafId);
+      setWebglError('3D WebGL-kontekst gik tabt i vertikal boks.');
+    };
+    const onContextRestored = () => {
+      setWebglError(null);
+      setWebglRetryNonce((n) => n + 1);
+    };
+    renderer.domElement.addEventListener('webglcontextlost', onContextLost);
+    renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
 
     const afterDraw = isSoftwareGl
       ? (cb: () => void) => {
-          gl.getError();
+          gl?.getError();
           setTimeout(cb, 0);
         }
       : (cb: () => void) => cb();
 
     const animate = () => {
+      if (disposed || gl?.isContextLost?.()) return;
       rafId = requestAnimationFrame(animate);
       if (frameInFlight) return;
       frameInFlight = true;
@@ -988,7 +1035,16 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
       }
 
       controls.update();
-      renderer.render(scene, camera);
+      try {
+        renderer.render(scene, camera);
+      } catch (err) {
+        disposed = true;
+        cancelAnimationFrame(rafId);
+        const msg = err instanceof Error ? err.message : String(err);
+        setWebglError(`3D-rendering fejl: ${msg}`);
+        frameInFlight = false;
+        return;
+      }
       afterDraw(() => {
         frameInFlight = false;
       });
@@ -997,8 +1053,11 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
     rafId = requestAnimationFrame(animate);
 
     return () => {
+      disposed = true;
       cancelAnimationFrame(rafId);
       resizeObserver.disconnect();
+      renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
+      renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
       rebuildPlumeRef.current = null;
       applyCameraPresetRef.current = null;
       controls.dispose();
@@ -1009,11 +1068,16 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
       particlesMat.dispose();
       hammerWaveGeo.dispose();
       hammerWaveMat.dispose();
-      envRT.dispose();
-      pmremGenerator.dispose();
+      envRT?.dispose();
+      pmremGenerator?.dispose();
       renderer.dispose();
+      try {
+        renderer.forceContextLoss();
+      } catch {
+        // Ignore cleanup context-loss errors
+      }
     };
-  }, [isExpanded]);
+  }, [isExpanded, webglRetryNonce]);
 
   const prevHourIdx = (currentWeather.hourIndex + 23) % 24;
   const nextHourIdx = (currentWeather.hourIndex + 1) % 24;
@@ -1179,9 +1243,27 @@ export const VerticalPlume3DBoxWidget: React.FC<VerticalPlume3DBoxWidgetProps> =
 
               {/* Three.js Canvas Mount Container */}
               <div
-                ref={mountRef}
                 className={`w-full relative ${isTallViewport ? 'h-[460px]' : 'h-[320px]'}`}
-              />
+              >
+                <div ref={mountRef} className="w-full h-full" />
+                {webglError && (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#070b14]/95 p-4 text-center">
+                    <div className="max-w-sm rounded-lg border border-rose-500/40 bg-[#111827] p-4 text-slate-100">
+                      <div className="text-[11px] font-bold text-rose-300 mb-1">
+                        Vertikal 3D-visning utilgængelig
+                      </div>
+                      <p className="text-[11px] text-slate-300 mb-3">{webglError}</p>
+                      <button
+                        type="button"
+                        onClick={() => setWebglRetryNonce((n) => n + 1)}
+                        className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold cursor-pointer"
+                      >
+                        Prøv WebGL igen
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Bottom Control Dock below WebGL Canvas */}
               <div className="px-3 py-2 bg-[#0A0F1D] border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-[11px]">

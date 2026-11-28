@@ -5,6 +5,10 @@
  */
 
 import { jsPDF } from 'jspdf';
+import {
+  computeMeteorologicalRefractionContext,
+  renderMeteorologicalRefractionContextPdfSection,
+} from './meteorologicalRefractionPdfContext';
 
 function sanitizePdfText(input: string): string {
   return input
@@ -51,6 +55,14 @@ export interface WindImpulseCorrelationPdfParams {
   totalDustEvents: number;
   rows: WindImpulseCorrelationPdfRow[];
   sha256Hash?: string;
+  currentWeather?: {
+    windSpeed10m: number;
+    windGusts10m?: number;
+    windDirection10m: number;
+    temperature2m?: number;
+    pasquillClass?: string;
+    precipitation?: number;
+  };
 }
 
 export function generateWindImpulseCorrelationPdfReport(
@@ -307,6 +319,40 @@ export function generateWindImpulseCorrelationPdfReport(
     });
     y += 5.7;
   });
+
+  // Automatisk 'Meteorological Refraction Context' når impulsstøj-hændelser er fanget
+  if ((totalImpulseEvents > 0 || Boolean(peakRow)) && peakRow) {
+    const refractionWeather = params.currentWeather ?? {
+      windSpeed10m: peakRow.windSpeedMs,
+      windGusts10m: peakRow.windGustMs,
+      windDirection10m: peakRow.windDirectionDeg,
+    };
+    const refractionCtx = computeMeteorologicalRefractionContext({
+      windSpeed10m: refractionWeather.windSpeed10m,
+      windGusts10m: refractionWeather.windGusts10m,
+      windDirection10m: refractionWeather.windDirection10m,
+      temperature2m: refractionWeather.temperature2m,
+      pasquillClass: refractionWeather.pasquillClass,
+      precipitation: refractionWeather.precipitation,
+    });
+    y = renderMeteorologicalRefractionContextPdfSection(doc, {
+      startY: y + 6,
+      margin,
+      contentW,
+      pageH,
+      sectionTitle:
+        '03. METEOROLOGICAL REFRACTION CONTEXT (VIND- & TEMPERATURGRADIENTER VED IMPULSSTØJ)',
+      entries: [
+        {
+          eventCode: `${machineCatalogLabel.split(' ')[0].toUpperCase()}-IMPULS`,
+          timestampLabel: `${dateIso} kl. ${peakRow.hourLabel}`,
+          locationLabel: `Ringparken Spids-Receptor (${machineCatalogLabel})`,
+          lafmaxDb: peakRow.estimatedLafmaxDb,
+          context: refractionCtx,
+        },
+      ],
+    });
+  }
 
   // Footer
   const totalPages = doc.getNumberOfPages();

@@ -42,7 +42,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   render(): ReactNode {
     if (this.state.hasError) {
       return (
-        <div className="p-6 my-4 bg-[var(--surface-overlay)] border border-[var(--border-subtle)] border-l-4 border-l-rose-500 rounded-xl text-[var(--text-primary)] shadow-lg max-w-3xl mx-auto">
+        <div className="p-6 my-4 bg-[#111827] bg-[var(--surface-overlay,#111827)] border border-[#334155] border-[var(--border-subtle,#334155)] border-l-4 border-l-rose-500 rounded-xl text-slate-100 text-[var(--text-primary,#f1f5f9)] shadow-lg max-w-3xl mx-auto">
           <div className="flex items-start gap-3.5">
             <div className="p-2.5 rounded-lg bg-red-950/80 border border-red-500/50 text-red-400 shrink-0">
               <ShieldAlert className="w-6 h-6" />

@@ -16,6 +16,7 @@ import {
   DemolitionSourceNode,
   HourlyWeatherPoint,
 } from '../types/dispersion';
+import { useAcousticWeighting } from '../context/AcousticWeightingContext';
 
 export interface Rolling6hGustNoiseCorrelationWidgetProps {
   weatherHours: HourlyWeatherPoint[];
@@ -74,6 +75,7 @@ export const Rolling6hGustNoiseCorrelationWidget: React.FC<
   manualMachineNoiseOutputDb = 114,
   isManualMachineNoiseOverrideActive = false,
 }) => {
+  const { convertDb, unitLabel, labels } = useAcousticWeighting();
   const [windowSpanHours, setWindowSpanHours] = useState<6 | 8>(6);
 
   const activeSourcesCount = Math.max(
@@ -219,6 +221,16 @@ export const Rolling6hGustNoiseCorrelationWidget: React.FC<
   }, [rolling6hWindowRows]);
 
   const isRolling6hNoiseAvgAbove55Db = rolling6hNoiseAvgDb > 55;
+  const rollingCtx = {
+    windSpeedMs: currentWeather.windSpeed10m,
+    windGustMs: currentWeather.windGusts10m,
+    isImpulse: true,
+  };
+  const displayRolling6hAvg = convertDb(rolling6hNoiseAvgDb, rollingCtx);
+  const displayThreshold55 = convertDb(55.0, rollingCtx);
+  const displayThreshold85 = convertDb(85.0, rollingCtx);
+  const displayWindowMaxImpulse = convertDb(windowMaxImpulseDb, rollingCtx);
+  const displaySourceLwa = convertDb(effectiveSourceLwaDb, rollingCtx);
 
   const activeR = activePoint?.rolling6hR ?? 0;
   const rStatusColor =
@@ -249,7 +261,7 @@ export const Rolling6hGustNoiseCorrelationWidget: React.FC<
           </div>
           <p className="text-[11px] text-slate-300 leading-snug font-sans">
             Beregner dynamisk Pearsons korrelationskoefficient <strong className="text-white font-mono">r</strong> mellem
-            vindstød (<span className="font-mono text-cyan-300">v_stød</span> m/s) og maskiners impulsstøj (<span className="font-mono text-rose-300">L_AFmax</span> dB(A))
+            vindstød (<span className="font-mono text-cyan-300">v_stød</span> m/s) og maskiners impulsstøj (<span className="font-mono text-rose-300">{labels.lmaxLabel}</span> {unitLabel})
             hen over et rullende {windowSpanHours}-timers vindue afsluttende kl.{' '}
             <strong className="text-amber-300 font-mono">{currentWeather.hourLabel}</strong>.
           </p>
@@ -299,8 +311,8 @@ export const Rolling6hGustNoiseCorrelationWidget: React.FC<
           )}
           <span className="font-bold">
             {isRolling6hNoiseAvgAbove55Db
-              ? `▲ OVER 55 dB(A) GRÆNSE (+${(rolling6hNoiseAvgDb - 55).toFixed(1)} dB)`
-              : '● UNDER 55 dB(A) GRÆNSE'}
+              ? `▲ OVER ${displayThreshold55.toFixed(0)} ${unitLabel} GRÆNSE (+${(rolling6hNoiseAvgDb - 55).toFixed(1)} dB)`
+              : `● UNDER ${displayThreshold55.toFixed(0)} ${unitLabel} GRÆNSE`}
           </span>
         </div>
         <div className="flex items-center gap-2 text-[11px]">
@@ -310,10 +322,10 @@ export const Rolling6hGustNoiseCorrelationWidget: React.FC<
               isRolling6hNoiseAvgAbove55Db ? 'text-amber-200' : 'text-emerald-300'
             }
           >
-            {rolling6hNoiseAvgDb.toFixed(1)} dB(A)
+            {displayRolling6hAvg.toFixed(1)} {unitLabel}
           </strong>
           <span aria-hidden="true" className="text-slate-500">/</span>
-          <span className="text-slate-400">Grænse: 55,0 dB(A)</span>
+          <span className="text-slate-400">Grænse: {displayThreshold55.toFixed(1)} {unitLabel}</span>
         </div>
       </div>
 
@@ -354,17 +366,17 @@ export const Rolling6hGustNoiseCorrelationWidget: React.FC<
               windowMaxImpulseDb > 85 ? 'text-rose-400' : 'text-amber-300'
             }`}
           >
-            {windowMaxImpulseDb.toFixed(1)} dB
+            {displayWindowMaxImpulse.toFixed(1)} {unitLabel}
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">
-            Kildestyrke: {effectiveSourceLwaDb.toFixed(0)} dB LwA
+            Kildestyrke: {displaySourceLwa.toFixed(0)} {unitLabel} {labels.lwaLabel}
           </div>
         </div>
 
         <div className="p-2 rounded bg-[#151C28] border border-[#253042]">
           <div className="text-[10px] text-slate-400 uppercase tracking-wider flex items-center gap-1">
             <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-            <span>Impuls &gt; 85 dB i Vindue</span>
+            <span>Impuls &gt; {displayThreshold85.toFixed(0)} {unitLabel} i Vindue</span>
           </div>
           <div
             className={`text-base font-extrabold mt-0.5 ${
@@ -374,7 +386,7 @@ export const Rolling6hGustNoiseCorrelationWidget: React.FC<
             {windowOver85Hours} / {windowSpanHours} timer
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">
-            {windowOver85Hours > 0 ? 'Akustisk trykbølge-risiko' : 'Under 85 dB grænse'}
+            {windowOver85Hours > 0 ? 'Akustisk trykbølge-risiko' : `Under ${displayThreshold85.toFixed(0)} ${unitLabel} grænse`}
           </div>
         </div>
       </div>
@@ -384,7 +396,7 @@ export const Rolling6hGustNoiseCorrelationWidget: React.FC<
         <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300">
           <span className="font-bold flex items-center gap-1.5">
             <Activity className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span>24t Forløb: Rullende {windowSpanHours}t r · Vindstød (m/s) · Impulsstøj L_AFmax (dB)</span>
+            <span>24t Forløb: Rullende {windowSpanHours}t r · Vindstød (m/s) · Impulsstøj {labels.lmaxLabel} ({unitLabel})</span>
           </span>
           <span className="text-slate-400">Klik på time for at flytte {windowSpanHours}t-vinduet</span>
         </div>
@@ -466,7 +478,13 @@ export const Rolling6hGustNoiseCorrelationWidget: React.FC<
                         Vindstød: {row.windGustMs.toFixed(1)} m/s (Middel {row.windSpeedMs.toFixed(1)} m/s)
                       </div>
                       <div className={row.isExceeding85Db ? 'text-rose-300 font-bold' : 'text-slate-200'}>
-                        Maskin-impuls L_AFmax: {row.machineImpulseNoiseDb.toFixed(1)} dB(A)
+                        Maskin-impuls {labels.lmaxLabel}:{' '}
+                        {convertDb(row.machineImpulseNoiseDb, {
+                          windSpeedMs: row.windSpeedMs,
+                          windGustMs: row.windGustMs,
+                          isImpulse: true,
+                        }).toFixed(1)}{' '}
+                        {unitLabel}
                       </div>
                     </div>
                   );

@@ -1102,4 +1102,175 @@ export function buildLastWeekPredictedVsActualWeatherPairs(
   });
 }
 
+export interface OpenMeteoLast24hResult {
+  hours: HourlyWeatherPoint[];
+  sourceApi: string;
+  fetchedAtIso: string;
+  isLiveApi: boolean;
+  windowStartIso: string;
+  windowEndIso: string;
+}
+
+/**
+ * Udtrækker de seneste 24 hele timer op til referenceDate (Copenhagen tid)
+ * fra et Open-Meteo hourly response-objekt.
+ */
+export function buildLast24HoursFromOpenMeteoResponse(
+  data: OpenMeteoHourlyResponse,
+  referenceDate: Date = new Date()
+): HourlyWeatherPoint[] | null {
+  const hourly = data?.hourly;
+  if (!hourly || !Array.isArray(hourly.time) || hourly.time.length === 0) {
+    return null;
+  }
+
+  // Build YYYY-MM-DDTHH:00 string in Europe/Copenhagen or local fallback
+  let cutoffPrefix = '';
+  try {
+    const parts = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Europe/Copenhagen',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      hour12: false,
+    }).formatToParts(referenceDate);
+    const get = (t: string) => parts.find((p) => p.type === t)?.value || '00';
+    const rawHr = get('hour') === '24' ? '00' : get('hour');
+    cutoffPrefix = `${get('year')}-${get('month')}-${get('day')}T${rawHr}:00`;
+  } catch {
+    cutoffPrefix = referenceDate.toISOString().slice(0, 13) + ':00';
+  }
+
+  const eligibleIndices: number[] = [];
+  for (let i = 0; i < hourly.time.length; i++) {
+    if (hourly.time[i] <= cutoffPrefix) {
+      eligibleIndices.push(i);
+    }
+  }
+
+  const chosenIndices =
+    eligibleIndices.length >= 24
+      ? eligibleIndices.slice(-24)
+      : hourly.time.slice(-24).map((_, i, arr) => hourly.time.length - arr.length + i);
+
+  if (chosenIndices.length === 0) return null;
+
+  return chosenIndices.map((rawIdx) => {
+    const isoRaw = hourly.time[rawIdx] || '2026-11-27T00:00';
+    const hourPart = Number(isoRaw.slice(11, 13));
+    const hourIndex = Number.isFinite(hourPart) ? Math.max(0, Math.min(23, hourPart)) : 0;
+    const hourLabel = `${String(hourIndex).padStart(2, '0')}:00`;
+    const temp = Number(hourly.temperature_2m?.[rawIdx] ?? 10.5);
+    const rh = Number(hourly.relative_humidity_2m?.[rawIdx] ?? 72);
+    const precip = Number(hourly.precipitation?.[rawIdx] ?? 0);
+    const clouds = Number(hourly.cloud_cover?.[rawIdx] ?? 50);
+    const windSpeed = Number(hourly.wind_speed_10m?.[rawIdx] ?? 5.4);
+    const windDir = Number(hourly.wind_direction_10m?.[rawIdx] ?? 245);
+    const gusts = Number(hourly.wind_gusts_10m?.[rawIdx] ?? windSpeed * 1.4);
+    const soilMoisture = Number(hourly.soil_moisture_0_to_7cm?.[rawIdx] ?? 0.22);
+    const radiation = Number(hourly.direct_radiation?.[rawIdx] ?? 160);
+    const wCode = Number(hourly.weather_code?.[rawIdx] ?? 2);
+
+    return {
+      isoTime: isoRaw,
+      hourIndex,
+      hourLabel,
+      temperature2m: Number(temp.toFixed(1)),
+      relativeHumidity2m: Math.round(rh),
+      precipitation: Number(precip.toFixed(1)),
+      cloudCover: Math.round(clouds),
+      windSpeed10m: Number(windSpeed.toFixed(1)),
+      windDirection10m: Math.round(windDir),
+      windGusts10m: Number(gusts.toFixed(1)),
+      soilMoisture0To7cm: Number(soilMoisture.toFixed(3)),
+      directRadiation: Math.round(radiation),
+      weatherCode: wCode,
+      pasquillClass: computePasquillGiffordClass(windSpeed, radiation, clouds, hourIndex),
+      hadRecentFreezeThaw: temp <= 0.5,
+    };
+  });
+}
+
+/**
+ * Henter de seneste 24 timers time-for-time meteorologi fra Open-Meteo Forecast API
+ * (past_days=2&forecast_days=1) for Ringparken, Slagelse (55.4128°N, 11.3533°E).
+ */
+export async function fetchOpenMeteoLast24HoursWindHistory(
+  fallbackHours?: HourlyWeatherPoint[]
+): Promise<OpenMeteoLast24hResult> {
+  const lat = RINGPARKEN_CENTER.lat;
+  const lng = RINGPARKEN_CENTER.lng;
+  const hourlyParams =
+    'temperature_2m,relative_humidity_2m,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,soil_moisture_0_to_7cm,direct_radiation';
+
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=${hourlyParams}&wind_speed_unit=ms&timezone=Europe%2FCopenhagen&past_days=2&forecast_days=1`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const json = (await res.json()) as OpenMeteoHourlyResponse;
+      const hours = buildLast24HoursFromOpenMeteoResponse(json, new Date());
+      if (hours && hours.length > 0) {
+        return {
+          hours,
+          sourceApi: 'Open-Meteo Live API (Seneste 24 timer · Slagelse)',
+          fetchedAtIso: new Date().toISOString(),
+          isLiveApi: true,
+          windowStartIso: hours[0].isoTime,
+          windowEndIso: hours[hours.length - 1].isoTime,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Open-Meteo seneste 24t kald fejlede, anvender kalibreret 24t profil:', err);
+  }
+
+  const fb =
+    fallbackHours && fallbackHours.length > 0
+      ? fallbackHours.slice(0, 24)
+      : buildFallback24hLastWindow();
+
+  return {
+    hours: fb,
+    sourceApi: 'Open-Meteo Kalibreret 24t Vindprofil (Slagelse)',
+    fetchedAtIso: new Date().toISOString(),
+    isLiveApi: false,
+    windowStartIso: fb[0]?.isoTime || '',
+    windowEndIso: fb[fb.length - 1]?.isoTime || '',
+  };
+}
+
+function buildFallback24hLastWindow(): HourlyWeatherPoint[] {
+  const now = new Date();
+  return Array.from({ length: 24 }, (_, idx) => {
+    const dt = new Date(now.getTime() - (23 - idx) * 3600_000);
+    const hr = dt.getUTCHours();
+    const dayPhase = Math.max(0, Math.sin(((hr - 6) / 14) * Math.PI));
+    const windSpeed = Number(
+      Math.max(2.1, 5.2 + dayPhase * 4.4 + Math.sin(idx * 0.55) * 1.4).toFixed(1)
+    );
+    const gusts = Number((windSpeed * 1.42).toFixed(1));
+    const windDir = (238 + Math.round(Math.sin(idx * 0.4) * 20) + 360) % 360;
+    const rad = Math.round(dayPhase * 390);
+    return {
+      isoTime: dt.toISOString().slice(0, 13) + ':00',
+      hourIndex: hr,
+      hourLabel: `${String(hr).padStart(2, '0')}:00`,
+      temperature2m: Number((8.5 + dayPhase * 5.8).toFixed(1)),
+      relativeHumidity2m: Math.round(78 - dayPhase * 18),
+      precipitation: 0,
+      cloudCover: 42,
+      windSpeed10m: windSpeed,
+      windDirection10m: windDir,
+      windGusts10m: gusts,
+      soilMoisture0To7cm: 0.22,
+      directRadiation: rad,
+      weatherCode: 2,
+      pasquillClass: computePasquillGiffordClass(windSpeed, rad, 42, hr),
+      hadRecentFreezeThaw: false,
+    };
+  });
+}
+
+
 

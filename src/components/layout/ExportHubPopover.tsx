@@ -50,7 +50,8 @@ export interface ExportHubPopoverProps {
   completedRangeSimulation: RangeSimulationSummary | null;
   onOpenRangeSimDrawer: () => void;
   isBulkDownloading: boolean;
-  // Category A: 10 PDF Reports
+  // Category A: PDF Reports
+  onDownloadWeeklyExternalAuditPdf?: () => void;
   onDownloadForensicPdf: () => void;
   onOpenForensicReportModal: () => void;
   onExportChronologicalEvidencePdf: () => void;
@@ -115,6 +116,7 @@ export const ExportHubPopover: React.FC<ExportHubPopoverProps> = ({
   completedRangeSimulation,
   onOpenRangeSimDrawer,
   isBulkDownloading,
+  onDownloadWeeklyExternalAuditPdf,
   onDownloadForensicPdf,
   onOpenForensicReportModal,
   onExportChronologicalEvidencePdf,
@@ -216,7 +218,21 @@ export const ExportHubPopover: React.FC<ExportHubPopoverProps> = ({
 
   const items = useMemo<ExportItemSpec[]>(
     () => [
-      // KATEGORI A — 10 PDF-FLOWS
+      // KATEGORI A — PDF-FLOWS
+      ...(onDownloadWeeklyExternalAuditPdf
+        ? [
+            {
+              id: 'a0-weekly-external-audit-pdf',
+              category: 'cat_a_pdf' as const,
+              indexLabel: 'A0',
+              title: 'Ekstern Miljørevision: Seneste Uges Målinger (Støj, Støv & Vejr)',
+              subtitle:
+                'Automatisk 7-døgns (168t) A4-revisionsrapport med støj, støv, vejrdata, grafer og ISO 19011 / SHA-256 segl.',
+              formatTag: 'PDF · Ekstern Revision',
+              onTrigger: onDownloadWeeklyExternalAuditPdf,
+            },
+          ]
+        : []),
       {
         id: 'a1-forensic-pdf',
         category: 'cat_a_pdf',

@@ -27,6 +27,7 @@ export type DashboardWindowId =
   | 'temp_aerosol_24h'
   | 'cumulative_dust_24h'
   | 'receptor_dust_deposition_profile'
+  | 'climate_resilience_percolation'
   | 'substances_sumformel'
   | 'algedonic_observations'
   | 'noise_dust_correlation'
@@ -326,6 +327,16 @@ export const DASHBOARD_WINDOW_REGISTRY: Record<
     defaultX: 124,
     defaultY: 112,
     defaultWidth: 760,
+  },
+  climate_resilience_percolation: {
+    id: 'climate_resilience_percolation',
+    title: 'Klimaresiliens: Fremtidig Nedbør, Grundvandsstigning & 3D Perkolation',
+    shortTitle: 'Klimaresiliens & 3D Perkolation',
+    category: 'Klimaresiliens',
+    accentColor: 'cyan',
+    defaultX: 116,
+    defaultY: 96,
+    defaultWidth: 780,
   },
 };
 

@@ -1051,10 +1051,39 @@ export const DispersionForecastBulletinWidget: React.FC<
     );
   }, [receptors, selectedReceptorId]);
 
-  // Automatically focus and synchronize when mode changes
+  const onSelectDateAndHourRef = useRef(onSelectDateAndHour);
+  onSelectDateAndHourRef.current = onSelectDateAndHour;
+  const onSelectReceptorRef = useRef(onSelectReceptor);
+  onSelectReceptorRef.current = onSelectReceptor;
+  const latestSyncSnapshotRef = useRef({
+    simulatedDateIso,
+    simulatedHourIndex,
+    selectedReceptorId,
+    nextDayMidnightAnalysis,
+    nextDayDataset: nextDayForecast.dataset,
+    fiveDaysAggregatedSummary,
+    fiveDaysDetailed,
+  });
+  latestSyncSnapshotRef.current = {
+    simulatedDateIso,
+    simulatedHourIndex,
+    selectedReceptorId,
+    nextDayMidnightAnalysis,
+    nextDayDataset: nextDayForecast.dataset,
+    fiveDaysAggregatedSummary,
+    fiveDaysDetailed,
+  };
+  const lastAutoSyncKeyRef = useRef<string | null>(null);
+
+  // Automatically focus and synchronize when mode or focusTrigger changes
   useEffect(() => {
+    const syncKey = `${mode}::${focusTrigger}`;
+    if (lastAutoSyncKeyRef.current === syncKey) return;
+    lastAutoSyncKeyRef.current = syncKey;
+
     setIsFocusPulseActive(true);
     const timer = window.setTimeout(() => setIsFocusPulseActive(false), 1800);
+    const snap = latestSyncSnapshotRef.current;
 
     if (mode === 'next_day_00_00_59') {
       if (nextDayFocusPanelRef.current) {
@@ -1070,14 +1099,24 @@ export const DispersionForecastBulletinWidget: React.FC<
         });
       }
 
-      onSelectDateAndHour(
-        nextDayMidnightAnalysis.dateIso,
-        0,
-        nextDayForecast.dataset
-      );
+      if (
+        snap.simulatedDateIso !== snap.nextDayMidnightAnalysis.dateIso ||
+        snap.simulatedHourIndex !== 0
+      ) {
+        onSelectDateAndHourRef.current(
+          snap.nextDayMidnightAnalysis.dateIso,
+          0,
+          snap.nextDayDataset
+        );
+      }
 
-      if (nextDayMidnightAnalysis.worstRec00?.receptorId) {
-        onSelectReceptor(nextDayMidnightAnalysis.worstRec00.receptorId);
+      if (
+        snap.nextDayMidnightAnalysis.worstRec00?.receptorId &&
+        snap.selectedReceptorId !== snap.nextDayMidnightAnalysis.worstRec00.receptorId
+      ) {
+        onSelectReceptorRef.current(
+          snap.nextDayMidnightAnalysis.worstRec00.receptorId
+        );
       }
     } else if (mode === 'five_day_forecast') {
       if (fiveDayFocusPanelRef.current) {
@@ -1088,15 +1127,23 @@ export const DispersionForecastBulletinWidget: React.FC<
         fiveDayFocusPanelRef.current.focus({ preventScroll: true });
       }
       const targetDay =
-        fiveDaysAggregatedSummary.worstDayEntry || fiveDaysDetailed[0];
+        snap.fiveDaysAggregatedSummary.worstDayEntry || snap.fiveDaysDetailed[0];
       if (targetDay) {
-        onSelectDateAndHour(
-          targetDay.dateIso,
-          targetDay.peakHourIndex,
-          targetDay.dataset
-        );
-        if (targetDay.peakReceptorId) {
-          onSelectReceptor(targetDay.peakReceptorId);
+        if (
+          snap.simulatedDateIso !== targetDay.dateIso ||
+          snap.simulatedHourIndex !== targetDay.peakHourIndex
+        ) {
+          onSelectDateAndHourRef.current(
+            targetDay.dateIso,
+            targetDay.peakHourIndex,
+            targetDay.dataset
+          );
+        }
+        if (
+          targetDay.peakReceptorId &&
+          snap.selectedReceptorId !== targetDay.peakReceptorId
+        ) {
+          onSelectReceptorRef.current(targetDay.peakReceptorId);
         }
       }
     } else if (mode === 'weather_broadcast_segment') {
@@ -1110,8 +1157,7 @@ export const DispersionForecastBulletinWidget: React.FC<
     }
 
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, focusTrigger, nextDayMidnightAnalysis.dateIso]);
+  }, [mode, focusTrigger]);
 
   // Export 5-Day Aggregated Forecast & Sum Quotients to CSV
   const handleExport5DayForecastCsv = () => {

@@ -268,6 +268,14 @@ export const WindNoiseCorrelationDashboardWindow: React.FC<
         isHighSensitivity: r.isHighSensitivity,
       })),
       sha256Hash,
+      currentWeather: {
+        windSpeed10m: currentWeather.windSpeed10m,
+        windGusts10m: currentWeather.windGusts10m,
+        windDirection10m: currentWeather.windDirection10m,
+        temperature2m: currentWeather.temperature2m,
+        pasquillClass: currentWeather.pasquillClass,
+        precipitation: currentWeather.precipitation,
+      },
     });
     setPdfExportSuccess(true);
     window.setTimeout(() => setPdfExportSuccess(false), 2600);

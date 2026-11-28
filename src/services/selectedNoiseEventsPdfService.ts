@@ -7,6 +7,11 @@
 
 import { jsPDF } from 'jspdf';
 import { deterministicHexHash256 } from './autonomousReceptorMeshService';
+import {
+  MeteorologicalRefractionPdfEntry,
+  computeMeteorologicalRefractionContext,
+  renderMeteorologicalRefractionContextPdfSection,
+} from './meteorologicalRefractionPdfContext';
 
 export interface ForensicSelectableNoiseEvent {
   id: string;
@@ -24,12 +29,23 @@ export interface ForensicSelectableNoiseEvent {
   isNoiseLimitExceeded: boolean;
   isSumQuotientExceeded: boolean;
   sha256Signature: string;
+  temperature2m?: number;
+  pasquillClass?: string;
+  precipitationMm?: number;
 }
 
 export interface GenerateSelectedNoiseEventsPdfParams {
   dateIso: string;
   receptorFocusName: string;
   selectedEvents: ForensicSelectableNoiseEvent[];
+  currentWeather?: {
+    windSpeed10m: number;
+    windGusts10m?: number;
+    windDirection10m: number;
+    temperature2m?: number;
+    pasquillClass?: string;
+    precipitation?: number;
+  };
 }
 
 function pearsonR(xs: number[], ys: number[]): number {
@@ -187,6 +203,35 @@ export function downloadSelectedNoiseEventsForensicPdf(
 
     y += 13;
   });
+
+  // Automatisk 'Meteorological Refraction Context' for fangede maskin-impulsstøjhændelser
+  if (selectedEvents.length > 0) {
+    const refractionEntries: MeteorologicalRefractionPdfEntry[] = selectedEvents
+      .slice(0, 5)
+      .map((ev) => ({
+        eventCode: ev.code,
+        timestampLabel: ev.timestampLabel,
+        locationLabel: `${ev.locationLabel} (${ev.sourceLabel})`,
+        lafmaxDb: ev.estimatedLafmaxDb,
+        context: computeMeteorologicalRefractionContext({
+          windSpeed10m: ev.windSpeedMs,
+          windGusts10m: ev.windGustMs,
+          windDirection10m: ev.windDirectionDeg,
+          temperature2m: ev.temperature2m ?? params.currentWeather?.temperature2m,
+          pasquillClass: ev.pasquillClass ?? params.currentWeather?.pasquillClass,
+          precipitation: ev.precipitationMm ?? params.currentWeather?.precipitation,
+        }),
+      }));
+    y = renderMeteorologicalRefractionContextPdfSection(doc, {
+      startY: y + 6,
+      margin: 14,
+      contentW: 182,
+      pageH: 297,
+      entries: refractionEntries,
+      sectionTitle:
+        'METEOROLOGICAL REFRACTION CONTEXT (VIND- & TEMPERATURGRADIENTER VED IMPULSSTØJ)',
+    });
+  }
 
   // Retsmedicinsk Konklusion & Footer
   if (y > 248) {
@@ -446,6 +491,9 @@ export function downloadNeighborGustNoiseTechnicalAppendixPdf(params: {
     windSpeed10m: number;
     windGusts10m: number;
     windDirection10m: number;
+    temperature2m?: number;
+    pasquillClass?: string;
+    precipitation?: number;
   };
   sources: Array<{
     id: string;
@@ -612,6 +660,36 @@ export function downloadNeighborGustNoiseTechnicalAppendixPdf(params: {
 
     y += 12.5;
   });
+
+  // Automatisk 'Meteorological Refraction Context' for impulshændelser ved nabofacader
+  if (dataset.rows.length > 0) {
+    const topNeighbor = dataset.rows[0];
+    const refractionCtx = computeMeteorologicalRefractionContext({
+      windSpeed10m: params.currentWeather.windSpeed10m,
+      windGusts10m: params.currentWeather.windGusts10m,
+      windDirection10m: params.currentWeather.windDirection10m,
+      temperature2m: params.currentWeather.temperature2m,
+      pasquillClass: params.currentWeather.pasquillClass,
+      precipitation: params.currentWeather.precipitation,
+    });
+    y = renderMeteorologicalRefractionContextPdfSection(doc, {
+      startY: y + 6,
+      margin: 14,
+      contentW: 182,
+      pageH: 297,
+      sectionTitle:
+        'METEOROLOGICAL REFRACTION CONTEXT (AKUSTISK UDBREDELSE VED VIND & TEMPERATURGRADIENT)',
+      entries: [
+        {
+          eventCode: `${topNeighbor.dominantSourceCode}-IMPULS`,
+          timestampLabel: `${dataset.dateIso} kl. ${dataset.hourLabel}`,
+          locationLabel: `${topNeighbor.receptorCode} · ${topNeighbor.receptorName}`,
+          lafmaxDb: topNeighbor.currentLafmaxDb,
+          context: refractionCtx,
+        },
+      ],
+    });
+  }
 
   // Sektion 3: Teknisk bilags-attestation
   if (y > 246) {

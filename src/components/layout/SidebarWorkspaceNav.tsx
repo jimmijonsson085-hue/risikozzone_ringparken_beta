@@ -7,11 +7,17 @@ import {
   Home,
   Scale,
   Volume2,
+  Waves,
   Wind,
 } from 'lucide-react';
 import { RightPanelTab } from './layoutTypes';
 
-export type SidebarDomainWorkspaceId = 'evidence' | 'dispersion' | 'acoustics' | 'legalBioAi';
+export type SidebarDomainWorkspaceId =
+  | 'evidence'
+  | 'dispersion'
+  | 'acoustics'
+  | 'climate'
+  | 'legalBioAi';
 
 export interface SidebarWorkspaceNavProps {
   activeTab: RightPanelTab;
@@ -25,6 +31,7 @@ const DOMAIN_FOR_TAB: Record<RightPanelTab, SidebarDomainWorkspaceId> = {
   algedonic: 'evidence',
   substances: 'dispersion',
   puff24h: 'dispersion',
+  climateResilience: 'climate',
   noiseDust: 'acoustics',
   indoorClimate: 'acoustics',
   compliance: 'legalBioAi',
@@ -77,6 +84,14 @@ const SUBTABS_BY_DOMAIN: Record<
       icon: Home,
     },
   ],
+  climate: [
+    {
+      id: 'climateResilience',
+      label: 'Klimaresiliens & 3D Perkolation',
+      title: 'Simulér fremtidige klimaforandringer (øget nedbør, skybrud & grundvandsstigning) på underjordisk perkolation i 3D-scenen',
+      icon: Waves,
+    },
+  ],
   legalBioAi: [
     {
       id: 'compliance',
@@ -113,6 +128,7 @@ export const SidebarWorkspaceNav: React.FC<SidebarWorkspaceNavProps> = ({
     evidence: 'algedonic',
     dispersion: 'substances',
     acoustics: 'noiseDust',
+    climate: 'climateResilience',
     legalBioAi: 'compliance',
   });
 
@@ -157,6 +173,12 @@ export const SidebarWorkspaceNav: React.FC<SidebarWorkspaceNavProps> = ({
       badgeTone: 'rose',
     },
     {
+      id: 'climate',
+      label: 'Klimaresiliens',
+      title: 'Fremtidige klimaforandringer, øget nedbør og 3D underjordisk perkolation',
+      icon: Waves,
+    },
+    {
       id: 'legalBioAi',
       label: 'Jura, Bio & AI',
       title: 'Lovovertrædelser, L 69, Bio-toks & Læge-AI samt 5 AI Eksperter',
@@ -170,11 +192,11 @@ export const SidebarWorkspaceNav: React.FC<SidebarWorkspaceNavProps> = ({
 
   return (
     <div className="bg-[var(--surface-panel)] border-b border-[var(--border-subtle)] shrink-0 font-sans tabular-nums">
-      {/* Trin A: 4 Rummelige Hovedkategorier */}
+      {/* Trin A: Rummelige Hovedkategorier */}
       <div
         role="tablist"
         aria-label="Primære analyse-kategorier"
-        className="sidebar-tab-grid grid grid-cols-2 2xl:grid-cols-4 gap-1.5 p-2"
+        className="sidebar-tab-grid grid grid-cols-2 2xl:grid-cols-5 gap-1.5 p-2"
       >
         {domains.map((dom) => {
           const Icon = dom.icon;

@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
   AlertTriangle,
+  Box,
   Building2,
   CheckCircle2,
   CloudRain,
@@ -10,6 +11,7 @@ import {
   Droplets,
   FileWarning,
   Layers,
+  Map as MapIcon,
   MapPin,
   Search,
   ShieldAlert,
@@ -18,6 +20,7 @@ import {
   Wind,
   X,
 } from 'lucide-react';
+import { RiskGis3DBuildingsView } from './RiskGis3DBuildingsView';
 import {
   MATERIAL_SAMPLES,
   PROTECTED_FEATURES,
@@ -247,6 +250,14 @@ export const RiskZoneMap: React.FC<RiskZoneMapProps> = ({
   );
   const [selectedProtectedFeature, setSelectedProtectedFeature] =
     useState<ProtectedFeature | null>(null);
+
+  // Glidende overgang mellem 2D-kortvisning, Split og 3D-bygningsmodeller i RiskGIS
+  const [gisDimensionMode, setGisDimensionMode] = useState<'2d' | 'split' | '3d'>('2d');
+  const [isTransitioningDimension, setIsTransitioningDimension] = useState<boolean>(false);
+  const [transitionDirectionLabel, setTransitionDirectionLabel] = useState<string | null>(null);
+  const [threeTransitionKey, setThreeTransitionKey] = useState<number>(0);
+  const [isExitingTo2D, setIsExitingTo2D] = useState<boolean>(false);
+  const transitionTimersRef = useRef<number[]>([]);
 
   const activeDemolitionSources = useMemo(
     () =>
@@ -910,6 +921,56 @@ export const RiskZoneMap: React.FC<RiskZoneMapProps> = ({
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  useEffect(() => {
+    return () => {
+      transitionTimersRef.current.forEach((id) => window.clearTimeout(id));
+      transitionTimersRef.current = [];
+    };
+  }, []);
+
+  const handleSwitchGisDimension = (nextMode: '2d' | 'split' | '3d') => {
+    if (nextMode === gisDimensionMode) return;
+    transitionTimersRef.current.forEach((id) => window.clearTimeout(id));
+    transitionTimersRef.current = [];
+
+    if (nextMode === '2d') {
+      setIsExitingTo2D(true);
+      setIsTransitioningDimension(true);
+      setTransitionDirectionLabel('Glider tilbage til 2D-kortvisning…');
+      const t1 = window.setTimeout(() => {
+        setGisDimensionMode('2d');
+        setIsExitingTo2D(false);
+        mapRef.current?.invalidateSize({ animate: true });
+      }, 340);
+      const t2 = window.setTimeout(() => {
+        setIsTransitioningDimension(false);
+        setTransitionDirectionLabel(null);
+        mapRef.current?.invalidateSize({ animate: true });
+      }, 640);
+      transitionTimersRef.current.push(t1, t2);
+      return;
+    }
+
+    setIsExitingTo2D(false);
+    setIsTransitioningDimension(true);
+    setTransitionDirectionLabel(
+      nextMode === '3d'
+        ? 'Ekstruderer 3D-bygningsmodeller…'
+        : 'Synkroniserer 2D-kort & 3D-modeller…'
+    );
+    setGisDimensionMode(nextMode);
+    setThreeTransitionKey((k) => k + 1);
+    const t1 = window.setTimeout(() => {
+      mapRef.current?.invalidateSize({ animate: true });
+    }, 180);
+    const t2 = window.setTimeout(() => {
+      setIsTransitioningDimension(false);
+      setTransitionDirectionLabel(null);
+      mapRef.current?.invalidateSize({ animate: true });
+    }, 640);
+    transitionTimersRef.current.push(t1, t2);
+  };
+
   return (
     <section
       aria-label="Interaktivt GIS Risikokort for Ringparken i Slagelse"
@@ -1014,8 +1075,41 @@ export const RiskZoneMap: React.FC<RiskZoneMapProps> = ({
           )}
         </div>
 
-        {/* Arbejdstid & Basemap-skift */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Arbejdstid, 2D/3D Bygningsmodeller & Basemap-skift */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div
+            data-testid="riskgis-dimension-switcher"
+            className="flex items-center gap-0.5 p-0.5 rounded-md bg-[#0B0F19] border border-[#334155]"
+            role="group"
+            aria-label="Skift mellem 2D-kortvisning og 3D-bygningsmodeller i RiskGIS"
+          >
+            {(
+              [
+                { id: '2d', label: '2D Kort', icon: MapIcon },
+                { id: 'split', label: '2D + 3D', icon: Layers },
+                { id: '3d', label: '3D Bygninger', icon: Box },
+              ] as const
+            ).map(({ id, label, icon: DimIcon }) => {
+              const active = gisDimensionMode === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  data-testid={`riskgis-dim-${id}-btn`}
+                  onClick={() => handleSwitchGisDimension(id)}
+                  className={`px-2 py-1 rounded text-[11px] font-mono font-semibold flex items-center gap-1 cursor-pointer transition-all duration-200 whitespace-nowrap ${
+                    active
+                      ? 'bg-cyan-500 text-slate-950 font-bold shadow-xs'
+                      : 'text-slate-300 hover:text-white hover:bg-[#1E293B]'
+                  }`}
+                >
+                  <DimIcon className="w-3 h-3 shrink-0" />
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+
           <div
             className={`px-2.5 py-1 rounded border text-[11px] font-mono font-semibold flex items-center gap-1.5 whitespace-nowrap ${
               workHoursStatus.isAllowed
@@ -1283,13 +1377,70 @@ export const RiskZoneMap: React.FC<RiskZoneMapProps> = ({
           )}
         </aside>
 
-        {/* MIDT: LEAFLET KORTCONTAINER MED ISOLATE Z-0 */}
-        <div className="lg:col-span-5 relative isolate z-0 min-h-[420px] lg:min-h-[540px] bg-[#07090E]">
+        {/* MIDT: GLIDENDE OVERGANG MELLEM 2D LEAFLET-KORT & 3D-BYGNINGSMODELLER */}
+        <div
+          data-testid="riskgis-stage-container"
+          data-dimension-mode={gisDimensionMode}
+          className="lg:col-span-5 relative isolate z-0 min-h-[420px] lg:min-h-[540px] bg-[#07090E] overflow-hidden"
+        >
+          {/* 2D Leaflet Kortlag (forbliver monteret for øjeblikkelig, glidende morphing) */}
           <div
-            ref={mapContainerRef}
-            className="w-full h-full min-h-[420px] lg:min-h-[540px]"
-            aria-label="Leaflet GIS kort over Ringparken"
-          />
+            className={`absolute inset-0 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              gisDimensionMode === '2d'
+                ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto z-10'
+                : gisDimensionMode === 'split'
+                ? 'opacity-100 scale-100 translate-y-0 bottom-1/2 border-b border-cyan-500/40 pointer-events-auto z-10'
+                : 'opacity-0 scale-[0.94] -translate-y-2 pointer-events-none z-0'
+            }`}
+            style={{
+              transform:
+                gisDimensionMode === '3d'
+                  ? 'perspective(1200px) rotateX(16deg) scale(0.94)'
+                  : 'perspective(1200px) rotateX(0deg) scale(1)',
+            }}
+          >
+            <div
+              ref={mapContainerRef}
+              className="w-full h-full min-h-[210px]"
+              aria-label="Leaflet GIS kort over Ringparken"
+            />
+          </div>
+
+          {/* 3D Three.js Bygningsmodeller Lag */}
+          {(gisDimensionMode === '3d' || gisDimensionMode === 'split') && (
+            <div
+              className={`absolute inset-x-0 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                gisDimensionMode === 'split' ? 'top-1/2 bottom-0 z-20' : 'top-0 bottom-0 z-20'
+              } ${
+                isExitingTo2D
+                  ? 'opacity-0 scale-[0.96]'
+                  : 'opacity-100 scale-100 riskgis-3d-enter'
+              }`}
+            >
+              <RiskGis3DBuildingsView
+                windFromDeg={windFromDeg}
+                windSpeedMs={windSpeedMs}
+                isDryWeather={isDryWeather}
+                selectedBuildingId={selectedBuildingId}
+                exposureByBuildingId={exposureByBuildingId}
+                layers={layers}
+                onSelectBuilding={handleSelectBuildingItem}
+                transitionTriggerKey={threeTransitionKey}
+                isExitingTo2D={isExitingTo2D}
+              />
+            </div>
+          )}
+
+          {/* Glidende Overgangs-Indikator under 2D ↔ 3D morph */}
+          {isTransitioningDimension && transitionDirectionLabel && (
+            <div
+              data-testid="riskgis-transition-indicator"
+              className="pointer-events-none absolute bottom-3 right-3 z-30 px-2.5 py-1 rounded bg-[#0B0F19]/90 border border-cyan-500/50 text-[10.5px] font-mono text-cyan-200 flex items-center gap-1.5 backdrop-blur-xs animate-pulse"
+            >
+              <Compass className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
+              <span>{transitionDirectionLabel}</span>
+            </div>
+          )}
         </div>
 
         {/* HØJRE DETALJEPANEL: BYGNING / LABORATORIEPRØVER / HP14 / AFSTAND */}

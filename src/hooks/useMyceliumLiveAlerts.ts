@@ -104,6 +104,8 @@ export function useMyceliumLiveAlerts({
   const scrubUntilMsRef = useRef<number>(0);
   const prevHourRef = useRef<number>(selectedHourIndex);
   const prevProgRef = useRef<number>(timelineProgress);
+  const prevPlayingRef = useRef<boolean>(isPlayingTimeline);
+  const lastScrubStatsSigRef = useRef<string | null>(null);
 
   useEffect(() => {
     const unlock = () => { userInteractedRef.current = true; };
@@ -124,18 +126,23 @@ export function useMyceliumLiveAlerts({
   /** Synkron 600 ms Tidslinje-Scrubbing Guard mod alarm-spam under træk i 24t- og +6t-slidere. */
   const notifyTimelineScrub = useCallback(() => {
     scrubUntilMsRef.current = Date.now() + SCRUBBING_GUARD_MS;
-    setIsScrubbingSuppressed(true);
+    setIsScrubbingSuppressed((prev) => (prev ? prev : true));
     if (scrubTimerRef.current !== null) window.clearTimeout(scrubTimerRef.current);
     scrubTimerRef.current = window.setTimeout(() => {
       scrubUntilMsRef.current = 0;
-      if (!isPlayingTimeline) setIsScrubbingSuppressed(false);
+      if (!isPlayingTimeline) setIsScrubbingSuppressed((prev) => (prev ? false : prev));
     }, SCRUBBING_GUARD_MS);
   }, [isPlayingTimeline]);
 
   useEffect(() => {
-    if (prevHourRef.current !== selectedHourIndex || prevProgRef.current !== timelineProgress || isPlayingTimeline) {
+    if (
+      prevHourRef.current !== selectedHourIndex ||
+      prevProgRef.current !== timelineProgress ||
+      prevPlayingRef.current !== isPlayingTimeline
+    ) {
       prevHourRef.current = selectedHourIndex;
       prevProgRef.current = timelineProgress;
+      prevPlayingRef.current = isPlayingTimeline;
       notifyTimelineScrub();
     }
   }, [selectedHourIndex, timelineProgress, isPlayingTimeline, notifyTimelineScrub]);
@@ -261,11 +268,23 @@ export function useMyceliumLiveAlerts({
     'REGULATORY APOPTOSIS & AMNESTI UDLØST',
     `Kill-chains sænket til ${simState.kpis.activeKillChainsPct}% & Algoritmisk Amnesti (P_s=1,00) aktiv ved σ=${simState.kpis.systemicEntropySigma.toFixed(2)}.`, { j: 0, kg: 0, hepa: 0 });
 
-    if (gate1Inc || hystInc || scrubInc || emitted.length) {
-      setSuppressedStats((p) => ({
-        emittedCount: p.emittedCount + emitted.length, destroyedByGate1Count: p.destroyedByGate1Count + gate1Inc,
-        suppressedByHysteresisCount: p.suppressedByHysteresisCount + hystInc, suppressedByScrubbingCount: p.suppressedByScrubbingCount + scrubInc,
-      }));
+    const scrubSig = `${selectedHourIndex}::${isScrubbingSuppressed}::${isPlayingTimeline}`;
+    const shouldCountSuppressionStats = !activelyScrubbing || lastScrubStatsSigRef.current !== scrubSig;
+    if (activelyScrubbing) {
+      lastScrubStatsSigRef.current = scrubSig;
+    } else {
+      lastScrubStatsSigRef.current = null;
+    }
+
+    if ((gate1Inc || (shouldCountSuppressionStats && (hystInc || scrubInc)) || emitted.length)) {
+      const effHystInc = shouldCountSuppressionStats ? hystInc : 0;
+      const effScrubInc = shouldCountSuppressionStats ? scrubInc : 0;
+      if (gate1Inc || effHystInc || effScrubInc || emitted.length) {
+        setSuppressedStats((p) => ({
+          emittedCount: p.emittedCount + emitted.length, destroyedByGate1Count: p.destroyedByGate1Count + gate1Inc,
+          suppressedByHysteresisCount: p.suppressedByHysteresisCount + effHystInc, suppressedByScrubbingCount: p.suppressedByScrubbingCount + effScrubInc,
+        }));
+      }
     }
     if (emitted.length > 0) {
       setEventLog((prev) => [...emitted, ...prev].slice(0, 50));
@@ -273,7 +292,7 @@ export function useMyceliumLiveAlerts({
       playBiocyberneticChime(false);
       dispatchOsNotification(emitted[0].titleDa, emitted[0].messageDa);
     }
-  }, [simState, isLiveEnabled, alertProfile, isScrubbingSuppressed, selectedHourIndex, timelineProgress, isPlayingTimeline, currentWeather?.windSpeed10m, playBiocyberneticChime, dispatchOsNotification]);
+  }, [simState, isLiveEnabled, alertProfile, isScrubbingSuppressed, selectedHourIndex, isPlayingTimeline, currentWeather?.windSpeed10m, playBiocyberneticChime, dispatchOsNotification]);
 
   const dismissToast = useCallback((id: string) => setActiveToastQueue((p) => p.filter((t) => t.id !== id)), []);
   const acknowledgeAlert = useCallback((id: string) => {
@@ -510,10 +529,13 @@ export function useSimultaneousAlgedonicDispatch({
     ]
   );
 
+  const onAtomicDispatchRef = useRef(onAtomicSimultaneousDispatch);
+  onAtomicDispatchRef.current = onAtomicSimultaneousDispatch;
+
   // Hysteresis latch + scrubbing suppression for automatic triggers
   useEffect(() => {
     if (manualScenarioOverride !== null) {
-      setAutoLatched(true);
+      if (!autoLatched) setAutoLatched(true);
       return;
     }
     const isScrubbing =
@@ -584,8 +606,8 @@ export function useSimultaneousAlgedonicDispatch({
     if (lastCommittedKeyRef.current === commitKey) return;
     lastCommittedKeyRef.current = commitKey;
     playDualToneP1(false);
-    onAtomicSimultaneousDispatch?.(dispatch);
-  }, [dispatch, onAtomicSimultaneousDispatch, playDualToneP1]);
+    onAtomicDispatchRef.current?.(dispatch);
+  }, [dispatch, playDualToneP1]);
 
   // Discrete ISA-18.2 reminder pulse every 6s while unacknowledged & not muted
   useEffect(() => {

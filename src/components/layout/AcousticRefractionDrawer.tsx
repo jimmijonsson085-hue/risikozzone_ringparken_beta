@@ -26,6 +26,7 @@ import {
 } from '../../services/acousticRefractionMath';
 import { MachineImpulseWindSensitivityWidget } from '../MachineImpulseWindSensitivityWidget';
 import { WindCompensatedDbaCatalogSection } from '../WindCompensatedDbaCatalogSection';
+import { useAcousticWeighting } from '../../context/AcousticWeightingContext';
 
 export interface AcousticRefractionDrawerProps {
   weatherDataset: WeatherDataset;
@@ -123,6 +124,7 @@ export const AcousticRefractionDrawer: React.FC<AcousticRefractionDrawerProps> =
   const [acousticRefractionPdfBanner, setAcousticRefractionPdfBanner] = useState<string | null>(
     null
   );
+  const { convertDb, unitLabel, labels } = useAcousticWeighting();
 
   const progressRef = useRef<number>(selectedHourIndex);
   const lastSyncedHourRef = useRef<number>(selectedHourIndex);
@@ -866,7 +868,7 @@ export const AcousticRefractionDrawer: React.FC<AcousticRefractionDrawerProps> =
                   K1
                 </text>
                 <text x="126" y="148" fill="#fda4af" fontSize="9.5" fontWeight="bold">
-                  Støjkilde 108 dB(A)
+                  Støjkilde {convertDb(108, { windSpeedMs: frame.animWindSpeed10m, windGustMs: frame.animWindGusts10m }).toFixed(0)} {unitLabel}
                 </text>
 
                 <rect
@@ -1214,7 +1216,7 @@ export const AcousticRefractionDrawer: React.FC<AcousticRefractionDrawerProps> =
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-extrabold uppercase text-amber-300">
-              Beregnede Akustiske dB-Værdier pr. Receptor (ΔL_refr, L_Aeq,korr &amp; Impuls-Peak L_AFmax)
+              Beregnede Akustiske dB-Værdier pr. Receptor (ΔL_refr, {labels.leqKorrLabel} &amp; Impuls-Peak {labels.lmaxLabel} · {unitLabel})
             </span>
             <span className="text-[11px] text-slate-400">
               Kilde: <strong className="text-white">{primaryActiveSource.code}</strong> · Klik på en receptor for at opdatere lydbølgebøjnings-diagrammet
@@ -1235,6 +1237,15 @@ export const AcousticRefractionDrawer: React.FC<AcousticRefractionDrawerProps> =
           {receptorRefractions.map((recRef) => {
             const isSelected = recRef.receptorId === selectedReceptorExposure.receptorId;
             const recExceeds3dB = recRef.totalRefrDb > 3.0;
+            const refrCtx = {
+              windSpeedMs: frame.animWindSpeed10m,
+              windGustMs: frame.animWindGusts10m,
+            };
+            const dispCorrectedEq = convertDb(recRef.correctedLaeqDb, refrCtx);
+            const dispPeakMax = convertDb(recRef.impulsePeakLafmaxDb, {
+              ...refrCtx,
+              isImpulse: true,
+            });
             return (
               <button
                 key={`ribbon-ac-rec-${recRef.receptorId}`}
@@ -1273,15 +1284,15 @@ export const AcousticRefractionDrawer: React.FC<AcousticRefractionDrawerProps> =
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-slate-400 mt-0.5 pt-0.5 border-t border-slate-800/80">
                   <span>
-                    L_Aeq: <strong className="text-white">{recRef.correctedLaeqDb.toFixed(1)}</strong>{' '}
-                    dB
+                    {labels.leqLabel}: <strong className="text-white">{dispCorrectedEq.toFixed(1)}</strong>{' '}
+                    {unitLabel}
                   </span>
                   <span>
                     Peak:{' '}
                     <strong className="text-amber-300">
-                      {recRef.impulsePeakLafmaxDb.toFixed(0)}
+                      {dispPeakMax.toFixed(0)}
                     </strong>{' '}
-                    dB
+                    {unitLabel}
                   </span>
                 </div>
               </button>

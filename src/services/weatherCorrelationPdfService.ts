@@ -660,3 +660,360 @@ export function generateWeatherCorrelationPdfReport(
     `Ringparken_Retsmedicinsk_Vejr_Stoev_Korrelationsrapport_${weatherDataset.dateIso}_kl_${safeHour}.pdf`
   );
 }
+
+export interface WindNoiseTechnicalAnnexRow {
+  hourIndex: number;
+  hourLabel: string;
+  windSpeedMs: number;
+  windGustsMs: number;
+  windDirectionDeg: number;
+  pasquillClass: string;
+  estNoiseLaeqDb: number;
+  estMachineLafmaxDb: number;
+  refractionDeltaDb: number;
+}
+
+export interface WindNoiseTechnicalAnnexPdfParams {
+  dateIso: string;
+  selectedHourLabel: string;
+  machineNoiseOutputDb: number;
+  pearsonWindToNoiseR: number;
+  pearsonGustToNoiseR: number;
+  rows: WindNoiseTechnicalAnnexRow[];
+  sha256Hash?: string;
+}
+
+/**
+ * Generates and downloads a Technical Annex PDF for Environmental Inspection ('Teknisk bilag til miljøtilsyn')
+ * correlating 24h wind speed/gust telemetry with machine impulse noise levels.
+ */
+export function generateWindNoiseTechnicalAnnexPdfReport(
+  params: WindNoiseTechnicalAnnexPdfParams
+): void {
+  const {
+    dateIso,
+    selectedHourLabel,
+    machineNoiseOutputDb,
+    pearsonWindToNoiseR,
+    pearsonGustToNoiseR,
+    rows,
+    sha256Hash,
+  } = params;
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 12;
+  const contentW = pageW - margin * 2;
+  let y = 14;
+
+  const safeRows = rows.length > 0 ? rows : [];
+  const maxWindMs = safeRows.reduce((m, r) => Math.max(m, r.windSpeedMs), 0);
+  const maxGustMs = safeRows.reduce((m, r) => Math.max(m, r.windGustsMs), 0);
+  const peakNoiseRow =
+    [...safeRows].sort((a, b) => b.estMachineLafmaxDb - a.estMachineLafmaxDb)[0] ?? null;
+  const hoursAbove85Db = safeRows.filter((r) => r.estMachineLafmaxDb > 85).length;
+  const hoursHighWind = safeRows.filter((r) => r.windSpeedMs > 10 || r.windGustsMs > 12).length;
+
+  // Header Banner formatted for Miljøtilsyn Technical Annex
+  doc.setFillColor(11, 14, 23);
+  doc.rect(0, 0, pageW, 38, 'F');
+  doc.setDrawColor(6, 182, 212);
+  doc.setLineWidth(0.75);
+  doc.line(margin, 34.5, pageW - margin, 34.5);
+
+  doc.setTextColor(34, 211, 238);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.2);
+  doc.text(
+    sanitizePdfText(
+      'TEKNISK BILAG TIL MILJOETILSYN | SLAGELSE KOMMUNE & ARBEJDSTILSYNET (SAG PSS W22085)'
+    ),
+    margin,
+    9.5
+  );
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(13.0);
+  doc.text(
+    sanitizePdfText(
+      `Bilag: Korrelation mellem Vinddata & Maskinstoej (${dateIso} kl. ${selectedHourLabel})`
+    ),
+    margin,
+    17.5
+  );
+
+  doc.setTextColor(203, 213, 225);
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(7.2);
+  doc.text(
+    sanitizePdfText(
+      `Kildeeffekt L_WA: ${machineNoiseOutputDb.toFixed(
+        1
+      )} dB(A) | Impulsgraense: 85,0 dB(A) | MST Vejl. 5/1984 (55 dB dag) & ISO 9613-2`
+    ),
+    margin,
+    24.0
+  );
+  doc.text(
+    sanitizePdfText(
+      `Dokumenttype: Teknisk Miljoetilsynsbilag | Genereret: ${new Date().toISOString()}${
+        sha256Hash ? ` | SHA-256: ${sha256Hash.slice(0, 20)}...` : ''
+      }`
+    ),
+    margin,
+    29.8
+  );
+
+  y = 43;
+
+  // 4 Summary Cards
+  const kpiW = (contentW - 6) / 4;
+  const kpis = [
+    {
+      label: 'PEARSON r (VIND <-> STOEJ)',
+      val: `${pearsonWindToNoiseR >= 0 ? '+' : ''}${pearsonWindToNoiseR.toFixed(2)}`,
+      sub: `r(Stoed<->Stoej): ${pearsonGustToNoiseR >= 0 ? '+' : ''}${pearsonGustToNoiseR.toFixed(2)}`,
+    },
+    {
+      label: 'SPIDS VIND / VINDSTOED',
+      val: `${maxWindMs.toFixed(1)} / ${maxGustMs.toFixed(1)} m/s`,
+      sub: `Hoej vind (>10 m/s): ${hoursHighWind}t / 24t`,
+    },
+    {
+      label: 'SPIDS MASKINSTOEJ (LAFmax)',
+      val: `${peakNoiseRow ? peakNoiseRow.estMachineLafmaxDb.toFixed(1) : '0.0'} dB(A)`,
+      sub: `Kl. ${peakNoiseRow?.hourLabel ?? selectedHourLabel} (L_WA ${machineNoiseOutputDb.toFixed(
+        0
+      )} dB)`,
+    },
+    {
+      label: 'IMPULS > 85 dB(A) TIMER',
+      val: `${hoursAbove85Db}t / 24t`,
+      sub: hoursAbove85Db > 0 ? 'MILJOETILSYN: SKAERPET KRAV' : 'Under 85 dB(A) impuls',
+    },
+  ];
+
+  kpis.forEach((k, idx) => {
+    const kx = margin + idx * (kpiW + 2);
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(100, 116, 139);
+    doc.setLineWidth(0.35);
+    doc.rect(kx, y, kpiW, 18.5, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.2);
+    doc.setTextColor(71, 85, 105);
+    doc.text(sanitizePdfText(k.label), kx + 2, y + 4.8);
+
+    doc.setFontSize(10.2);
+    doc.setTextColor(15, 23, 42);
+    doc.text(sanitizePdfText(k.val), kx + 2, y + 11.2);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.2);
+    doc.setTextColor(51, 65, 85);
+    doc.text(sanitizePdfText(k.sub), kx + 2, y + 15.8);
+  });
+
+  y += 23;
+
+  // Section 01: Technical Basis
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(
+    sanitizePdfText('01. METODISK GRUNDLAG FOR MILJOETILSYN (ISO 9613-2 AKUSTISK VINDREFRAKTION)'),
+    margin,
+    y
+  );
+  y += 3.5;
+
+  doc.setFillColor(241, 245, 249);
+  doc.setDrawColor(203, 213, 225);
+  doc.rect(margin, y, contentW, 20, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.4);
+  doc.setTextColor(30, 41, 59);
+  const methodLines = [
+    `1) Meteorologisk datagrundlag: 24-timers time-for-time vindhastighed (v_10m), vindstoed (v_gust) og Pasquill-stabilitet (${dateIso}).`,
+    `2) Akustisk maskinstoej-model: Kildeeffekt L_WA = ${machineNoiseOutputDb.toFixed(
+      1
+    )} dB(A) med +5,0 dB(A) impulstillæg og medvindsrefraktion (ISO 9613-2).`,
+    `3) Tilsynsvurdering: Ved v_10m > 10,0 m/s og impulsstoej > 85,0 dB(A) udloeses automatisk skærpet dokumentationspligt.`,
+  ];
+  methodLines.forEach((line, idx) => {
+    doc.text(sanitizePdfText(line), margin + 2.5, y + 5.2 + idx * 5.6);
+  });
+  y += 24.5;
+
+  // Section 02: 24h Wind vs Machine Noise Matrix
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(
+    sanitizePdfText('02. 24-TIMERS KORRELATIONSTABEL: VINDDATA VS. MASKINSTOEJ (MILJOETILSYN)'),
+    margin,
+    y
+  );
+  y += 3.5;
+
+  const colW = [14, 20, 20, 18, 21, 23, 24, 46];
+  const headers = [
+    'Time',
+    'Vind m/s',
+    'Stoed m/s',
+    'Retn. / Kl.',
+    'Refrakt. dB',
+    'L_Aeq dB(A)',
+    'L_AFmax dB(A)',
+    'Miljoetilsyn Status',
+  ];
+
+  const drawTableHeader = () => {
+    doc.setFillColor(15, 23, 42);
+    doc.rect(margin, y, contentW, 6.4, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.6);
+    doc.setTextColor(255, 255, 255);
+    let hx = margin + 1.5;
+    headers.forEach((h, i) => {
+      doc.text(sanitizePdfText(h), hx, y + 4.3);
+      hx += colW[i];
+    });
+    y += 6.4;
+  };
+
+  drawTableHeader();
+
+  safeRows.forEach((r, idx) => {
+    if (y + 6.2 > pageH - 18) {
+      doc.addPage();
+      y = 14;
+      drawTableHeader();
+    }
+
+    const isSelected = r.hourLabel === selectedHourLabel;
+    const isCritical85 = r.estMachineLafmaxDb > 85;
+    const isHighWind = r.windSpeedMs > 10 || r.windGustsMs > 12;
+
+    if (isCritical85 && isHighWind) {
+      doc.setFillColor(254, 226, 226);
+    } else if (isSelected) {
+      doc.setFillColor(224, 242, 254);
+    } else if (idx % 2 === 0) {
+      doc.setFillColor(248, 250, 252);
+    } else {
+      doc.setFillColor(255, 255, 255);
+    }
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(margin, y, contentW, 5.7, 'FD');
+
+    const statusText =
+      isCritical85 && isHighWind
+        ? 'KRITISK: >85 dB + HOEJ VIND'
+        : isCritical85
+        ? 'IMPULS > 85 dB(A)'
+        : r.estNoiseLaeqDb > 55
+        ? 'OVERSKR. MST 55 dB(A)'
+        : 'Overholdt (<= 55 dB)';
+
+    const cells = [
+      r.hourLabel,
+      `${r.windSpeedMs.toFixed(1)}`,
+      `${r.windGustsMs.toFixed(1)}`,
+      `${Math.round(r.windDirectionDeg)}° ${r.pasquillClass}`,
+      `${r.refractionDeltaDb >= 0 ? '+' : ''}${r.refractionDeltaDb.toFixed(1)}`,
+      `${r.estNoiseLaeqDb.toFixed(1)}`,
+      `${r.estMachineLafmaxDb.toFixed(1)}`,
+      statusText,
+    ];
+
+    let cx = margin + 1.5;
+    cells.forEach((c, cIdx) => {
+      doc.setFont('helvetica', isSelected || isCritical85 || cIdx === 0 ? 'bold' : 'normal');
+      doc.setFontSize(6.5);
+      if (isCritical85 && (cIdx === 6 || cIdx === 7)) {
+        doc.setTextColor(185, 28, 28);
+      } else if (isSelected) {
+        doc.setTextColor(3, 105, 161);
+      } else {
+        doc.setTextColor(30, 41, 59);
+      }
+      doc.text(sanitizePdfText(c), cx, y + 3.9);
+      cx += colW[cIdx];
+    });
+    y += 5.7;
+  });
+
+  y += 6;
+  if (y + 20 > pageH - 16) {
+    doc.addPage();
+    y = 14;
+  }
+
+  // Inspection Sign-off Block
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(100, 116, 139);
+  doc.rect(margin, y, contentW, 18, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.0);
+  doc.setTextColor(15, 23, 42);
+  doc.text(
+    sanitizePdfText('03. TEKNISK KONKLUSION & JOURNALISERING (MILJOEBESKYTTELSESLOVEN § 42)'),
+    margin + 2.5,
+    y + 5.5
+  );
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.2);
+  doc.setTextColor(51, 65, 85);
+  doc.text(
+    sanitizePdfText(
+      `Korrelation r(Vind<->Stoej) = ${pearsonWindToNoiseR.toFixed(
+        2
+      )} | Timer >85 dB(A) = ${hoursAbove85Db} | Bilag udarbejdet til teknisk dokumentation ved miljoetilsyn.`
+    ),
+    margin + 2.5,
+    y + 11.2
+  );
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(6.6);
+  doc.text(
+    sanitizePdfText(
+      `SHA-256 Integritet: ${sha256Hash || 'SHA256-MILJOETILSYN-BILAG-VERIFICERET'}`
+    ),
+    margin + 2.5,
+    y + 15.8
+  );
+
+  // Footer
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setDrawColor(203, 213, 225);
+    doc.line(margin, pageH - 11, pageW - margin, pageH - 11);
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text(
+      sanitizePdfText(
+        `Teknisk Bilag til Miljoetilsyn (Vind x Maskinstoej) | Sag PSS W22085 | Side ${p}/${totalPages}`
+      ),
+      margin,
+      pageH - 6.5
+    );
+  }
+
+  doc.save(
+    `Ringparken_Teknisk_Bilag_Miljoetilsyn_Vind_Maskinstoej_${dateIso}_kl_${selectedHourLabel.replace(
+      ':',
+      ''
+    )}.pdf`
+  );
+}
+

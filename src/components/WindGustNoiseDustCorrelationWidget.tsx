@@ -1,15 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import { Wind, Volume2, AlertTriangle } from 'lucide-react';
+import { Wind, Volume2, AlertTriangle, FilePlus2, CheckCircle2 } from 'lucide-react';
 import {
   AlgedonicObservation,
   DemolitionSourceNode,
   HourlyReceptorPuffDose,
   HourlyWeatherPoint,
+  LatLngPoint,
 } from '../types/dispersion';
 import {
   isDustObservation,
   isNoiseObservation,
 } from './NeighborComplaintDensityOverlay';
+import { FormalNoiseReportPayload } from './HighFrequencyNoiseSpikeDetectorWidget';
+import { useAcousticWeighting } from '../context/AcousticWeightingContext';
 
 export type GustCorrelationLayerFilter = 'all' | 'gust_dust' | 'gust_noise';
 
@@ -18,12 +21,17 @@ export interface WindGustNoiseDustCorrelationWidgetProps {
   weatherHours: HourlyWeatherPoint[];
   hourlyReceptorProfile: HourlyReceptorPuffDose[];
   receptorName: string;
+  receptorAddress?: string;
+  receptorPosition?: LatLngPoint;
   observations: AlgedonicObservation[];
   sources: DemolitionSourceNode[];
   selectedHourIndex: number;
   machineNoiseOutputDb: number;
   onSelectHour: (hourIndex: number) => void;
   onSelectObservation?: (obs: AlgedonicObservation) => void;
+  onFileFormalNoiseReport?: (
+    payload: FormalNoiseReportPayload
+  ) => Promise<AlgedonicObservation | null>;
 }
 
 interface HourlyGustCorrelationRow {
@@ -71,16 +79,25 @@ export const WindGustNoiseDustCorrelationWidget: React.FC<
   weatherHours,
   hourlyReceptorProfile,
   receptorName,
+  receptorAddress = 'Ringparken, 4200 Slagelse',
+  receptorPosition = { lat: 55.41335, lng: 11.35415 },
   observations,
   sources,
   selectedHourIndex,
   machineNoiseOutputDb,
   onSelectHour,
   onSelectObservation,
+  onFileFormalNoiseReport,
 }) => {
+  const { convertDb, unitLabel, labels } = useAcousticWeighting();
   const [layerFilter, setLayerFilter] =
     useState<GustCorrelationLayerFilter>('all');
   const [hoveredHourIndex, setHoveredHourIndex] = useState<number | null>(null);
+  const [isFilingReport, setIsFilingReport] = useState<boolean>(false);
+  const [isDraftOpen, setIsDraftOpen] = useState<boolean>(false);
+  const [customNotes, setCustomNotes] = useState<string>('');
+  const [filedObservationFeedback, setFiledObservationFeedback] =
+    useState<AlgedonicObservation | null>(null);
 
   const activeSourceCount = useMemo(
     () => Math.max(1, sources.filter((s) => s.active).length),
@@ -216,6 +233,45 @@ export const WindGustNoiseDustCorrelationWidget: React.FC<
 
   const activeInspectRow =
     rows[hoveredHourIndex ?? selectedHourIndex] || rows[0];
+
+  const handleSubmitFormalNoiseReport = async () => {
+    if (!onFileFormalNoiseReport || !activeInspectRow) return;
+    setIsFilingReport(true);
+    try {
+      const nowTime = new Date().toLocaleTimeString('da-DK', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      const weightedNoiseDb = convertDb(activeInspectRow.estimatedLaeqDb, {
+        windSpeedMs: activeInspectRow.windSpeedMs,
+        windGustMs: activeInspectRow.windGustMs,
+      });
+      const created = await onFileFormalNoiseReport({
+        hourIndex: activeInspectRow.hourIndex,
+        timeLabel: `${activeInspectRow.hourLabel} (indberettet ${nowTime})`,
+        locationLabel: `${receptorName} (${receptorAddress})`,
+        position: receptorPosition,
+        decibelLevelDb: weightedNoiseDb,
+        windGustMs: activeInspectRow.windGustMs,
+        sourceName: sources.find((s) => s.active)?.name || 'Aktiv nedrivningsmaskine',
+        notes:
+          customNotes.trim() ||
+          `Formel støjrapport fra Støj-Støv korrelationsgraf: ${weightedNoiseDb.toFixed(
+            1
+          )} ${unitLabel} ved vindstød ${activeInspectRow.windGustMs.toFixed(
+            1
+          )} m/s og støv-kvotient S=${activeInspectRow.dustSumQuotient.toFixed(2)}.`,
+      });
+      if (created) {
+        setFiledObservationFeedback(created);
+        setIsDraftOpen(false);
+        setCustomNotes('');
+      }
+    } finally {
+      setIsFilingReport(false);
+    }
+  };
 
   // SVG Chart Geometry
   const svgW = 760;
@@ -636,7 +692,7 @@ export const WindGustNoiseDustCorrelationWidget: React.FC<
             )}
             {(layerFilter === 'all' || layerFilter === 'gust_noise') && (
               <span className="text-amber-300">
-                ─── Impulsstøj L_Aeq,korr (dB)
+                ─── Impulsstøj {labels.leqKorrLabel} ({unitLabel})
               </span>
             )}
             <span className="text-fuchsia-300">■ KL = Naboklager pr. time</span>
@@ -657,7 +713,7 @@ export const WindGustNoiseDustCorrelationWidget: React.FC<
             (+{activeInspectRow.gustSurgeDeltaMs.toFixed(1)} m/s · G=
             {activeInspectRow.gustFactor.toFixed(2)})
           </span>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span
               className={
                 activeInspectRow.dustSumQuotient >= 1.0
@@ -675,10 +731,107 @@ export const WindGustNoiseDustCorrelationWidget: React.FC<
                   : 'text-slate-300'
               }
             >
-              Støj = {activeInspectRow.estimatedLaeqDb.toFixed(1)} dB(A)
+              Støj ={' '}
+              {convertDb(activeInspectRow.estimatedLaeqDb, {
+                windSpeedMs: activeInspectRow.windSpeedMs,
+                windGustMs: activeInspectRow.windGustMs,
+              }).toFixed(1)}{' '}
+              {unitLabel}
             </span>
+            {onFileFormalNoiseReport && (
+              <button
+                type="button"
+                data-testid="open-formal-noise-report-btn"
+                onClick={() => setIsDraftOpen((v) => !v)}
+                className="px-2.5 py-1 rounded bg-rose-500/20 hover:bg-rose-500/35 border border-rose-400/75 text-rose-100 font-semibold text-[11px] inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
+              >
+                <FilePlus2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Indgiv Formel Støjrapport</span>
+              </button>
+            )}
           </div>
         </div>
+
+        {isDraftOpen && onFileFormalNoiseReport && (
+          <div
+            data-testid="formal-noise-report-draft-panel"
+            className="p-2.5 rounded bg-slate-900 border border-rose-500/50 space-y-2 text-[11px]"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 font-mono tabular-nums text-slate-200">
+              <span className="font-semibold text-rose-200">
+                Automatisk Udfyldt Retsmedicinsk Støjrapport
+              </span>
+              <span className="text-slate-400">Kl. {activeInspectRow.hourLabel} ({dateIso})</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono tabular-nums">
+              <div className="px-2 py-1.5 rounded bg-slate-950 border border-slate-800">
+                <div className="text-[10px] text-slate-400">Tidspunkt</div>
+                <div className="text-slate-100 font-semibold">{dateIso} · {activeInspectRow.hourLabel}</div>
+              </div>
+              <div className="px-2 py-1.5 rounded bg-slate-950 border border-slate-800">
+                <div className="text-[10px] text-slate-400">Lokation</div>
+                <div className="text-slate-100 font-semibold truncate" title={`${receptorName} (${receptorAddress})`}>
+                  {receptorName}
+                </div>
+              </div>
+              <div className="px-2 py-1.5 rounded bg-slate-950 border border-slate-800">
+                <div className="text-[10px] text-slate-400">Decibelniveau</div>
+                <div className="text-amber-300 font-bold">
+                  {convertDb(activeInspectRow.estimatedLaeqDb, {
+                    windSpeedMs: activeInspectRow.windSpeedMs,
+                    windGustMs: activeInspectRow.windGustMs,
+                  }).toFixed(1)}{' '}
+                  {unitLabel}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={customNotes}
+                onChange={(e) => setCustomNotes(e.target.value)}
+                placeholder="Valgfri bemærkning (fx maskintype eller oplevet støjgene)..."
+                className="flex-1 min-w-[200px] px-2.5 py-1.5 rounded bg-slate-950 border border-slate-700 text-slate-100 text-[11px] focus:outline-none focus:border-rose-400"
+              />
+              <button
+                type="button"
+                data-testid="submit-formal-noise-report-btn"
+                disabled={isFilingReport}
+                onClick={handleSubmitFormalNoiseReport}
+                className="px-3 py-1.5 rounded bg-rose-500 hover:bg-rose-400 text-white font-mono font-bold text-[11px] cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-60"
+              >
+                {isFilingReport ? 'Signerer SHA-256...' : 'Gem i Bevis-Log (SHA-256)'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {filedObservationFeedback && (
+          <div
+            data-testid="formal-noise-report-confirmation"
+            className="px-2.5 py-1.5 rounded bg-emerald-950/60 border border-emerald-500/60 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-emerald-200"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>
+                Støjrapport <strong>{filedObservationFeedback.code}</strong> oprettet i bevis-log (
+                {filedObservationFeedback.locationLabel} ·{' '}
+                {convertDb(activeInspectRow.estimatedLaeqDb, {
+                  windSpeedMs: activeInspectRow.windSpeedMs,
+                  windGustMs: activeInspectRow.windGustMs,
+                }).toFixed(1)}{' '}
+                {unitLabel})
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => onSelectObservation?.(filedObservationFeedback)}
+              className="underline text-emerald-100 hover:text-white cursor-pointer whitespace-nowrap"
+            >
+              Vis post ({filedObservationFeedback.sha256Signature.slice(0, 8)}…)
+            </button>
+          </div>
+        )}
 
         {activeInspectRow.hourComplaints.length > 0 ? (
           <div className="space-y-1 pt-1 border-t border-slate-800/80">

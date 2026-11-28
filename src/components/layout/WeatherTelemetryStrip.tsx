@@ -5,6 +5,7 @@ import {
   Calendar,
   Check,
   ChevronDown,
+  CloudLightning,
   CloudRain,
   Compass,
   Download,
@@ -36,8 +37,13 @@ import {
   RingparkenBuildingUnit,
   WeatherDataset,
 } from '../../types/dispersion';
+import {
+  HISTORICAL_EXTREME_WEATHER_SCENARIOS,
+  HistoricalExtremeWeatherScenario,
+} from '../../utils/historicalExtremeWeatherScenarios';
 import { Animated24hWindWidget } from '../Animated24hWindWidget';
 import { DispersionForecastOptionMode } from '../DispersionForecastBulletinWidget';
+import { HistoricalExtremeWeatherModule } from '../HistoricalExtremeWeatherModule';
 import { TemperatureAerosolChart } from '../TemperatureAerosolChart';
 import { VerticalPlume3DBoxWidget } from '../VerticalPlume3DBoxWidget';
 
@@ -117,6 +123,11 @@ export interface WeatherTelemetryStripProps {
   onCloseAllExternalDrawers?: () => void;
   externalDrawersActiveCount?: number;
   onExport7DayWindRoseBiasPdf?: () => Promise<void>;
+  activeHistoricalExtremeScenarioId?: string | null;
+  onApplyHistoricalExtremeScenario?: (
+    scenario: HistoricalExtremeWeatherScenario,
+    targetViewport?: 'keep' | 'underground_3d' | '2d'
+  ) => void;
 }
 
 export const WeatherTelemetryStrip: React.FC<WeatherTelemetryStripProps> = ({
@@ -184,11 +195,14 @@ export const WeatherTelemetryStrip: React.FC<WeatherTelemetryStripProps> = ({
   onCloseAllExternalDrawers,
   externalDrawersActiveCount = 0,
   onExport7DayWindRoseBiasPdf,
+  activeHistoricalExtremeScenarioId = null,
+  onApplyHistoricalExtremeScenario,
 }) => {
   const [isDrawersMenuOpen, setIsDrawersMenuOpen] = useState(false);
   const [showVerticalPlume3DProfile, setShowVerticalPlume3DProfile] = useState(false);
   const [is24hWindDrawerOpen, setIs24hWindDrawerOpen] = useState(false);
   const [is24hDustDangerDrawerOpen, setIs24hDustDangerDrawerOpen] = useState(false);
+  const [isHistoricalExtremeDrawerOpen, setIsHistoricalExtremeDrawerOpen] = useState(false);
   const [isExporting7DayWindRosePdf, setIsExporting7DayWindRosePdf] = useState(false);
   const [exported7DayWindRosePdfJustNow, setExported7DayWindRosePdfJustNow] = useState(false);
 
@@ -208,6 +222,7 @@ export const WeatherTelemetryStrip: React.FC<WeatherTelemetryStripProps> = ({
     showVerticalPlume3DProfile,
     is24hWindDrawerOpen,
     is24hDustDangerDrawerOpen,
+    isHistoricalExtremeDrawerOpen,
   ].filter(Boolean).length;
 
   const totalOpenDrawersCount = localDrawerCount + externalDrawersActiveCount;
@@ -221,6 +236,7 @@ export const WeatherTelemetryStrip: React.FC<WeatherTelemetryStripProps> = ({
     setShowVerticalPlume3DProfile(false);
     setIs24hWindDrawerOpen(false);
     setIs24hDustDangerDrawerOpen(false);
+    setIsHistoricalExtremeDrawerOpen(false);
   };
 
   useEffect(() => {
@@ -467,7 +483,7 @@ export const WeatherTelemetryStrip: React.FC<WeatherTelemetryStripProps> = ({
                   ? 'bg-[#212C3E] border-cyan-400/70 text-cyan-200'
                   : 'bg-[#1B2433] hover:bg-[#212C3E] border-[#2D3B50] text-slate-200'
               }`}
-              title="Åbn Vejr- & Prognose-Skuffer (Prognose, Vind & Luft, Akustik & Skorsten, AI Rådgivere)"
+              title="Åbn Vejr- & Prognose-Skuffer (Prognose, Vind & Luft, Akustik & Skorsten, AI Rådgivere, Historisk Ekstremvejr)"
             >
               <Layers className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <span>
@@ -485,7 +501,7 @@ export const WeatherTelemetryStrip: React.FC<WeatherTelemetryStripProps> = ({
               >
                 <div className="flex items-center justify-between border-b border-[#2D3B50] pb-1.5">
                   <span className="font-bold uppercase tracking-wider text-cyan-200">
-                    Vejr- &amp; Prognose-Skuffer (4 Grupper)
+                    Vejr- &amp; Prognose-Skuffer (5 Grupper)
                   </span>
                   <div className="flex items-center gap-1.5">
                     {totalOpenDrawersCount > 0 && (
@@ -800,6 +816,67 @@ export const WeatherTelemetryStrip: React.FC<WeatherTelemetryStripProps> = ({
                       <Bot className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                       <span className="truncate">5 AI Eksperter (Miljø · Akustik · Jura · Toksikologi)</span>
                     </button>
+                  </div>
+                </div>
+
+                {/* Gruppe 5: Historiske Ekstremvejr-Scenarier (Storm, Skybrud & Ringparken Spredningsrisiko) */}
+                <div className="space-y-1.5 pt-1 border-t border-[#2D3B50]/70">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                    5. Historiske Ekstremvejr-Scenarier (Storm &amp; Skybrud)
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      data-testid="toggle-historical-extreme-weather-btn"
+                      onClick={() => {
+                        setIsHistoricalExtremeDrawerOpen((v) => !v);
+                        setIsDrawersMenuOpen(false);
+                      }}
+                      className={`px-2 py-1.5 rounded text-left border flex items-center justify-between gap-1.5 cursor-pointer col-span-2 transition-colors ${
+                        isHistoricalExtremeDrawerOpen
+                          ? 'bg-amber-400 text-slate-950 border-amber-200 font-bold'
+                          : 'bg-amber-950/35 hover:bg-amber-900/40 border-amber-500/50 text-amber-100 font-semibold'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <CloudLightning
+                          className={`w-3.5 h-3.5 shrink-0 ${
+                            isHistoricalExtremeDrawerOpen ? 'text-slate-950' : 'text-amber-400'
+                          }`}
+                        />
+                        <span className="truncate">
+                          Historisk Ekstremvejr-Dashboard ({HISTORICAL_EXTREME_WEATHER_SCENARIOS.length} hændelser)
+                        </span>
+                      </span>
+                      <span className="text-[10px] font-mono opacity-90 shrink-0">
+                        {isHistoricalExtremeDrawerOpen ? 'Åben' : 'Åbn modul'}
+                      </span>
+                    </button>
+
+                    {onApplyHistoricalExtremeScenario &&
+                      HISTORICAL_EXTREME_WEATHER_SCENARIOS.slice(0, 2).map((sc) => {
+                        const isSel = activeHistoricalExtremeScenarioId === sc.id;
+                        return (
+                          <button
+                            key={`quick-hist-${sc.id}`}
+                            type="button"
+                            onClick={() => {
+                              onApplyHistoricalExtremeScenario(sc, 'keep');
+                              setIsHistoricalExtremeDrawerOpen(true);
+                              setIsDrawersMenuOpen(false);
+                            }}
+                            className={`px-2 py-1 rounded text-left border flex items-center gap-1.5 cursor-pointer ${
+                              isSel
+                                ? 'bg-cyan-500/20 border-cyan-400 text-white font-semibold'
+                                : 'bg-[#151C28] border-[#2D3B50] text-slate-300 hover:bg-[#212C3E]'
+                            }`}
+                            title={sc.dispersionRiskMechanismDa}
+                          >
+                            <Wind className="w-3 h-3 text-rose-400 shrink-0" />
+                            <span className="truncate">{sc.shortTitle}</span>
+                          </button>
+                        );
+                      })}
                   </div>
                 </div>
               </div>
@@ -1168,6 +1245,17 @@ export const WeatherTelemetryStrip: React.FC<WeatherTelemetryStripProps> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {isHistoricalExtremeDrawerOpen && (
+            <HistoricalExtremeWeatherModule
+              sources={sources}
+              receptors={receptors}
+              activeScenarioId={activeHistoricalExtremeScenarioId}
+              onApplyScenario={(scenario, targetViewport) =>
+                onApplyHistoricalExtremeScenario?.(scenario, targetViewport)
+              }
+            />
           )}
         </div>
       )}

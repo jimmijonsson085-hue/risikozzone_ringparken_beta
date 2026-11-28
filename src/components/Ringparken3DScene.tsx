@@ -66,6 +66,10 @@ import {
 import { degreesToCompass } from '../services/weatherService';
 import { computeHydrogeologicalPercolation } from './UndergroundPercolation2D';
 import {
+  ClimateResilienceConfig,
+  computeClimateResiliencePercolation,
+} from '../utils/climateResiliencePercolation';
+import {
   BornehaveSpatialPlumeAlertStatus,
   evaluateBornehaveDaycare3DPlumeAlert,
 } from '../services/bornehaveSpatialAlertService';
@@ -188,6 +192,8 @@ export interface Ringparken3DSceneProps {
   virtualLeakImpact?: VirtualLeakPinImpact | null;
   onToggleVirtualLeakPinQuick?: () => void;
   simultaneousDispatch?: SimultaneousAlgedonicDispatch | null;
+  climateResilienceConfig?: ClimateResilienceConfig;
+  onOpenClimateResilienceTab?: () => void;
 }
 
 export interface WeatherCorrelationPoint3D {
@@ -1062,7 +1068,8 @@ function createGroundCanvasTexture(maxAnisotropy: number): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
   canvas.height = 1024;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return new THREE.CanvasTexture(canvas);
 
   // Base dark forensic terrain
   ctx.fillStyle = '#111826';
@@ -1161,7 +1168,8 @@ function createFacadeWindowTexture(
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return new THREE.CanvasTexture(canvas);
 
   ctx.fillStyle = baseHex;
   ctx.fillRect(0, 0, 256, 256);
@@ -1227,7 +1235,8 @@ function createContactShadowTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = 128;
   c.height = 128;
-  const ctx = c.getContext('2d')!;
+  const ctx = c.getContext('2d');
+  if (!ctx) return new THREE.CanvasTexture(c);
   const g = ctx.createRadialGradient(64, 64, 6, 64, 64, 64);
   g.addColorStop(0, 'rgba(0,0,0,0.65)');
   g.addColorStop(0.55, 'rgba(0,0,0,0.28)');
@@ -1247,7 +1256,8 @@ function createLeewardWakeDecalTexture(maxAnisotropy: number): THREE.CanvasTextu
   const c = document.createElement('canvas');
   c.width = 256;
   c.height = 256;
-  const ctx = c.getContext('2d')!;
+  const ctx = c.getContext('2d');
+  if (!ctx) return new THREE.CanvasTexture(c);
 
   ctx.clearRect(0, 0, 256, 256);
 
@@ -2051,7 +2061,8 @@ function createThermalCorrelationSpotTexture(maxAnisotropy: number): THREE.Canva
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 128;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return new THREE.CanvasTexture(canvas);
   ctx.clearRect(0, 0, 128, 128);
 
   const grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 60);
@@ -2653,7 +2664,8 @@ function createDustBlanketDecalTexture(maxAnisotropy: number): THREE.CanvasTextu
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return new THREE.CanvasTexture(canvas);
   ctx.clearRect(0, 0, 256, 256);
 
   const grad = ctx.createRadialGradient(128, 128, 12, 128, 128, 122);
@@ -4424,8 +4436,18 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
   virtualLeakImpact = null,
   onToggleVirtualLeakPinQuick,
   simultaneousDispatch,
+  climateResilienceConfig,
+  onOpenClimateResilienceTab,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const onSelectSourceRef = useRef(onSelectSource);
+  onSelectSourceRef.current = onSelectSource;
+  const onSelectReceptorRef = useRef(onSelectReceptor);
+  onSelectReceptorRef.current = onSelectReceptor;
+  const onToggleUndergroundModeRef = useRef(onToggleUndergroundMode);
+  onToggleUndergroundModeRef.current = onToggleUndergroundMode;
+  const onBornehavePlumeAlertUpdateRef = useRef(onBornehavePlumeAlertUpdate);
+  onBornehavePlumeAlertUpdateRef.current = onBornehavePlumeAlertUpdate;
   const [internalMapOnly, setInternalMapOnly] = useState<boolean>(false);
   const effectiveMapOnly = isMapOnly !== undefined ? isMapOnly : internalMapOnly;
   const handleToggleMapOnly = () => {
@@ -4518,6 +4540,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
   const [bottomDockPos, setBottomDockPos] = useState<{ x: number; y: number }>({ x: 180, y: 500 });
   const [hoveredEntityLabel, setHoveredEntityLabel] = useState<string | null>(null);
   const [isSoftwareRenderer, setIsSoftwareRenderer] = useState<boolean>(false);
+  const [webglErrorMessage, setWebglErrorMessage] = useState<string | null>(null);
+  const [webglRetryNonce, setWebglRetryNonce] = useState<number>(0);
   const [localShow3DNeutralPressurePlane, setLocalShow3DNeutralPressurePlane] =
     useState<boolean>(true);
   const [localNeutralPressureHeightM, setLocalNeutralPressureHeightM] =
@@ -4697,6 +4721,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
   const asbestosCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const asbestosTextureRef = useRef<THREE.CanvasTexture | null>(null);
   const asbestosReliefGeoRef = useRef<THREE.PlaneGeometry | null>(null);
+  const lastAsbestosMetricsSigRef = useRef<string>('');
+  const lastBornehaveAlertSigRef = useRef<string>('');
   const [asbestosMetrics, setAsbestosMetrics] = useState<AsbestosHeatmapMetrics>({
     isTemporal24hMode: false,
     peakFibersCm3: 0.0042,
@@ -4757,11 +4783,6 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
   const activePrecipOverride =
     onChangePrecipitationOverride !== undefined ? precipitationOverrideMm : localPrecipOverride;
 
-  const effectivePrecipMm =
-    activePrecipOverride !== null && activePrecipOverride !== undefined
-      ? activePrecipOverride
-      : currentWeather.precipitation;
-
   const handleSetPrecipOverride = useCallback(
     (val: number | null) => {
       if (onChangePrecipitationOverride) {
@@ -4816,22 +4837,24 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     setZoom3DLevelPct(pct);
   }, []);
 
+  const lastFocusPercolationTriggerRef = useRef<number>(0);
+
   const handleFocusBlok12Percolation3D = useCallback(() => {
-    if (onToggleUndergroundMode) {
-      onToggleUndergroundMode(true);
+    if (onToggleUndergroundModeRef.current) {
+      onToggleUndergroundModeRef.current(true);
     } else {
       setLocalUndergroundMode(true);
     }
     setCameraPreset('blok1_blok2_percolation');
     cameraTransitionActiveRef.current = true;
-    setZoom3DLevelPct(135);
-  }, [onToggleUndergroundMode]);
+    setZoom3DLevelPct((prev) => (prev === 135 ? prev : 135));
+  }, []);
 
   const handleToggleUnderground3D = useCallback(
     (nextVal?: boolean) => {
       const targetVal = nextVal !== undefined ? nextVal : !isUndergroundActive;
-      if (onToggleUndergroundMode) {
-        onToggleUndergroundMode(targetVal);
+      if (onToggleUndergroundModeRef.current) {
+        onToggleUndergroundModeRef.current(targetVal);
       } else {
         setLocalUndergroundMode(targetVal);
       }
@@ -4843,35 +4866,72 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
         cameraTransitionActiveRef.current = true;
       }
     },
-    [isUndergroundActive, onToggleUndergroundMode]
+    [isUndergroundActive]
   );
 
   // Automatically glide to Blok 1 & 2 percolation focus when externalUndergroundMode turns true or focusBlok12PercolationTrigger increments
   useEffect(() => {
     if (externalUndergroundMode) {
-      setCameraPreset('blok1_blok2_percolation');
+      setCameraPreset((prev) =>
+        prev === 'blok1_blok2_percolation' ? prev : 'blok1_blok2_percolation'
+      );
       cameraTransitionActiveRef.current = true;
     }
   }, [externalUndergroundMode]);
 
   useEffect(() => {
-    if (focusBlok12PercolationTrigger && focusBlok12PercolationTrigger > 0) {
+    if (
+      focusBlok12PercolationTrigger &&
+      focusBlok12PercolationTrigger > 0 &&
+      lastFocusPercolationTriggerRef.current !== focusBlok12PercolationTrigger
+    ) {
+      lastFocusPercolationTriggerRef.current = focusBlok12PercolationTrigger;
       handleFocusBlok12Percolation3D();
     }
   }, [focusBlok12PercolationTrigger, handleFocusBlok12Percolation3D]);
+
+  const baseEffectivePrecipMm =
+    activePrecipOverride !== null && activePrecipOverride !== undefined
+      ? activePrecipOverride
+      : currentWeather.precipitation;
 
   const activeSourceCount = sources.filter((s) => s.active).length;
   const unsecuredDemolishedCount = buildings.filter(
     (b) => b.category === 'e_demolished_unsecured'
   ).length;
 
-  const hydroSim = computeHydrogeologicalPercolation(
-    effectivePrecipMm,
+  const climatePercolationSummary = React.useMemo(() => {
+    if (!climateResilienceConfig?.enabled) return null;
+    return computeClimateResiliencePercolation(
+      baseEffectivePrecipMm,
+      currentWeather.soilMoisture0To7cm,
+      currentWeather.hadRecentFreezeThaw,
+      activeSourceCount,
+      unsecuredDemolishedCount,
+      climateResilienceConfig
+    );
+  }, [
+    climateResilienceConfig,
+    baseEffectivePrecipMm,
     currentWeather.soilMoisture0To7cm,
     currentWeather.hadRecentFreezeThaw,
     activeSourceCount,
-    unsecuredDemolishedCount
-  );
+    unsecuredDemolishedCount,
+  ]);
+
+  const effectivePrecipMm = climatePercolationSummary
+    ? climatePercolationSummary.effectiveClimatePrecipMmH
+    : baseEffectivePrecipMm;
+
+  const hydroSim = climatePercolationSummary
+    ? climatePercolationSummary.projected
+    : computeHydrogeologicalPercolation(
+        baseEffectivePrecipMm,
+        currentWeather.soilMoisture0To7cm,
+        currentWeather.hadRecentFreezeThaw,
+        activeSourceCount,
+        unsecuredDemolishedCount
+      );
 
   const blok12PercolationMetrics = React.useMemo(() => {
     const b1 = buildings.find((b) => b.id === 'BLOK-1');
@@ -5141,6 +5201,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     simultaneousDispatch,
     machineNoiseOutputDb,
     hasSteelRoadPlates,
+    climateResilienceConfig,
+    climatePercolationSummary,
   });
 
   useEffect(() => {
@@ -5207,6 +5269,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       simultaneousDispatch,
       machineNoiseOutputDb,
       hasSteelRoadPlates,
+      climateResilienceConfig,
+      climatePercolationSummary,
     };
   }, [
     sources,
@@ -5271,6 +5335,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     simultaneousDispatch,
     machineNoiseOutputDb,
     hasSteelRoadPlates,
+    climateResilienceConfig,
+    climatePercolationSummary,
   ]);
 
   // Real-time recomputation of the 3D Asbestos-Fiber Dispersion Heatmap (both 1h Real-Time & 24h Temporal 3D Volume Accumulation)
@@ -5295,8 +5361,12 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     if (asbestosTextureRef.current) {
       asbestosTextureRef.current.needsUpdate = true;
     }
-    setAsbestosMetrics(metrics);
-    if (onBornehavePlumeAlertUpdate) {
+    const metricsSig = `${metrics.isTemporal24hMode}|${metrics.peakFibersCm3.toFixed(6)}|${metrics.exceedanceAreaM2}|${metrics.actionZoneAreaM2}|${metrics.evaluatedSourceCount}|${metrics.dominantSourceLabel}|${metrics.accumulatedHoursCount}|${metrics.peak24hCumulativeDoseFibersCm3H.toFixed(6)}|${metrics.mostExposedNeighborName}|${metrics.bornehaveFibersCm3.toFixed(6)}|${metrics.leewardWakeActive}`;
+    if (lastAsbestosMetricsSigRef.current !== metricsSig) {
+      lastAsbestosMetricsSigRef.current = metricsSig;
+      setAsbestosMetrics(metrics);
+    }
+    if (onBornehavePlumeAlertUpdateRef.current) {
       const daycareAlert = evaluateBornehaveDaycare3DPlumeAlert({
         sources,
         receptors,
@@ -5304,7 +5374,11 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
         evalHeightMeters: asbestosEvalHeightMeters,
         waterSuppressionActive,
       });
-      onBornehavePlumeAlertUpdate(daycareAlert);
+      const alertSig = JSON.stringify(daycareAlert);
+      if (lastBornehaveAlertSigRef.current !== alertSig) {
+        lastBornehaveAlertSigRef.current = alertSig;
+        onBornehavePlumeAlertUpdateRef.current(daycareAlert);
+      }
     }
   }, [
     sources,
@@ -5319,29 +5393,52 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     isTemporal24hAsbestosActive,
     showLeewardWake,
     effectiveTemporalAccumulationHours,
-    onBornehavePlumeAlertUpdate,
   ]);
 
   useEffect(() => {
     const container = mountRef.current;
     if (!container) return;
 
-    // 1. Software-WebGL Detection via WEBGL_debug_renderer_info
+    setWebglErrorMessage(null);
+
+    // 1. Pre-flight WebGL & Software-WebGL Detection via WEBGL_debug_renderer_info
     const probeCanvas = document.createElement('canvas');
-    const probeGl = probeCanvas.getContext('webgl2') || probeCanvas.getContext('webgl');
-    const debugInfo = probeGl && probeGl.getExtension('WEBGL_debug_renderer_info');
+    let probeGl: WebGLRenderingContext | WebGL2RenderingContext | null = null;
+    try {
+      probeGl =
+        (probeCanvas.getContext('webgl2') as WebGL2RenderingContext | null) ||
+        (probeCanvas.getContext('webgl') as WebGLRenderingContext | null) ||
+        (probeCanvas.getContext('experimental-webgl') as WebGLRenderingContext | null);
+    } catch {
+      probeGl = null;
+    }
+    if (!probeGl) {
+      setWebglErrorMessage(
+        '3D WebGL-grafikmotor er ikke tilgængelig i denne browser-session. Skift til 2D-kort eller prøv igen.'
+      );
+      return;
+    }
+
+    const debugInfo = probeGl.getExtension('WEBGL_debug_renderer_info');
     const rendererStr =
-      (probeGl && debugInfo && probeGl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)) || '';
+      (debugInfo && probeGl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)) || '';
     const isSoftwareGl = /SwiftShader|llvmpipe|softpipe|Software|Basic Render/i.test(
       String(rendererStr)
     );
-    setIsSoftwareRenderer(isSoftwareGl);
+    setIsSoftwareRenderer((prev) => (prev === isSoftwareGl ? prev : isSoftwareGl));
 
     // 2. WebGLRenderer with ACESFilmicToneMapping & SRGBColorSpace
-    const renderer = new THREE.WebGLRenderer({
-      antialias: !isSoftwareGl,
-      powerPreference: 'high-performance',
-    });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: !isSoftwareGl,
+        powerPreference: 'high-performance',
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setWebglErrorMessage(`WebGLRenderer kunne ikke oprettes: ${msg}`);
+      return;
+    }
     renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2));
     renderer.setSize(container.clientWidth || 800, container.clientHeight || 540);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -5361,10 +5458,17 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     scene.background = new THREE.Color(horizonHex);
     scene.fog = new THREE.FogExp2(horizonHex, 0.0028);
 
-    const pmremGenerator = new THREE.PMREMGenerator(renderer);
-    const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environment = envTexture;
-    pmremGenerator.dispose();
+    let envTexture: THREE.Texture | null = null;
+    try {
+      const pmremGenerator = new THREE.PMREMGenerator(renderer);
+      const roomEnv = new RoomEnvironment();
+      envTexture = pmremGenerator.fromScene(roomEnv, 0.04).texture;
+      scene.environment = envTexture;
+      roomEnv.dispose();
+      pmremGenerator.dispose();
+    } catch {
+      envTexture = null;
+    }
 
     // 4. Camera & Damped OrbitControls
     const camera = new THREE.PerspectiveCamera(
@@ -5395,7 +5499,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       const pct = Math.round(THREE.MathUtils.clamp((104.2 / dist) * 100, 35, 650));
       if (Math.abs(pct - lastReportedZoomPct) >= 5) {
         lastReportedZoomPct = pct;
-        setZoom3DLevelPct(pct);
+        setZoom3DLevelPct((prev) => (prev === pct ? prev : pct));
       }
     };
     controls.addEventListener('start', onControlStart);
@@ -5501,7 +5605,11 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       simStateRef.current.effectiveTemporalAccumulationHours
     );
     asbestosHeatmapTex.needsUpdate = true;
-    setAsbestosMetrics(initialMetrics);
+    const initialMetricsSig = `${initialMetrics.isTemporal24hMode}|${initialMetrics.peakFibersCm3.toFixed(6)}|${initialMetrics.exceedanceAreaM2}|${initialMetrics.actionZoneAreaM2}|${initialMetrics.evaluatedSourceCount}|${initialMetrics.dominantSourceLabel}|${initialMetrics.accumulatedHoursCount}|${initialMetrics.peak24hCumulativeDoseFibersCm3H.toFixed(6)}|${initialMetrics.mostExposedNeighborName}|${initialMetrics.bornehaveFibersCm3.toFixed(6)}|${initialMetrics.leewardWakeActive}`;
+    if (lastAsbestosMetricsSigRef.current !== initialMetricsSig) {
+      lastAsbestosMetricsSigRef.current = initialMetricsSig;
+      setAsbestosMetrics(initialMetrics);
+    }
 
     const asbestosHeatmapGroup = new THREE.Group();
     asbestosHeatmapGroup.name = 'asbestos-fiber-heatmap-3d-group';
@@ -6853,6 +6961,19 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     secondaryWaterTableMesh.position.y = -7.2 * SUB_SCALE_Y;
     subsurfaceGroup.add(secondaryWaterTableMesh);
 
+    // Baseline 2026 groundwater reference wireframe (shown when Klimaresiliens climate uplift is active)
+    const baselineWaterTableRefMesh = new THREE.LineSegments(
+      new THREE.EdgesGeometry(waterTablePlaneGeo),
+      new THREE.LineBasicMaterial({
+        color: 0x94a3b8,
+        transparent: true,
+        opacity: 0.55,
+      })
+    );
+    baselineWaterTableRefMesh.position.y = -7.5 * SUB_SCALE_Y;
+    baselineWaterTableRefMesh.visible = false;
+    subsurfaceGroup.add(baselineWaterTableRefMesh);
+
     // Dynamic Primary OSD Groundwater Table Surface Mesh (~ -15.2m to -16.6m)
     const primaryWaterTableMat = new THREE.MeshStandardMaterial({
       color: 0x06b6d4,
@@ -7691,14 +7812,14 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           correlationPointId,
         } = hitObj.userData || {};
         if (clickableType === 'source' && sourceId) {
-          onSelectSource(sourceId);
+          onSelectSourceRef.current(sourceId);
         } else if (clickableType === 'receptor' && receptorId) {
-          onSelectReceptor(receptorId);
+          onSelectReceptorRef.current(receptorId);
         } else if (clickableType === 'leeward_wake' && buildingId) {
           if (isSourceBuilding) {
-            onSelectSource(buildingId);
+            onSelectSourceRef.current(buildingId);
           } else {
-            onSelectReceptor(buildingId);
+            onSelectReceptorRef.current(buildingId);
           }
         } else if (clickableType === 'weather_correlation_point' && correlationPointId) {
           setSelectedCorrelationPointId((prev) =>
@@ -7775,13 +7896,27 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     resizeObserver.observe(container);
 
     // 15. Software-WebGL Paced Animation Loop (`afterDraw` with `gl.fenceSync` on Software GL)
-    const gl = renderer.getContext() as WebGL2RenderingContext;
+    const gl = renderer.getContext() as WebGL2RenderingContext | null;
     let rafId = 0;
     let timeoutId = 0;
     let disposed = false;
 
+    const onContextLost = (ev: Event) => {
+      ev.preventDefault();
+      disposed = true;
+      cancelAnimationFrame(rafId);
+      clearTimeout(timeoutId);
+      setWebglErrorMessage('3D WebGL-kontekst gik tabt (GPU/iframe-begrænsning).');
+    };
+    const onContextRestored = () => {
+      setWebglErrorMessage(null);
+      setWebglRetryNonce((n) => n + 1);
+    };
+    renderer.domElement.addEventListener('webglcontextlost', onContextLost);
+    renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
+
     function afterDraw(cb: () => void) {
-      if (disposed) return;
+      if (disposed || !gl || gl.isContextLost?.()) return;
       if (!isSoftwareGl || !gl.fenceSync) {
         rafId = requestAnimationFrame(cb);
         return;
@@ -7789,7 +7924,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
       gl.flush();
       function poll() {
-        if (disposed) return;
+        if (disposed || !gl) return;
         if (!sync) {
           rafId = requestAnimationFrame(cb);
           return;
@@ -10043,12 +10178,27 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       if (showSubsurface) {
         const sim = state.hydroSim;
         const rainMm = state.effectivePrecipMm;
+        const climateSum = state.climatePercolationSummary;
 
-        // Elevate secondary and primary groundwater tables dynamically with precipitation
+        // Elevate secondary and primary groundwater tables dynamically with precipitation + climate projection
         const secY = -sim.secondaryWaterTableDepthM * SUB_SCALE_Y + Math.sin(elapsed * 1.8) * 0.08;
         const priY = -sim.primaryWaterTableDepthM * SUB_SCALE_Y + Math.cos(elapsed * 1.4) * 0.06;
         secondaryWaterTableMesh.position.y = secY;
         primaryWaterTableMesh.position.y = priY;
+
+        if (climateSum) {
+          baselineWaterTableRefMesh.visible = true;
+          baselineWaterTableRefMesh.position.y = -climateSum.baseline.secondaryWaterTableDepthM * SUB_SCALE_Y;
+          const isStressed = climateSum.unsaturatedBufferProjectedM < 3.5 || sim.leadConcentrationSecondaryUgL >= 1.0;
+          secondaryWaterTableMat.color.setHex(isStressed ? 0xf59e0b : 0x38bdf8);
+          secondaryWaterTableMat.emissive.setHex(isStressed ? 0xd97706 : 0x0284c7);
+          secondaryWaterTableMat.opacity = Math.min(0.76, 0.52 + climateSum.waterTableRiseTotalM * 0.14);
+        } else {
+          baselineWaterTableRefMesh.visible = false;
+          secondaryWaterTableMat.color.setHex(0x38bdf8);
+          secondaryWaterTableMat.emissive.setHex(0x0284c7);
+          secondaryWaterTableMat.opacity = 0.52;
+        }
 
         const maxDepthUnits = sim.plumeMaxDepthMeters * SUB_SCALE_Y;
         const coneRadiusUnits = 5.5 + rainMm * 0.35 + sim.saturationRatio * 4.2;
@@ -10058,6 +10208,14 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           if (!leachCone) return;
           leachCone.visible = src.active;
           leachCone.scale.set(coneRadiusUnits, Math.max(2.5, maxDepthUnits), coneRadiusUnits);
+          const coneMat = leachCone.material as THREE.MeshBasicMaterial;
+          if (climateSum && (sim.leadConcentrationSecondaryUgL >= 1.0 || sim.reachesPrimaryAquifer)) {
+            coneMat.color.setHex(0xf43f5e);
+            coneMat.opacity = 0.32;
+          } else {
+            coneMat.color.setHex(0xf59e0b);
+            coneMat.opacity = 0.24;
+          }
         });
 
         // Animate 320 Instanced Percolating Leachate & Water Droplets
@@ -10501,7 +10659,15 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       }
 
       controls.update();
-      renderer.render(scene, camera);
+      if (disposed || gl?.isContextLost?.()) return;
+      try {
+        renderer.render(scene, camera);
+      } catch (err) {
+        disposed = true;
+        const msg = err instanceof Error ? err.message : String(err);
+        setWebglErrorMessage(`3D-rendering afbrudt: ${msg}`);
+        return;
+      }
       afterDraw(tick);
     }
 
@@ -10521,6 +10687,8 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       renderer.domElement.removeEventListener('mousedown', onPointerDown);
       renderer.domElement.removeEventListener('mouseup', onPointerUp);
       renderer.domElement.removeEventListener('mousemove', onPointerMove);
+      renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
+      renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
 
       scene.traverse((obj) => {
         if ((obj as THREE.Mesh).isMesh) {
@@ -10533,7 +10701,7 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
           }
         }
       });
-      envTexture.dispose();
+      envTexture?.dispose();
       groundTex.dispose();
       bumpTex.dispose();
       shadowTex.dispose();
@@ -10549,8 +10717,13 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
       asbestosTextureRef.current = null;
       asbestosReliefGeoRef.current = null;
       renderer.dispose();
+      try {
+        renderer.forceContextLoss();
+      } catch {
+        // Ignore cleanup context-loss errors
+      }
     };
-  }, [onSelectReceptor, onSelectSource]);
+  }, [webglRetryNonce]);
 
   const plumeDirectionDeg = (currentWeather.windDirection10m + 180) % 360;
   const isHighRiskWind = currentWeather.windSpeed10m > 10;
@@ -10574,6 +10747,40 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
     >
       {/* Dedicated WebGL Canvas Mount Container (never re-rendered by React state) */}
       <div ref={mountRef} className="w-full h-full" />
+
+      {webglErrorMessage && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#07090E]/95 p-6">
+          <div className="max-w-md w-full rounded-xl border border-rose-500/40 bg-[#111827] p-5 text-slate-100 shadow-2xl">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-rose-300 font-bold mb-1">
+              3D WebGL-sikringslag aktivt
+            </div>
+            <h3 className="text-sm font-bold text-white mb-1.5">
+              3D-scenen kunne ikke startes på denne enhed
+            </h3>
+            <p className="text-xs text-slate-300 leading-relaxed mb-4">
+              {webglErrorMessage}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setWebglRetryNonce((n) => n + 1)}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer transition-colors"
+              >
+                Prøv 3D igen
+              </button>
+              {onSwitchTo2DPercolation && (
+                <button
+                  type="button"
+                  onClick={onSwitchTo2DPercolation}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-cyan-200 text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  Skift til 2D-visning
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Top-Left Minimal Telemetry & 3D Heatmap HUD Overlay (hidden in 'Kun Kort' mode so only map + filters are shown) */}
       {!effectiveMapOnly && (
@@ -10853,6 +11060,30 @@ export const Ringparken3DScene: React.FC<Ringparken3DSceneProps> = ({
                   Hastighed: <strong className="text-amber-300">{blok12PercolationMetrics.verticalVelocityCmH} cm/t</strong>
                 </span>
               </div>
+
+              {climatePercolationSummary && climateResilienceConfig?.enabled && (
+                <div
+                  data-testid="3d-climate-resilience-hud"
+                  className="flex flex-wrap items-center justify-between gap-1.5 px-2 py-1 rounded bg-cyan-950/70 border border-cyan-400/50 text-[11px] text-cyan-100"
+                >
+                  <span>
+                    Klimaresiliens ({climateResilienceConfig.horizonLabel.split(' ')[0]}): GV ↑{' '}
+                    <strong className="text-amber-300">+{climatePercolationSummary.waterTableRiseTotalM.toFixed(2)} m</strong> · Buffer{' '}
+                    <strong className={climatePercolationSummary.unsaturatedBufferProjectedM < 3.5 ? 'text-rose-300' : 'text-emerald-300'}>
+                      {climatePercolationSummary.unsaturatedBufferProjectedM.toFixed(2)} m
+                    </strong>
+                  </span>
+                  {onOpenClimateResilienceTab && (
+                    <button
+                      type="button"
+                      onClick={onOpenClimateResilienceTab}
+                      className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-cyan-400/50 text-cyan-200 text-[10px] font-semibold cursor-pointer"
+                    >
+                      Justér Klima
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

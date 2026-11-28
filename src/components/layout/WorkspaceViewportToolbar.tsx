@@ -69,6 +69,7 @@ import {
   OrientationSelection,
   ViewportVisualizationMode,
 } from './layoutTypes';
+import { useAcousticWeighting } from '../../context/AcousticWeightingContext';
 
 export interface WorkspaceViewportToolbarProps {
   isMapOnlyMode: boolean;
@@ -318,6 +319,7 @@ export const WorkspaceViewportToolbar: React.FC<WorkspaceViewportToolbarProps> =
     ? substanceKeysList.filter((k) => Boolean(visibleSubstances[k])).length
     : 5;
 
+  const { convertDb, unitLabel } = useAcousticWeighting();
   const activeSrc =
     sources.find((s) => s.id === selectedSourceId) ||
     sources.find((s) => s.active) ||
@@ -335,6 +337,10 @@ export const WorkspaceViewportToolbar: React.FC<WorkspaceViewportToolbarProps> =
     Math.max(estReceptorLaeqDb - hrLimitDb, estImpulsePeakDb - hrImpulseLimitDb).toFixed(1)
   );
   const isNoiseExceeded = Boolean(activeSrc?.active) && exceedanceDb > 0;
+  const windCtx = { windSpeedMs: currentWeather.windSpeed10m, windGustMs: currentWeather.windGusts10m };
+  const displayMachineDb = convertDb(effMachineDb, windCtx);
+  const displayReceptorEqDb = convertDb(estReceptorLaeqDb, windCtx);
+  const displayLimitEqDb = convertDb(hrLimitDb, windCtx);
 
   return (
     <>
@@ -683,12 +689,12 @@ export const WorkspaceViewportToolbar: React.FC<WorkspaceViewportToolbarProps> =
                   >
                     <span className="flex items-center gap-1.5">
                       <Volume2 className="w-3.5 h-3.5 shrink-0" />
-                      <span>3D Impuls-Støjbølger ({effMachineDb} dB)</span>
+                      <span>3D Impuls-Støjbølger ({displayMachineDb} {unitLabel})</span>
                     </span>
                     <span>
                       {isNoiseExceeded
                         ? `+${exceedanceDb} dB OVER`
-                        : `OK (${estReceptorLaeqDb}/${hrLimitDb} dB)`}
+                        : `OK (${displayReceptorEqDb}/${displayLimitEqDb} ${unitLabel})`}
                     </span>
                   </button>
 
@@ -1483,7 +1489,7 @@ export const WorkspaceViewportToolbar: React.FC<WorkspaceViewportToolbarProps> =
                       ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200 font-bold'
                       : 'bg-[#1B2433] hover:bg-[#212C3E] text-slate-200 border-[#2D3B50]'
                   }`}
-                  title="Quick-Snapshot: Logger aktuel kortvisning som tidsstemplet & SHA-256 signeret observation i evidensloggen"
+                  title="Quick Snapshot Export: Logger aktuel simuleringstilstand og auto-genererer retsmedicinsk PDF-oversigt over de 3 mest berørte receptorer"
                 >
                   <Camera
                     className={`w-3.5 h-3.5 shrink-0 ${
@@ -1492,10 +1498,10 @@ export const WorkspaceViewportToolbar: React.FC<WorkspaceViewportToolbarProps> =
                   />
                   <span>
                     {isQuickSnapshotSaving
-                      ? 'Gemmer...'
+                      ? 'Eksporterer...'
                       : quickSnapshotSavedJustNow
-                      ? '✓ Snapshot Logget'
-                      : 'Quick-Snapshot'}
+                      ? '✓ Snapshot + Top-3 PDF'
+                      : 'Quick Snapshot Export'}
                   </span>
                 </button>
               )}

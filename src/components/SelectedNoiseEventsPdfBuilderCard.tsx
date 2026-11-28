@@ -138,6 +138,9 @@ export const SelectedNoiseEventsPdfBuilderCard: React.FC<
         isSumQuotientExceeded: sAtTime >= 1.0,
         sha256Signature:
           obs.sha256Signature || deterministicHexHash256(`${obs.code}|${lafmax}|${sAtTime}`),
+        temperature2m: w.temperature2m,
+        pasquillClass: w.pasquillClass,
+        precipitationMm: w.precipitation,
       });
     });
 
@@ -176,6 +179,9 @@ export const SelectedNoiseEventsPdfBuilderCard: React.FC<
         isNoiseLimitExceeded: lafmax >= 80,
         isSumQuotientExceeded: sVal >= 1.0,
         sha256Signature: deterministicHexHash256(`${id}|${lafmax}|${sVal}|${hr.windDirection10m}`),
+        temperature2m: hr.temperature2m,
+        pasquillClass: hr.pasquillClass,
+        precipitationMm: hr.precipitation,
       });
     });
 
@@ -210,11 +216,12 @@ export const SelectedNoiseEventsPdfBuilderCard: React.FC<
       dateIso,
       receptorFocusName,
       selectedEvents,
+      currentWeather,
     });
     setLastExportedInfo({
       fileName: res.fileName,
       hash: res.reportSha256,
-      label: 'Retsmedicinsk Støj- & Vind-PDF',
+      label: 'Retsmedicinsk Støj-, Vind- & Refraktions-PDF',
     });
   };
 
@@ -261,7 +268,7 @@ export const SelectedNoiseEventsPdfBuilderCard: React.FC<
             <span>Retsmedicinsk PDF-Rapport: Valgte Støj-Hændelser × Vind &amp; Sumkvotient (S)</span>
           </h3>
           <p className="text-[11px] text-slate-400">
-            Vælg støj-hændelser eller naboblokke nedenfor for at eksportere retsmedicinsk støj-PDF eller teknisk bilag over vindstød × maskinstøj til miljøtilsyn.
+            Vælg støj-hændelser eller naboblokke nedenfor for at eksportere retsmedicinsk støj-PDF eller teknisk bilag — inkl. automatisk Meteorological Refraction Context (vind-/temperaturgradient &amp; dB-udbredelse).
           </p>
         </div>
 

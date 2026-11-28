@@ -468,6 +468,23 @@ export const WindDirectionalNoiseHudCard: React.FC<
           Valgte kilde-noder ({selectedSourceCodes.length}):{' '}
           <strong className="text-white">{selectedSourceCodes.join(', ') || 'Ingen'}</strong>
         </div>
+        <div
+          data-testid="wind-noise-heatmap-high-wind-banner"
+          className={`px-1.5 py-1 rounded border text-[10.5px] font-semibold flex items-center justify-between gap-1 ${
+            currentWeather.windSpeed10m > 10 && selectedSourceCodes.length > 0
+              ? 'bg-rose-950/80 border-rose-400/75 text-rose-100'
+              : 'bg-slate-900/90 border-slate-700 text-slate-300'
+          }`}
+        >
+          <span>
+            {currentWeather.windSpeed10m > 10 && selectedSourceCodes.length > 0
+              ? `HØJ VIND >10 m/s + ${selectedSourceCodes.length} IMPULSKILDE(R)`
+              : `Vindbasis: ${currentWeather.windSpeed10m.toFixed(1)} m/s (Grænse >10 m/s)`}
+          </span>
+          <span className="font-bold tabular-nums shrink-0">
+            {currentWeather.windSpeed10m > 10 ? 'FORHØJET RISIKO' : 'MODERAT'}
+          </span>
+        </div>
       </div>
 
       {/* Vindvinkel slider */}

@@ -27,6 +27,12 @@ import {
   SLAGELSE_TYPICAL_CLIMATE_NORMAL_8,
 } from './weatherService';
 import { computeForensicSha256Hash } from './dispersionEngine';
+import {
+  MeteorologicalRefractionPdfEntry,
+  computeMeteorologicalRefractionContext,
+  isCapturedImpulseNoiseObservation,
+  renderMeteorologicalRefractionContextPdfSection,
+} from './meteorologicalRefractionPdfContext';
 
 /**
  * Normalizes characters that standard PDF Helvetica (WinAnsiEncoding) might not render cleanly
@@ -1217,6 +1223,53 @@ export function generateForensicPdfReport(params: {
       doc.text(vLines.slice(0, 2), margin + 2.5, y + 9.2);
       y += 14.5;
     }
+  }
+
+  // Automatic Meteorological Refraction Context whenever impulse noise events are captured
+  const capturedImpulseObs = observations.filter(isCapturedImpulseNoiseObservation);
+  const noiseMetricViolations = legalViolations.filter((v) => Boolean(v.noiseMetrics));
+  if (capturedImpulseObs.length > 0 || noiseMetricViolations.length > 0) {
+    const entries: MeteorologicalRefractionPdfEntry[] =
+      capturedImpulseObs.length > 0
+        ? capturedImpulseObs.slice(0, 4).map((obs) => ({
+            eventCode: obs.code,
+            timestampLabel: `${obs.observedDateIso} kl. ${obs.observedHourLabel}`,
+            locationLabel: obs.locationLabel,
+            lafmaxDb: obs.audioEvidence?.analysis.estimatedSourceLwaDb
+              ? Number((obs.audioEvidence.analysis.estimatedSourceLwaDb - 26).toFixed(1))
+              : undefined,
+            context: computeMeteorologicalRefractionContext({
+              windSpeed10m: obs.weatherSnapshot.windSpeed10m,
+              windGusts10m: obs.weatherSnapshot.windGusts10m,
+              windDirection10m: obs.weatherSnapshot.windDirection10m,
+              temperature2m: obs.weatherSnapshot.temperature2m,
+              pasquillClass: obs.weatherSnapshot.pasquillClass,
+              precipitation: obs.weatherSnapshot.precipitation,
+            }),
+          }))
+        : noiseMetricViolations.slice(0, 3).map((v) => ({
+            eventCode: v.id.slice(0, 14).toUpperCase(),
+            timestampLabel: `${weatherDataset.dateIso} kl. ${currentWeather.hourLabel}`,
+            locationLabel: v.receptorName,
+            lafmaxDb: v.noiseMetrics?.lafmaxDb,
+            context: computeMeteorologicalRefractionContext({
+              windSpeed10m: currentWeather.windSpeed10m,
+              windGusts10m: currentWeather.windGusts10m,
+              windDirection10m: currentWeather.windDirection10m,
+              temperature2m: currentWeather.temperature2m,
+              pasquillClass: currentWeather.pasquillClass,
+              precipitation: currentWeather.precipitation,
+            }),
+          }));
+    y = renderMeteorologicalRefractionContextPdfSection(doc, {
+      startY: y + 4,
+      margin,
+      contentW,
+      pageH,
+      entries,
+      sectionTitle:
+        'METEOROLOGICAL REFRACTION CONTEXT (VIND- & TEMPERATURGRADIENTER VED IMPULSSTØJ)',
+    });
   }
 
   // =========================================================================
@@ -4825,6 +4878,45 @@ export function generateChronologicalEvidenceObservationsPdfReport(params: {
     y += cardHeight + 3.2;
   });
 
+  // Automatic Meteorological Refraction Context for captured impulse noise events
+  const impulseObservations = chronologicalObservations.filter(
+    isCapturedImpulseNoiseObservation
+  );
+  if (impulseObservations.length > 0) {
+    const entries: MeteorologicalRefractionPdfEntry[] = impulseObservations
+      .slice(0, 5)
+      .map((obs) => ({
+        eventCode: obs.code,
+        timestampLabel: `${obs.observedDateIso} kl. ${obs.observedHourLabel}`,
+        locationLabel: obs.locationLabel,
+        lafmaxDb: obs.audioEvidence?.analysis.estimatedSourceLwaDb
+          ? Number((obs.audioEvidence.analysis.estimatedSourceLwaDb - 26).toFixed(1))
+          : undefined,
+        context: computeMeteorologicalRefractionContext({
+          windSpeed10m: obs.weatherSnapshot.windSpeed10m,
+          windGusts10m: obs.weatherSnapshot.windGusts10m,
+          windDirection10m: obs.weatherSnapshot.windDirection10m,
+          temperature2m: obs.weatherSnapshot.temperature2m,
+          pasquillClass: obs.weatherSnapshot.pasquillClass,
+          precipitation: obs.weatherSnapshot.precipitation,
+        }),
+      }));
+    const prevPages = doc.getNumberOfPages();
+    y = renderMeteorologicalRefractionContextPdfSection(doc, {
+      startY: y + 2,
+      margin,
+      contentW: contentWidth,
+      pageH: pageHeight,
+      entries,
+      sectionTitle:
+        'METEOROLOGICAL REFRACTION CONTEXT (VIND- & TEMPERATURGRADIENTER VED IMPULSSTØJ)',
+    });
+    currentPage = doc.getNumberOfPages();
+    if (currentPage > prevPages) {
+      drawChronologicalHeader(currentPage);
+    }
+  }
+
   // 3. Official Legal & Forensic Attestation Block at the end of the report
   if (y + 34 > pageHeight - 16) {
     drawChronologicalFooter(currentPage);
@@ -6633,6 +6725,293 @@ export function generateTop5CriticalSummaryPdfReport(params: {
 
   const safeHour = params.hourLabel.replace(':', '');
   doc.save(`Ringparken_Summary_Data_Top5_Kritiske_${params.dateIso}_kl_${safeHour}.pdf`);
+}
+
+/**
+ * Generates and downloads a forensic PDF summary for Quick Snapshot Export
+ * detailing the current simulation state and the 3 most affected receptors ranked by SumQuotient (S).
+ */
+export function generateQuickSnapshotTop3ReceptorsPdfReport(params: {
+  dateIso: string;
+  hourLabel: string;
+  currentWeather: HourlyWeatherPoint;
+  maxSiteSumQuotient: number;
+  receptorExposures: ReceptorExposureResult[];
+  sources: DemolitionSourceNode[];
+  activeLayers: string[];
+  sha256Hash: string;
+  snapshotCode?: string;
+  snapshotDataUrl?: string;
+}): void {
+  const {
+    dateIso,
+    hourLabel,
+    currentWeather,
+    maxSiteSumQuotient,
+    receptorExposures,
+    sources,
+    activeLayers,
+    sha256Hash,
+    snapshotCode = 'QUICK-SNAP',
+    snapshotDataUrl,
+  } = params;
+
+  const top3 = [...receptorExposures]
+    .sort((a, b) => b.sumQuotient - a.sumQuotient)
+    .slice(0, 3);
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 12;
+  const contentW = pageW - margin * 2;
+  let y = 14;
+
+  // Header Banner
+  doc.setFillColor(11, 15, 25);
+  doc.rect(0, 0, pageW, 34, 'F');
+  doc.setDrawColor(34, 211, 238);
+  doc.setLineWidth(0.7);
+  doc.line(margin, 31, pageW - margin, 31);
+
+  doc.setTextColor(34, 211, 238);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.0);
+  doc.text(
+    sanitizePdfText(
+      `QUICK SNAPSHOT EXPORT | RETSMEDICINSK SIMULERINGSOEVERSIGT (${snapshotCode}) | PSS SAG W22085`
+    ),
+    margin,
+    9.2
+  );
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(13.0);
+  doc.text(
+    sanitizePdfText(
+      `Quick Snapshot Forensic Summary: Top 3 Mest Beroerte Receptorer (${dateIso} kl. ${hourLabel})`
+    ),
+    margin,
+    17.0
+  );
+
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(7.1);
+  doc.text(
+    sanitizePdfText(
+      `Max Sumkvotient S=${maxSiteSumQuotient.toFixed(2)} | Vind: ${currentWeather.windSpeed10m.toFixed(
+        1
+      )} m/s (${currentWeather.windDirection10m}°) | Stoed: ${currentWeather.windGusts10m.toFixed(
+        1
+      )} m/s | Pasquill ${currentWeather.pasquillClass}`
+    ),
+    margin,
+    23.4
+  );
+  doc.text(
+    sanitizePdfText(
+      `SHA-256 Integritet: ${sha256Hash.slice(0, 40)}... | Genereret: ${new Date().toISOString()}`
+    ),
+    margin,
+    28.4
+  );
+
+  y = 39;
+
+  // Simulation State Box
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(
+    sanitizePdfText('01. AKTUEL SIMULERINGSTILSTAND & AKTIVE KILDER'),
+    margin,
+    y
+  );
+  y += 3.5;
+
+  const activeSources = sources.filter((s) => s.active);
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.rect(margin, y, contentW, 20, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text(
+    sanitizePdfText(
+      `Aktive nedrivningskilder (${activeSources.length}/${sources.length}): ${
+        activeSources.map((s) => `${s.code} (${s.name})`).join(', ') || 'Ingen'
+      }`.slice(0, 112)
+    ),
+    margin + 2.5,
+    y + 5.2
+  );
+  doc.text(
+    sanitizePdfText(
+      `Aktive kortlag (${activeLayers.length}): ${activeLayers.join(' | ')}`.slice(0, 112)
+    ),
+    margin + 2.5,
+    y + 10.6
+  );
+  doc.text(
+    sanitizePdfText(
+      `Meteorologi: Temp ${currentWeather.temperature2m.toFixed(
+        1
+      )} C | Fugt ${currentWeather.relativeHumidity2m}% | Nedboer ${currentWeather.precipitation.toFixed(
+        1
+      )} mm/t | Faneretning ${(currentWeather.windDirection10m + 180) % 360}°`
+    ),
+    margin + 2.5,
+    y + 16.0
+  );
+  y += 25;
+
+  // Section 02: Top 3 Most Affected Receptors
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(
+    sanitizePdfText('02. TOP 3 MEST BEROERTE RECEPTORER (RANGORDNET EFTER SUMKVOTIENT S)'),
+    margin,
+    y
+  );
+  y += 4;
+
+  top3.forEach((rec, idx) => {
+    const isViolation = rec.sumQuotient >= 1.0;
+    const cardH = 34;
+
+    if (isViolation) {
+      doc.setFillColor(255, 241, 242);
+      doc.setDrawColor(225, 29, 72);
+    } else if (rec.sumQuotient >= 0.5) {
+      doc.setFillColor(255, 247, 237);
+      doc.setDrawColor(234, 88, 12);
+    } else {
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(100, 116, 139);
+    }
+    doc.setLineWidth(0.45);
+    doc.rect(margin, y, contentW, cardH, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(
+      sanitizePdfText(
+        `#${idx + 1}  ${rec.receptorCode}: ${rec.receptorName} (${rec.address})`
+      ),
+      margin + 3,
+      y + 6.5
+    );
+
+    doc.setFontSize(10.0);
+    if (isViolation) {
+      doc.setTextColor(190, 18, 60);
+    } else {
+      doc.setTextColor(194, 65, 12);
+    }
+    doc.text(
+      sanitizePdfText(
+        `S = ${rec.sumQuotient.toFixed(2)} (${
+          isViolation ? 'ULOVLIG >= 1,0' : rec.riskLevel.toUpperCase()
+        })`
+      ),
+      pageW - margin - 46,
+      y + 6.5
+    );
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.6);
+    doc.setTextColor(30, 41, 59);
+    doc.text(
+      sanitizePdfText(
+        `Dominerende kilde: ${rec.dominantSourceName} (${Math.round(
+          rec.distanceFromNearestSourceMeters
+        )} m) | GPS: ${rec.position.lat.toFixed(5)}°N, ${rec.position.lng.toFixed(5)}°E`
+      ),
+      margin + 3,
+      y + 13.0
+    );
+
+    const topSubstances = [...rec.substances]
+      .sort((a, b) => b.quotient - a.quotient)
+      .slice(0, 3)
+      .map(
+        (s) =>
+          `${s.name}: ${s.concentration.toFixed(3)} ${s.unit} (K=${s.quotient.toFixed(2)})`
+      )
+      .join('  |  ');
+
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(7.0);
+    doc.text(
+      sanitizePdfText(`Stof-bidrag: ${topSubstances}`).slice(0, 108),
+      margin + 3,
+      y + 19.5
+    );
+
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.1);
+    doc.setTextColor(71, 85, 105);
+    doc.text(
+      sanitizePdfText(
+        `Lovgrundlag: BEK nr. 613/2026 § 3 stk. 3 (Additiv sumkvotient S >= 1,0) | Hydrologi: ${
+          rec.hydrologicalRunoffActive ? 'Afstroemning aktiv' : 'Normal'
+        }`
+      ),
+      margin + 3,
+      y + 26.5
+    );
+
+    y += cardH + 4;
+  });
+
+  // Optional Map Viewport Snapshot Thumbnail
+  if (snapshotDataUrl && snapshotDataUrl.startsWith('data:image/png') && y + 72 < pageH - 18) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(
+      sanitizePdfText('03. KORT-SNAPSHOT (2D SPREDNINGS-VIEWPORT VED EKSPORT)'),
+      margin,
+      y + 2
+    );
+    y += 5;
+    try {
+      doc.addImage(snapshotDataUrl, 'PNG', margin, y, contentW, 64);
+      y += 68;
+    } catch {
+      // Ignore image embedding issues gracefully
+    }
+  }
+
+  // Footer
+  doc.setDrawColor(203, 213, 225);
+  doc.line(margin, pageH - 11, pageW - margin, pageH - 11);
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    sanitizePdfText(
+      `Quick Snapshot Export (${snapshotCode}) | Top 3 Receptorer | SHA-256: ${sha256Hash.slice(
+        0,
+        24
+      )}... | Side 1/1`
+    ),
+    margin,
+    pageH - 6.5
+  );
+
+  const safeHour = hourLabel.replace(/:/g, '');
+  doc.save(
+    `Ringparken_Quick_Snapshot_Top3_Receptorer_${dateIso}_kl_${safeHour}.pdf`
+  );
 }
 
 export async function exportSevenDayWindRoseAndBiasPdf(params: {

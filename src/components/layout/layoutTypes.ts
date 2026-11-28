@@ -1,6 +1,7 @@
 export type RightPanelTab =
   | 'substances'
   | 'puff24h'
+  | 'climateResilience'
   | 'algedonic'
   | 'noiseDust'
   | 'indoorClimate'
